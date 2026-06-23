@@ -1190,9 +1190,7 @@ html, body {
   }
 
   .hero-descriptor {
-    font-size: 14px;
-    top: 28px;
-    left: 28px;
+    display: none;
   }
 
   .logo-text {
@@ -1277,11 +1275,6 @@ html, body {
     right: 20px;
   }
 
-  .hero-descriptor {
-    font-size: 12px;
-    top: 22px;
-    left: 20px;
-  }
 
   .logo-text {
     font-size: 120px;

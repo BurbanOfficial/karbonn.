@@ -915,9 +915,7 @@ body {
     right: 28px;
   }
   .hero-descriptor {
-    font-size: 14px;
-    top: 28px;
-    left: 28px;
+    display: none;
   }
   .nav-menu a { font-size: 38px; }
   .nav-brand { display: none; }
@@ -935,11 +933,6 @@ body {
     padding: 11px 20px;
     top: 22px;
     right: 20px;
-  }
-  .hero-descriptor {
-    font-size: 12px;
-    top: 22px;
-    left: 20px;
   }
   .nav-menu a { font-size: 32px; }
   .nav-close {
