@@ -787,6 +787,14 @@
       });
 
       function applyParallax() {
+        if (window.innerWidth <= 768) {
+          parallaxTargets.forEach(({ el }) => {
+            if (!el) return;
+            el.style.transform = '';
+          });
+          rafId = null;
+          return;
+        }
         parallaxTargets.forEach(({ el, fx, fy }) => {
           if (!el) return;
           el.style.transform = `translate(${mouseX * fx}px, ${mouseY * fy}px)`;

@@ -179,6 +179,10 @@ document.addEventListener('mousemove', (e) => {
   mx = (e.clientX / window.innerWidth - 0.5);
   my = (e.clientY / window.innerHeight - 0.5);
   if (!rafId) rafId = requestAnimationFrame(() => {
+    if (window.innerWidth <= 768) {
+      rafId = null;
+      return;
+    }
     if (heroInner) heroInner.style.transform = `translate(${mx * -12}px, ${my * -8}px)`;
     if (heroScroll) heroScroll.style.transform = `translateX(-50%) translate(${mx * -6}px, ${my * -4}px)`;
     

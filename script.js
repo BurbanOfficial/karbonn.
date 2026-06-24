@@ -252,6 +252,14 @@ if (!isTouchDevice) {
 }
 
 function applyParallax() {
+  if (window.innerWidth <= 768) {
+    parallaxTargets.forEach(({ el, base }) => {
+      if (!el) return;
+      el.style.transform = base || '';
+    });
+    rafId = null;
+    return;
+  }
   parallaxTargets.forEach(({ el, fx, fy, base }) => {
     if (!el) return;
     const dx = mouseX * fx;
