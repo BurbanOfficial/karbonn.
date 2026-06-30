@@ -868,6 +868,12 @@
       margin-bottom: 6px;
     }
 
+    .modal-form small {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
     .modal-form input {
       width: 100%;
       padding: 12px 14px;
@@ -2801,8 +2807,9 @@
               <input type="email" id="part-email" name="email" required />
             </div>
             <div class="form-group">
-              <label for="part-adresse">Adresse de domicile</label>
-              <input type="text" id="part-adresse" name="adresse" />
+              <label for="part-adresse">Adresse de domicile <span style="color:var(--danger)">*</span></label>
+              <input type="text" id="part-adresse" name="adresse" required />
+              <small>Requise pour la facturation : numéro, rue, code postal, ville</small>
             </div>
             <div class="modal-actions">
               <button type="button" class="btn-back" id="back-from-particulier">Retour</button>
@@ -2870,8 +2877,9 @@
               <input type="text" id="pro-siret" name="siret" />
             </div>
             <div class="form-group">
-              <label for="pro-adresse">Adresse du siège social</label>
-              <input type="text" id="pro-adresse" name="adresse" />
+              <label for="pro-adresse">Adresse du siège social <span style="color:var(--danger)">*</span></label>
+              <input type="text" id="pro-adresse" name="adresse" required />
+              <small>Requise pour la facturation : numéro, rue, code postal, ville</small>
             </div>
             <div class="modal-actions">
               <button type="button" class="btn-back" id="back-from-professionnel">Retour</button>

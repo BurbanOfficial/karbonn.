@@ -43,7 +43,8 @@ app.use(cors({
     if (!origin || allowed.includes('*') || allowed.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      console.error(`CORS rejected origin: ${origin}. Allowed: ${allowed.join(', ')}`);
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
     }
   },
   credentials: true,
@@ -98,8 +99,12 @@ async function requireManager(req, res, next) {
   }
 }
 
-// Apply auth + manager to all /api routes
-app.use('/api', verifyAuth, requireManager);
+// Apply auth + manager to all /api routes, but allow CORS preflight
+app.options('/api/*', cors());
+app.use('/api', (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+  verifyAuth(req, res, next);
+}, requireManager);
 
 // Raw HTTP helper to call Abby API
 async function abbyRequest(path, options = {}) {
@@ -386,6 +391,17 @@ app.post('/api/create-estimate', async (req, res) => {
     return res.status(400).json({ error: 'Missing customerId or lines' });
   }
 
+  if (clientId) {
+    const clientDoc = await db.collection('clients').doc(clientId).get();
+    if (clientDoc.exists) {
+      const client = clientDoc.data();
+      const address = buildAddress(client);
+      if (!address.address || !address.city || !address.zipCode) {
+        return res.status(400).json({ error: 'Adresse client incomplète. Veuillez renseigner rue, code postal et ville.' });
+      }
+    }
+  }
+
   try {
     const estimate = await abbyRequest(`/v2/billing/estimate/${encodeURIComponent(abbyCustomerId)}`, {
       method: 'POST',
@@ -418,8 +434,9 @@ app.post('/api/create-estimate', async (req, res) => {
 
     res.json({ success: true, abbyBillingId: estimate.id, number: estimate.number });
   } catch (err) {
-    console.error('Create estimate error:', err.message, err.data);
-    res.status(500).json({ error: err.message || 'Failed to create estimate' });
+    console.error('Create estimate error:', err.message);
+    console.error('Abby error details:', JSON.stringify(err.data, null, 2));
+    res.status(500).json({ error: err.message || 'Failed to create estimate', details: err.data });
   }
 });
 
@@ -429,6 +446,17 @@ app.post('/api/create-invoice', async (req, res) => {
 
   if (!abbyCustomerId || !lines || !Array.isArray(lines) || lines.length === 0) {
     return res.status(400).json({ error: 'Missing customerId or lines' });
+  }
+
+  if (clientId) {
+    const clientDoc = await db.collection('clients').doc(clientId).get();
+    if (clientDoc.exists) {
+      const client = clientDoc.data();
+      const address = buildAddress(client);
+      if (!address.address || !address.city || !address.zipCode) {
+        return res.status(400).json({ error: 'Adresse client incomplète. Veuillez renseigner rue, code postal et ville.' });
+      }
+    }
   }
 
   try {
@@ -463,8 +491,9 @@ app.post('/api/create-invoice', async (req, res) => {
 
     res.json({ success: true, abbyBillingId: invoice.id, number: invoice.number });
   } catch (err) {
-    console.error('Create invoice error:', err.message, err.data);
-    res.status(500).json({ error: err.message || 'Failed to create invoice' });
+    console.error('Create invoice error:', err.message);
+    console.error('Abby error details:', JSON.stringify(err.data, null, 2));
+    res.status(500).json({ error: err.message || 'Failed to create invoice', details: err.data });
   }
 });
 

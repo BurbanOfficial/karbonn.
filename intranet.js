@@ -27,7 +27,12 @@ async function apiRequest(path, options = {}) {
     },
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Erreur API');
+  if (!response.ok) {
+    const error = new Error(data.error || 'Erreur API');
+    error.details = data.details || data;
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -401,6 +406,22 @@ function validateFormStep(type, step) {
     invalid.focus();
     return false;
   }
+
+  // Address must contain a number (zip) and enough text for street + city
+  const addressInput = container.querySelector('input[name="adresse"]');
+  if (addressInput) {
+    const address = addressInput.value.trim();
+    const hasZip = /\d{4,5}/.test(address);
+    const parts = address.split(',').map(p => p.trim()).filter(Boolean);
+    if (!hasZip || parts.length < 2) {
+      addressInput.setCustomValidity('Format attendu : numéro, rue, code postal, ville');
+      addressInput.reportValidity();
+      addressInput.focus();
+      return false;
+    }
+    addressInput.setCustomValidity('');
+  }
+
   return true;
 }
 
@@ -3081,7 +3102,12 @@ async function handleCreateBilling(e) {
     loadBillings();
   } catch (err) {
     console.error('Create billing error:', err);
-    facturationModalError.textContent = err.message || 'Erreur lors de la création.';
+    let message = err.message || 'Erreur lors de la création.';
+    if (err.details && typeof err.details === 'object') {
+      const details = err.details.message || err.details.error || JSON.stringify(err.details);
+      message += ` (${details})`;
+    }
+    facturationModalError.textContent = message;
   } finally {
     facturationModalSubmit.disabled = false;
     facturationModalSubmit.textContent = 'Créer';

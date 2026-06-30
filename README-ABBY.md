@@ -17,7 +17,7 @@ Dans le dashboard Render, ajoutez ces variables d'environnement :
 | `ABBY_API_KEY` | Votre clé API Abby (format `suk_...`) |
 | `ABBY_API_URL` | `https://api.app-abby.com` |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Contenu JSON complet du compte de service Firebase (sur une seule ligne) |
-| `ALLOWED_ORIGINS` | Domaines autorisés, séparés par des virgules. Ex : `https://votre-domaine.com,http://localhost` |
+| `ALLOWED_ORIGINS` | Domaines autorisés, séparés par des virgules. Ex : `https://votre-domaine.com,http://localhost`. Pour autoriser tout le monde en test : `*` |
 | `PORT` | Render le définit automatiquement sur `10000` |
 
 > ⚠️ **Ne jamais** commiter `ABBY_API_KEY` ou `FIREBASE_SERVICE_ACCOUNT_JSON` dans le repo. Utilisez uniquement les variables d'environnement de Render.
@@ -49,6 +49,8 @@ Dans l'intranet, ouvrez la section **Facturation & Devis** et cliquez sur **Sync
 ## Synchronisation automatique
 
 Chaque nouveau client créé dans la section **Clients** est automatiquement synchronisé avec Abby après sa création dans Firestore.
+
+> **Adresse client** : pour créer un devis ou une facture, Abby exige une adresse complète (rue, code postal, ville). Vérifiez l'adresse du client avant de créer un document.
 
 ## Endpoints API
 
