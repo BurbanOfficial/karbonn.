@@ -450,6 +450,7 @@ app.post('/api/create-estimate', async (req, res) => {
   const { clientId, abbyCustomerId, abbyContactId, title, lines, paymentDelay, finalize, estimateType = 'estimate', withElectronicSignature = false } = req.body;
   // For pro clients use the contact ID so Abby links estimate to org via contact
   const effectiveCustomerId = abbyContactId || abbyCustomerId;
+  console.log('[create-estimate] body:', JSON.stringify({ clientId, abbyCustomerId, abbyContactId, effectiveCustomerId, title, finalize, estimateType, withElectronicSignature, lineCount: lines?.length }));
 
   if (!abbyCustomerId || !lines || !Array.isArray(lines) || lines.length === 0) {
     return res.status(400).json({ error: 'Missing customerId or lines' });
@@ -476,42 +477,49 @@ app.post('/api/create-estimate', async (req, res) => {
         const isOrg = client.type === 'professionnel';
         // For orgs, patch address on the linked contact (org has no PATCH endpoint); for particulier, patch on the contact directly
         const patchContactId = isOrg ? abbyContactId : abbyCustomerId;
+        console.log(`[create-estimate] patching address on contact ${patchContactId}, address:`, JSON.stringify(address));
         if (patchContactId) {
           await abbyRequest(`/v2/contact/${encodeURIComponent(patchContactId)}`, {
             method: 'PATCH',
             body: JSON.stringify({ billingAddress: address }),
           });
-          console.log(`Patched Abby contact address for ${patchContactId}`);
+          console.log(`[create-estimate] patched Abby contact address for ${patchContactId}`);
+        } else {
+          console.warn('[create-estimate] no patchContactId — skipping address patch');
         }
       }
     } catch (patchErr) {
-      console.warn('Could not patch Abby customer address (non-fatal):', patchErr.message);
+      console.warn('[create-estimate] Could not patch Abby customer address (non-fatal):', patchErr.message, JSON.stringify(patchErr.data));
     }
   }
 
   try {
-    console.log(`Creating estimate for customer ${effectiveCustomerId}`);
+    console.log(`[create-estimate] creating estimate for customer ${effectiveCustomerId}`);
     const estimate = await abbyRequest(`/v2/billing/estimate/${encodeURIComponent(effectiveCustomerId)}`, {
       method: 'POST',
       body: JSON.stringify({ estimateType }),
     });
-    console.log(`Estimate created: ${estimate.id}, updating lines`);
+    console.log(`[create-estimate] estimate created: ${estimate.id}, state: ${estimate.state}, finalizable: ${estimate.finalizable}`);
+    console.log('[create-estimate] finalizeRequirements:', JSON.stringify(estimate.finalizeRequirements));
 
     const abbyLines = buildAbbyLines(lines);
-    console.log('Lines payload:', JSON.stringify(abbyLines));
-    await abbyRequest(`/v2/billing/${estimate.id}/lines`, {
+    console.log('[create-estimate] lines payload:', JSON.stringify(abbyLines));
+    const updatedBilling = await abbyRequest(`/v2/billing/${estimate.id}/lines`, {
       method: 'PATCH',
       body: JSON.stringify({ lines: abbyLines }),
     });
+    console.log('[create-estimate] lines updated, finalizeRequirements after:', JSON.stringify(updatedBilling?.finalizeRequirements));
 
     if (finalize) {
+      console.log(`[create-estimate] attempting finalize on ${estimate.id}`);
       await abbyRequest(`/v2/billing/${estimate.id}/finalize`, { method: 'PATCH' });
+      console.log(`[create-estimate] finalized successfully`);
       if (withElectronicSignature) {
         try {
           await abbyRequest(`/v2/billing/estimate/${estimate.id}/electronic-signature`, { method: 'POST' });
-          console.log(`Electronic signature activated on estimate ${estimate.id}`);
+          console.log(`[create-estimate] electronic signature activated on ${estimate.id}`);
         } catch (sigErr) {
-          console.warn('Could not activate electronic signature (non-fatal):', sigErr.message);
+          console.warn('[create-estimate] Could not activate electronic signature (non-fatal):', sigErr.message, JSON.stringify(sigErr.data));
         }
       }
     }
