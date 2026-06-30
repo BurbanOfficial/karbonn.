@@ -130,9 +130,14 @@ async function abbyRequest(path, options = {}) {
   }
 
   if (!response.ok) {
-    const error = new Error(data?.message || `Abby API error ${response.status}`);
+    const rawMessage = data?.message;
+    const message = Array.isArray(rawMessage)
+      ? rawMessage.join(', ')
+      : (rawMessage || `Abby API error ${response.status}`);
+    const error = new Error(message);
     error.status = response.status;
     error.data = data;
+    console.error(`Abby API ${response.status} on ${path}:`, JSON.stringify(data));
     throw error;
   }
 
@@ -434,9 +439,9 @@ app.post('/api/create-estimate', async (req, res) => {
 
     res.json({ success: true, abbyBillingId: estimate.id, number: estimate.number });
   } catch (err) {
-    console.error('Create estimate error:', err.message);
-    console.error('Abby error details:', JSON.stringify(err.data, null, 2));
-    res.status(500).json({ error: err.message || 'Failed to create estimate', details: err.data });
+    const details = err.data || null;
+    console.error('Create estimate error:', err.message, details);
+    res.status(500).json({ error: err.message || 'Failed to create estimate', details });
   }
 });
 
@@ -491,9 +496,9 @@ app.post('/api/create-invoice', async (req, res) => {
 
     res.json({ success: true, abbyBillingId: invoice.id, number: invoice.number });
   } catch (err) {
-    console.error('Create invoice error:', err.message);
-    console.error('Abby error details:', JSON.stringify(err.data, null, 2));
-    res.status(500).json({ error: err.message || 'Failed to create invoice', details: err.data });
+    const details = err.data || null;
+    console.error('Create invoice error:', err.message, details);
+    res.status(500).json({ error: err.message || 'Failed to create invoice', details });
   }
 });
 

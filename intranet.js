@@ -3103,9 +3103,12 @@ async function handleCreateBilling(e) {
   } catch (err) {
     console.error('Create billing error:', err);
     let message = err.message || 'Erreur lors de la création.';
-    if (err.details && typeof err.details === 'object') {
-      const details = err.details.message || err.details.error || JSON.stringify(err.details);
-      message += ` (${details})`;
+    if (err.details) {
+      const d = err.details;
+      const extra = Array.isArray(d.message)
+        ? d.message.join(' — ')
+        : (typeof d.message === 'string' ? d.message : (d.error || JSON.stringify(d)));
+      if (extra && extra !== message) message += ` (${extra})`;
     }
     facturationModalError.textContent = message;
   } finally {
