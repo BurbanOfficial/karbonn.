@@ -474,14 +474,15 @@ app.post('/api/create-estimate', async (req, res) => {
         const client = clientDoc.data();
         const address = buildAddress(client);
         const isOrg = client.type === 'professionnel';
-        const patchPath = isOrg
-          ? `/v2/organization/${encodeURIComponent(abbyCustomerId)}`
-          : `/v2/contact/${encodeURIComponent(abbyCustomerId)}`;
-        await abbyRequest(patchPath, {
-          method: 'PATCH',
-          body: JSON.stringify({ billingAddress: address }),
-        });
-        console.log(`Patched Abby customer address for ${abbyCustomerId}`);
+        // For orgs, patch address on the linked contact (org has no PATCH endpoint); for particulier, patch on the contact directly
+        const patchContactId = isOrg ? abbyContactId : abbyCustomerId;
+        if (patchContactId) {
+          await abbyRequest(`/v2/contact/${encodeURIComponent(patchContactId)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ billingAddress: address }),
+          });
+          console.log(`Patched Abby contact address for ${patchContactId}`);
+        }
       }
     } catch (patchErr) {
       console.warn('Could not patch Abby customer address (non-fatal):', patchErr.message);
@@ -564,14 +565,15 @@ app.post('/api/create-invoice', async (req, res) => {
         const client = clientDoc.data();
         const address = buildAddress(client);
         const isOrg = client.type === 'professionnel';
-        const patchPath = isOrg
-          ? `/v2/organization/${encodeURIComponent(abbyCustomerId)}`
-          : `/v2/contact/${encodeURIComponent(abbyCustomerId)}`;
-        await abbyRequest(patchPath, {
-          method: 'PATCH',
-          body: JSON.stringify({ billingAddress: address }),
-        });
-        console.log(`Patched Abby customer address for ${abbyCustomerId}`);
+        // For orgs, patch address on the linked contact (org has no PATCH endpoint); for particulier, patch on the contact directly
+        const patchContactId = isOrg ? abbyContactId : abbyCustomerId;
+        if (patchContactId) {
+          await abbyRequest(`/v2/contact/${encodeURIComponent(patchContactId)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ billingAddress: address }),
+          });
+          console.log(`Patched Abby contact address for ${patchContactId}`);
+        }
       }
     } catch (patchErr) {
       console.warn('Could not patch Abby customer address (non-fatal):', patchErr.message);
