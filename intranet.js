@@ -2907,12 +2907,16 @@ function openFacturationModal(type) {
   renderClientOptions();
   facturationLinesContainer.innerHTML = '';
   facturationLinesContainer.appendChild(createLineRow());
-  facturationModal.classList.add('active');
+  requestAnimationFrame(() => facturationModal.classList.add('visible'));
 }
 
 function closeFacturationModal() {
-  facturationModal.classList.remove('active');
+  facturationModal.classList.remove('visible');
 }
+
+facturationModal?.addEventListener('click', e => {
+  if (e.target === facturationModal) closeFacturationModal();
+});
 
 function getBillingLines() {
   const rows = facturationLinesContainer.querySelectorAll('.facturation-line');
