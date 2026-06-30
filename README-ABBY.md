@@ -58,6 +58,7 @@ Chaque nouveau client créé dans la section **Clients** est automatiquement syn
 | POST | `/api/sync-all-clients` | Synchronise tous les clients existants |
 | POST | `/api/create-estimate` | Crée un devis |
 | POST | `/api/create-invoice` | Crée une facture |
+| DELETE | `/api/client/:id` | Supprime un client (Abby + Firestore) |
 | PATCH | `/api/billing/:id/finalize` | Finalise un document |
 | PATCH | `/api/billing/:id/sign` | Signe un devis |
 | PATCH | `/api/billing/:id/unsign` | Annule la signature |

@@ -66,6 +66,11 @@ function showApp(user, profile) {
       }
     }
   });
+
+  // Re-render role-dependent UI
+  if (document.getElementById('clients-tbody')) {
+    renderClients(allClients);
+  }
 }
 
 function showLogin() {
@@ -242,13 +247,13 @@ db.collection('clients').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
   renderClients(allClients);
 }, err => {
   console.error(err);
-  document.getElementById('clients-tbody').innerHTML = '<tr class="empty-row"><td colspan="6">Erreur lors du chargement.</td></tr>';
+  document.getElementById('clients-tbody').innerHTML = '<tr class="empty-row"><td colspan="7">Erreur lors du chargement.</td></tr>';
 });
 
 function renderClients(clients) {
   const tbody = document.getElementById('clients-tbody');
   if (clients.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Aucun client trouvé.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Aucun client trouvé.</td></tr>';
     return;
   }
 
@@ -267,16 +272,66 @@ function renderClients(clients) {
       <td><span class="badge ${badgeClass}">${type}</span></td>
       <td>${entreprise}</td>
       <td>${date}</td>
+      <td style="text-align:right;"><div class="action-btns"><button class="action-btn" data-action="delete" title="Supprimer"><i class="fa-solid fa-trash"></i></button></div></td>
     </tr>`;
   }).join('');
 
   // Attach click handlers
   tbody.querySelectorAll('tr[data-client-id]').forEach(row => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', e => {
+      if (e.target.closest('.action-btns')) return;
       const client = allClients.find(c => c.id === row.dataset.clientId);
       if (client) openClientDetail(client);
     });
   });
+
+  tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+    if (!isManager()) {
+      btn.disabled = true;
+      btn.title = 'Réservé aux managers';
+    }
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      if (!isManager()) {
+        showToast('Accès réservé aux managers.', 'error');
+        return;
+      }
+      const row = btn.closest('tr[data-client-id]');
+      const clientId = row?.dataset.clientId;
+      if (!clientId) return;
+      await deleteClient(clientId);
+    });
+  });
+}
+
+async function deleteClient(clientId) {
+  if (!isManager()) {
+    showToast('Accès réservé aux managers.', 'error');
+    return;
+  }
+
+  const client = allClients.find(c => c.id === clientId);
+  if (!client) return;
+
+  if (!API_BASE_URL) {
+    showToast('URL du backend non configurée. Voir README-ABBY.md.', 'error');
+    return;
+  }
+
+  const nom = [client.prenom, client.nom].filter(Boolean).join(' ') || client.entreprise || client.email || clientId;
+  const confirmed = await appConfirm(
+    `Supprimer définitivement le client « ${nom} » ? Cette action est irréversible.`,
+    { title: 'Supprimer le client', confirmLabel: 'Supprimer', cancelLabel: 'Annuler', icon: 'fa-trash' }
+  );
+  if (!confirmed) return;
+
+  try {
+    await apiRequest(`/api/client/${clientId}`, { method: 'DELETE' });
+    showToast('Client supprimé avec succès.', 'success');
+  } catch (err) {
+    console.error('Delete client error:', err);
+    showToast('Erreur lors de la suppression du client : ' + err.message, 'error');
+  }
 }
 
 // Search
@@ -311,6 +366,8 @@ const modalTitle = document.getElementById('modal-title');
 function openClientModal() {
   clientModal.classList.add('visible');
   showModalStep('step1');
+  showFormStep('particulier', 1);
+  showFormStep('professionnel', 1);
 }
 
 function closeClientModal() {
@@ -319,6 +376,40 @@ function closeClientModal() {
   formProfessionnel.reset();
   document.getElementById('modal-error-particulier').textContent = '';
   document.getElementById('modal-error-professionnel').textContent = '';
+  showFormStep('particulier', 1);
+  showFormStep('professionnel', 1);
+}
+
+function showFormStep(type, step) {
+  const step1 = document.getElementById(`form-step-${type}-1`);
+  const step2 = document.getElementById(`form-step-${type}-2`);
+  if (!step1 || !step2) return;
+  if (step === 1) {
+    step1.classList.add('active');
+    step2.classList.remove('active');
+  } else {
+    step1.classList.remove('active');
+    step2.classList.add('active');
+  }
+}
+
+function validateFormStep(type, step) {
+  const container = document.getElementById(`form-step-${type}-${step}`);
+  if (!container) return false;
+  const invalid = container.querySelector(':invalid');
+  if (invalid) {
+    invalid.focus();
+    return false;
+  }
+  return true;
+}
+
+function collectFormData(form) {
+  const data = {};
+  form.querySelectorAll('input, select').forEach(input => {
+    if (input.name) data[input.name] = input.value.trim();
+  });
+  return data;
 }
 
 function showModalStep(step) {
@@ -344,10 +435,25 @@ clientModal.addEventListener('click', e => {
   if (e.target === clientModal) closeClientModal();
 });
 
-document.getElementById('type-particulier').addEventListener('click', () => showModalStep('particulier'));
-document.getElementById('type-professionnel').addEventListener('click', () => showModalStep('professionnel'));
+document.getElementById('type-particulier').addEventListener('click', () => {
+  showModalStep('particulier');
+  showFormStep('particulier', 1);
+});
+document.getElementById('type-professionnel').addEventListener('click', () => {
+  showModalStep('professionnel');
+  showFormStep('professionnel', 1);
+});
 document.getElementById('back-from-particulier').addEventListener('click', () => showModalStep('step1'));
 document.getElementById('back-from-professionnel').addEventListener('click', () => showModalStep('step1'));
+
+document.getElementById('next-particulier')?.addEventListener('click', () => {
+  if (validateFormStep('particulier', 1)) showFormStep('particulier', 2);
+});
+document.getElementById('next-professionnel')?.addEventListener('click', () => {
+  if (validateFormStep('professionnel', 1)) showFormStep('professionnel', 2);
+});
+document.getElementById('back-to-particulier-1')?.addEventListener('click', () => showFormStep('particulier', 1));
+document.getElementById('back-to-professionnel-1')?.addEventListener('click', () => showFormStep('professionnel', 1));
 
 function generateClientId() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -533,10 +639,7 @@ formParticulier.addEventListener('submit', async e => {
   const errorEl = document.getElementById('modal-error-particulier');
   errorEl.textContent = '';
 
-  const data = {};
-  formParticulier.querySelectorAll('input').forEach(input => {
-    if (input.name) data[input.name] = input.value.trim();
-  });
+  const data = collectFormData(formParticulier);
 
   try {
     const clientId = await saveNewClient(data, 'particulier');
@@ -553,10 +656,7 @@ formProfessionnel.addEventListener('submit', async e => {
   const errorEl = document.getElementById('modal-error-professionnel');
   errorEl.textContent = '';
 
-  const data = {};
-  formProfessionnel.querySelectorAll('input').forEach(input => {
-    if (input.name) data[input.name] = input.value.trim();
-  });
+  const data = collectFormData(formProfessionnel);
 
   try {
     const clientId = await saveNewClient(data, 'professionnel');

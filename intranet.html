@@ -427,6 +427,11 @@
       border-color: var(--text);
     }
 
+    .action-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
     .section-header h1 {
       font-size: 1.4rem;
       font-weight: 600;
@@ -806,6 +811,14 @@
     }
 
     .modal-step.active {
+      display: block;
+    }
+
+    .form-step {
+      display: none;
+    }
+
+    .form-step.active {
       display: block;
     }
 
@@ -2418,11 +2431,12 @@
                   <th>Type</th>
                   <th>Entreprise</th>
                   <th>Date de création</th>
+                  <th style="text-align:right;">Actions</th>
                 </tr>
               </thead>
               <tbody id="clients-tbody">
                 <tr class="empty-row">
-                  <td colspan="6">Chargement des clients...</td>
+                  <td colspan="7">Chargement des clients...</td>
                 </tr>
               </tbody>
             </table>
@@ -2767,32 +2781,60 @@
       <!-- Étape 2 : formulaire particulier -->
       <div class="modal-step" id="modal-step-particulier">
         <form class="modal-form" id="form-particulier">
-          <div class="form-row">
-            <div class="form-group">
-              <label for="part-nom">Nom</label>
-              <input type="text" id="part-nom" name="nom" required />
+          <div class="form-step active" id="form-step-particulier-1">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="part-nom">Nom</label>
+                <input type="text" id="part-nom" name="nom" required />
+              </div>
+              <div class="form-group">
+                <label for="part-prenom">Prénom</label>
+                <input type="text" id="part-prenom" name="prenom" required />
+              </div>
             </div>
             <div class="form-group">
-              <label for="part-prenom">Prénom</label>
-              <input type="text" id="part-prenom" name="prenom" required />
+              <label for="part-telephone">Téléphone</label>
+              <input type="tel" id="part-telephone" name="telephone" />
+            </div>
+            <div class="form-group">
+              <label for="part-email">Adresse email</label>
+              <input type="email" id="part-email" name="email" required />
+            </div>
+            <div class="form-group">
+              <label for="part-adresse">Adresse de domicile</label>
+              <input type="text" id="part-adresse" name="adresse" />
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn-back" id="back-from-particulier">Retour</button>
+              <button type="button" class="btn-submit" id="next-particulier">Continuer</button>
             </div>
           </div>
-          <div class="form-group">
-            <label for="part-telephone">Téléphone</label>
-            <input type="tel" id="part-telephone" name="telephone" />
-          </div>
-          <div class="form-group">
-            <label for="part-email">Adresse email</label>
-            <input type="email" id="part-email" name="email" required />
-          </div>
-          <div class="form-group">
-            <label for="part-adresse">Adresse de domicile</label>
-            <input type="text" id="part-adresse" name="adresse" />
-          </div>
-          <p class="modal-error" id="modal-error-particulier"></p>
-          <div class="modal-actions">
-            <button type="button" class="btn-back" id="back-from-particulier">Retour</button>
-            <button type="submit" class="btn-submit">Créer le client</button>
+
+          <div class="form-step" id="form-step-particulier-2">
+            <div class="form-group">
+              <label for="part-langue">Préférence de langue</label>
+              <select id="part-langue" name="langue" required>
+                <option value="fr">Français</option>
+                <option value="en">Anglais</option>
+                <option value="es">Espagnol</option>
+                <option value="de">Allemand</option>
+                <option value="it">Italien</option>
+                <option value="nl">Néerlandais</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="part-paiement">Moyen de paiement préféré</label>
+              <select id="part-paiement" name="paiement" required>
+                <option value="transfer">Virement</option>
+                <option value="credit_card">Carte Bancaire</option>
+                <option value="cheque">Chèque</option>
+              </select>
+            </div>
+            <p class="modal-error" id="modal-error-particulier"></p>
+            <div class="modal-actions">
+              <button type="button" class="btn-back" id="back-to-particulier-1">Retour</button>
+              <button type="submit" class="btn-submit">Créer le client</button>
+            </div>
           </div>
         </form>
       </div>
@@ -2800,36 +2842,68 @@
       <!-- Étape 2 : formulaire professionnel -->
       <div class="modal-step" id="modal-step-professionnel">
         <form class="modal-form" id="form-professionnel">
-          <div class="form-row">
-            <div class="form-group">
-              <label for="pro-nom">Nom</label>
-              <input type="text" id="pro-nom" name="nom" required />
+          <div class="form-step active" id="form-step-professionnel-1">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="pro-nom">Nom</label>
+                <input type="text" id="pro-nom" name="nom" required />
+              </div>
+              <div class="form-group">
+                <label for="pro-prenom">Prénom</label>
+                <input type="text" id="pro-prenom" name="prenom" required />
+              </div>
             </div>
             <div class="form-group">
-              <label for="pro-prenom">Prénom</label>
-              <input type="text" id="pro-prenom" name="prenom" required />
+              <label for="pro-entreprise">Nom de l'entreprise</label>
+              <input type="text" id="pro-entreprise" name="entreprise" required />
+            </div>
+            <div class="form-group">
+              <label for="pro-telephone">Téléphone</label>
+              <input type="tel" id="pro-telephone" name="telephone" />
+            </div>
+            <div class="form-group">
+              <label for="pro-email">Email professionnel</label>
+              <input type="email" id="pro-email" name="email" required />
+            </div>
+            <div class="form-group">
+              <label for="pro-siret">Numéro SIRET</label>
+              <input type="text" id="pro-siret" name="siret" />
+            </div>
+            <div class="form-group">
+              <label for="pro-adresse">Adresse du siège social</label>
+              <input type="text" id="pro-adresse" name="adresse" />
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn-back" id="back-from-professionnel">Retour</button>
+              <button type="button" class="btn-submit" id="next-professionnel">Continuer</button>
             </div>
           </div>
-          <div class="form-group">
-            <label for="pro-telephone">Téléphone</label>
-            <input type="tel" id="pro-telephone" name="telephone" />
-          </div>
-          <div class="form-group">
-            <label for="pro-email">Email professionnel</label>
-            <input type="email" id="pro-email" name="email" required />
-          </div>
-          <div class="form-group">
-            <label for="pro-siret">Numéro SIRET</label>
-            <input type="text" id="pro-siret" name="siret" />
-          </div>
-          <div class="form-group">
-            <label for="pro-adresse">Adresse du siège social</label>
-            <input type="text" id="pro-adresse" name="adresse" />
-          </div>
-          <p class="modal-error" id="modal-error-professionnel"></p>
-          <div class="modal-actions">
-            <button type="button" class="btn-back" id="back-from-professionnel">Retour</button>
-            <button type="submit" class="btn-submit">Créer le client</button>
+
+          <div class="form-step" id="form-step-professionnel-2">
+            <div class="form-group">
+              <label for="pro-langue">Préférence de langue</label>
+              <select id="pro-langue" name="langue" required>
+                <option value="fr">Français</option>
+                <option value="en">Anglais</option>
+                <option value="es">Espagnol</option>
+                <option value="de">Allemand</option>
+                <option value="it">Italien</option>
+                <option value="nl">Néerlandais</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="pro-paiement">Moyen de paiement préféré</label>
+              <select id="pro-paiement" name="paiement" required>
+                <option value="transfer">Virement</option>
+                <option value="credit_card">Carte Bancaire</option>
+                <option value="cheque">Chèque</option>
+              </select>
+            </div>
+            <p class="modal-error" id="modal-error-professionnel"></p>
+            <div class="modal-actions">
+              <button type="button" class="btn-back" id="back-to-professionnel-1">Retour</button>
+              <button type="submit" class="btn-submit">Créer le client</button>
+            </div>
           </div>
         </form>
       </div>

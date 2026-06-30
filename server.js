@@ -176,6 +176,18 @@ function buildAddress(client) {
   };
 }
 
+function buildClientPreferences(client) {
+  const validLanguages = ['fr', 'en', 'de', 'it', 'nl', 'pt', 'es'];
+  const validPayments = ['transfer', 'direct_debit', 'credit_card', 'cheque', 'universal_employment_service_cheque', 'cash', 'paypal', 'stripe', 'other'];
+  const language = validLanguages.includes(client.langue) ? client.langue : 'fr';
+  const payment = validPayments.includes(client.paiement) ? client.paiement : 'transfer';
+  return {
+    language,
+    currency: 'EUR',
+    paymentMethods: [payment],
+  };
+}
+
 // Sync a single client to Abby
 app.post('/api/sync-client', async (req, res) => {
   const { client } = req.body;
@@ -186,25 +198,23 @@ app.post('/api/sync-client', async (req, res) => {
   try {
     const address = buildAddress(client);
     const emails = client.email ? [client.email] : [];
+    const preferences = buildClientPreferences(client);
 
     let abbyCustomerId = null;
     let abbyCustomerType = null;
     let abbyData = null;
 
     if (client.type === 'professionnel') {
+      const orgName = client.entreprise || `${client.prenom} ${client.nom}`.trim() || client.email;
       const orgData = {
-        name: client.entreprise || `${client.prenom} ${client.nom}`.trim() || client.email,
+        name: orgName,
         commercialName: client.entreprise || '',
         emails,
         siret: client.siret || '',
         vatNumber: '',
         billingAddress: address,
         notes: '',
-        preferences: {
-          language: 'fr',
-          currency: 'EUR',
-          paymentMethods: ['transfer'],
-        },
+        preferences,
       };
 
       abbyData = await abbyRequest('/organization', {
@@ -222,11 +232,7 @@ app.post('/api/sync-client', async (req, res) => {
         emails,
         notes: '',
         billingAddress: address,
-        preferences: {
-          language: 'fr',
-          currency: 'EUR',
-          paymentMethods: ['transfer'],
-        },
+        preferences,
       };
 
       abbyData = await abbyRequest('/contact', {
@@ -251,6 +257,37 @@ app.post('/api/sync-client', async (req, res) => {
   }
 });
 
+// Delete a client from Abby and Firestore
+app.delete('/api/client/:id', async (req, res) => {
+  try {
+    const clientDoc = await db.collection('clients').doc(req.params.id).get();
+    if (!clientDoc.exists) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    const client = clientDoc.data();
+
+    // Delete from Abby if previously synced
+    if (client.abbyCustomerId && client.abbyCustomerType) {
+      const endpoint = client.abbyCustomerType === 'organization'
+        ? `/organization/${client.abbyCustomerId}`
+        : `/contact/${client.abbyCustomerId}`;
+      try {
+        await abbyRequest(endpoint, { method: 'DELETE' });
+      } catch (abbyErr) {
+        console.error('Abby delete error:', abbyErr.message);
+        // Continue with Firestore deletion even if Abby fails
+      }
+    }
+
+    await db.collection('clients').doc(req.params.id).delete();
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete client error:', err.message);
+    res.status(500).json({ error: err.message || 'Failed to delete client' });
+  }
+});
+
 // Sync all existing clients
 app.post('/api/sync-all-clients', async (req, res) => {
   try {
@@ -270,19 +307,21 @@ app.post('/api/sync-all-clients', async (req, res) => {
 
         let abbyCustomerId = null;
         let abbyCustomerType = null;
+        const preferences = buildClientPreferences(client);
+        const orgName = client.entreprise || `${client.prenom} ${client.nom}`.trim() || client.email;
 
         if (client.type === 'professionnel') {
           const abbyData = await abbyRequest('/organization', {
             method: 'POST',
             body: JSON.stringify({
-              name: client.entreprise || `${client.prenom} ${client.nom}`.trim() || client.email,
+              name: orgName,
               commercialName: client.entreprise || '',
               emails,
               siret: client.siret || '',
               vatNumber: '',
               billingAddress: address,
               notes: '',
-              preferences: { language: 'fr', currency: 'EUR', paymentMethods: ['transfer'] },
+              preferences,
             }),
           });
           abbyCustomerId = abbyData.id;
@@ -298,7 +337,7 @@ app.post('/api/sync-all-clients', async (req, res) => {
               emails,
               notes: '',
               billingAddress: address,
-              preferences: { language: 'fr', currency: 'EUR', paymentMethods: ['transfer'] },
+              preferences,
             }),
           });
           abbyCustomerId = abbyData.id;
