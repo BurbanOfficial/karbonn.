@@ -750,6 +750,29 @@ app.get('/api/billing/:id/download', async (req, res) => {
   }
 });
 
+// Sync billing status from Abby
+app.post('/api/billing/:id/sync-status', async (req, res) => {
+  try {
+    const abbyDoc = await abbyRequest(`/v2/billing/${req.params.id}`, { method: 'GET' });
+    // Abby state: 1=draft, 2=finalized, 3=signed/paid, 4=refused
+    // Also check finalizedAt, signedAt, refusedAt fields
+    const ABBY_STATE_MAP = { 1: 'draft', 2: 'finalized', 3: 'finalized', 4: 'refused', 5: 'paid' };
+    let status = ABBY_STATE_MAP[abbyDoc.state] || 'draft';
+    // Refine using specific timestamps
+    if (abbyDoc.signedAt) status = 'signed';
+    if (abbyDoc.refusedAt) status = 'refused';
+    if (abbyDoc.paidAt) status = 'paid';
+    if (abbyDoc.finalizedAt && !abbyDoc.signedAt && !abbyDoc.refusedAt && !abbyDoc.paidAt) status = 'finalized';
+    if (!abbyDoc.finalizedAt) status = 'draft';
+    await updateBillingStatus(req.params.id, status);
+    console.log(`Synced billing ${req.params.id} status: ${status}`);
+    res.json({ success: true, status });
+  } catch (err) {
+    console.error('Sync status error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Send billing by email
 app.post('/api/billing/:id/send', async (req, res) => {
   try {

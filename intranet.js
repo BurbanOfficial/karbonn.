@@ -3206,6 +3206,7 @@ function getBillingActions(billing) {
     }
   }
 
+  actions.push(`<button class="action-btn" onclick="syncBillingStatus('${id}')" title="Rafraîchir le statut depuis Abby"><i class="fa-solid fa-arrows-rotate"></i></button>`);
   actions.push(`<button class="action-btn" onclick="downloadBilling('${id}')" title="Télécharger PDF"><i class="fa-solid fa-download"></i></button>`);
   return actions.join('');
 }
@@ -3320,6 +3321,7 @@ window.markPaid = (id) => billingAction(`/api/billing/${id}/mark-paid`, 'Facture
 window.markUnpaid = (id) => billingAction(`/api/billing/${id}/mark-unpaid`, 'Facture marquée comme non payée.');
 window.sendBilling = (id) => billingAction(`/api/billing/${id}/send`, 'Document envoyé par email.', 'POST');
 window.activateEsignature = (id) => billingAction(`/api/billing/${id}/activate-esignature`, 'Signature électronique activée.', 'POST');
+window.syncBillingStatus = (id) => billingAction(`/api/billing/${id}/sync-status`, 'Statut mis à jour.', 'POST');
 
 window.downloadBilling = async (id) => {
   try {
