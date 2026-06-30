@@ -3186,7 +3186,7 @@ function getBillingActions(billing) {
   if (billing.type === 'estimate') {
     if (billing.status === 'finalized') {
       actions.push(`<button class="action-btn" onclick="sendBilling('${id}')" title="Envoyer par email"><i class="fa-solid fa-paper-plane"></i></button>`);
-      actions.push(`<button class="action-btn" onclick="activateEsignature('${id}')" title="Activer signature électronique"><i class="fa-solid fa-signature"></i></button>`);
+      actions.push(`<button class="action-btn" onclick="activateEsignature('${id}')" title="Activer signature électronique"><i class="fa-solid fa-file-signature"></i></button>`);
       actions.push(`<button class="action-btn" onclick="signBilling('${id}')" title="Marquer comme signé"><i class="fa-solid fa-pen-nib"></i></button>`);
       actions.push(`<button class="action-btn" onclick="refuseBilling('${id}')" title="Marquer comme refusé"><i class="fa-solid fa-ban"></i></button>`);
     }
@@ -3232,6 +3232,7 @@ function renderBillings() {
     return;
   }
 
+  console.log('[billings]', filtered.map(b => ({ id: b.id, status: b.status, type: b.type, abbyBillingId: b.abbyBillingId })));
   facturationTableBody.innerHTML = filtered.map(b => {
     const client = allClients.find(c => c.id === b.clientId);
     const clientName = client
