@@ -481,7 +481,13 @@ app.post('/api/create-estimate', async (req, res) => {
         if (patchContactId) {
           await abbyRequest(`/contact/${encodeURIComponent(patchContactId)}`, {
             method: 'PUT',
-            body: JSON.stringify({ billingAddress: address }),
+            body: JSON.stringify({
+              firstname: client.prenom || '',
+              lastname: client.nom || '',
+              phone: client.telephone || '',
+              emails: client.email ? [client.email] : [],
+              billingAddress: address,
+            }),
           });
           console.log(`[create-estimate] patched Abby contact address for ${patchContactId}`);
         } else {
@@ -581,7 +587,13 @@ app.post('/api/create-invoice', async (req, res) => {
         if (patchContactId) {
           await abbyRequest(`/contact/${encodeURIComponent(patchContactId)}`, {
             method: 'PUT',
-            body: JSON.stringify({ billingAddress: address }),
+            body: JSON.stringify({
+              firstname: client.prenom || '',
+              lastname: client.nom || '',
+              phone: client.telephone || '',
+              emails: client.email ? [client.email] : [],
+              billingAddress: address,
+            }),
           });
           console.log(`Patched Abby contact address for ${patchContactId}`);
         }
