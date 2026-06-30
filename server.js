@@ -375,14 +375,50 @@ app.post('/api/sync-all-clients', async (req, res) => {
   }
 });
 
+// Map numeric quantityUnit to Abby string enum
+const QUANTITY_UNIT_MAP = {
+  14: 'unit',
+  1: 'hour',
+  2: 'day',
+  3: 'month',
+  22: 'fixed_rate',
+  23: 'year',
+  4: 'gram',
+  5: 'kilogram',
+  6: 'ton',
+  7: 'kilometer',
+  8: 'liter',
+  9: 'batch',
+  10: 'meter',
+  11: 'square_meter',
+  12: 'cubic_meter',
+  13: 'linear_meter',
+  15: 'person',
+  16: 'word',
+  17: 'page',
+  18: 'leaflet',
+  19: 'paragraph',
+  20: 'minute',
+  21: 'overnight_stay',
+};
+
+// Map numeric type to Abby string enum
+const PRODUCT_TYPE_MAP = {
+  1: 'service_delivery',
+  2: 'sale_of_goods',
+  3: 'commercial_or_craft_services',
+  4: 'sale_of_manufactured_goods',
+  5: 'disbursement',
+};
+
 // Helper: build Abby billing lines from frontend lines
 function buildAbbyLines(lines) {
   return lines.map(line => ({
     designation: line.designation || '',
     quantity: Number(line.quantity) || 1,
     unitPrice: Math.round(Number(line.unitPrice) * 100), // euros to cents
-    quantityUnit: Number(line.quantityUnit) || 14,
-    type: Number(line.type) || 1,
+    quantityUnit: QUANTITY_UNIT_MAP[Number(line.quantityUnit)] || 'unit',
+    type: PRODUCT_TYPE_MAP[Number(line.type)] || 'service_delivery',
     vatCode: line.vatCode || 'FR_2000',
     isDeliveryOfGoods: false,
   }));
@@ -416,8 +452,8 @@ app.post('/api/create-estimate', async (req, res) => {
         const address = buildAddress(client);
         const isOrg = client.type === 'professionnel';
         const patchPath = isOrg
-          ? `/organization/${encodeURIComponent(abbyCustomerId)}`
-          : `/contact/${encodeURIComponent(abbyCustomerId)}`;
+          ? `/v2/organization/${encodeURIComponent(abbyCustomerId)}`
+          : `/v2/contact/${encodeURIComponent(abbyCustomerId)}`;
         await abbyRequest(patchPath, {
           method: 'PATCH',
           body: JSON.stringify({ billingAddress: address }),
@@ -498,8 +534,8 @@ app.post('/api/create-invoice', async (req, res) => {
         const address = buildAddress(client);
         const isOrg = client.type === 'professionnel';
         const patchPath = isOrg
-          ? `/organization/${encodeURIComponent(abbyCustomerId)}`
-          : `/contact/${encodeURIComponent(abbyCustomerId)}`;
+          ? `/v2/organization/${encodeURIComponent(abbyCustomerId)}`
+          : `/v2/contact/${encodeURIComponent(abbyCustomerId)}`;
         await abbyRequest(patchPath, {
           method: 'PATCH',
           body: JSON.stringify({ billingAddress: address }),
