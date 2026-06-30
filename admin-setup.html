@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Création du compte manager — CARBON.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #fafafa;
+      --text: #111111;
+      --muted: #6b6b6b;
+      --border: #e8e8e8;
+      --error: #d32f2f;
+      --success: #2e7d32;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .setup-card {
+      width: 100%;
+      max-width: 420px;
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
+    }
+
+    .setup-card .brand {
+      display: block;
+      text-align: center;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+
+    .setup-card h1 {
+      text-align: center;
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 28px;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .form-group input:focus {
+      border-color: var(--text);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    button[type="submit"] {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background-color: var(--text);
+      color: var(--bg);
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+      margin-top: 8px;
+    }
+
+    button[type="submit"]:hover {
+      opacity: 0.85;
+    }
+
+    button[type="submit"]:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .message {
+      margin-top: 14px;
+      font-size: 0.85rem;
+      text-align: center;
+      min-height: 1.2em;
+    }
+
+    .message.error {
+      color: var(--error);
+    }
+
+    .message.success {
+      color: var(--success);
+    }
+
+    .hint {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="setup-card">
+    <a href="index.html" class="brand">CARBON.</a>
+    <h1>Créer le premier compte manager</h1>
+    <form id="setup-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="prenom">Prénom</label>
+          <input type="text" id="prenom" required />
+        </div>
+        <div class="form-group">
+          <label for="nom">Nom</label>
+          <input type="text" id="nom" required />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="email">Adresse email</label>
+        <input type="email" id="email" placeholder="manager@carbon.com" required />
+      </div>
+      <div class="form-group">
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" placeholder="8 caractères minimum" minlength="8" required />
+      </div>
+      <div class="form-group">
+        <label for="confirm-password">Confirmer le mot de passe</label>
+        <input type="password" id="confirm-password" required />
+      </div>
+      <button type="submit" id="submit-btn">Créer le compte manager</button>
+      <p class="message" id="message"></p>
+    </form>
+    <p class="hint">Cette page est destinée à la première configuration. Sécurisez son accès après utilisation.</p>
+  </div>
+
+  <script>
+    const setupForm = document.getElementById('setup-form');
+    const messageEl = document.getElementById('message');
+    const submitBtn = document.getElementById('submit-btn');
+
+    async function isSetupComplete() {
+      try {
+        const doc = await db.collection('config').doc('setupComplete').get();
+        return doc.exists && doc.data().complete === true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    (async () => {
+      try {
+        if (await isSetupComplete()) {
+          messageEl.textContent = 'Un compte manager existe déjà. Redirection...';
+          messageEl.className = 'message success';
+          submitBtn.disabled = true;
+          setTimeout(() => window.location.href = 'intranet.html', 2000);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    })();
+
+    setupForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      messageEl.textContent = '';
+      messageEl.className = 'message';
+
+      const prenom = document.getElementById('prenom').value.trim();
+      const nom = document.getElementById('nom').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirm-password').value;
+
+      if (password !== confirmPassword) {
+        messageEl.textContent = 'Les mots de passe ne correspondent pas.';
+        messageEl.className = 'message error';
+        return;
+      }
+
+      if (password.length < 8) {
+        messageEl.textContent = 'Le mot de passe doit contenir au moins 8 caractères.';
+        messageEl.className = 'message error';
+        return;
+      }
+
+      try {
+        if (await isSetupComplete()) {
+          messageEl.textContent = 'Un compte manager existe déjà.';
+          messageEl.className = 'message error';
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Création en cours...';
+
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        await cred.user.updateProfile({ displayName: `${prenom} ${nom}` });
+        await db.collection('users').doc(cred.user.uid).set({
+          email,
+          displayName: `${prenom} ${nom}`,
+          prenom,
+          nom,
+          role: 'Manager',
+          status: 'Actif',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await db.collection('config').doc('setupComplete').set({
+          complete: true,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        messageEl.textContent = 'Compte manager créé. Redirection...';
+        messageEl.className = 'message success';
+        setTimeout(() => window.location.href = 'intranet.html', 1500);
+      } catch (err) {
+        console.error(err);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Créer le compte manager';
+        let msg = 'Erreur lors de la création du compte.';
+        if (err.code === 'auth/email-already-in-use') msg = 'Cette adresse email est déjà utilisée.';
+        if (err.code === 'auth/invalid-email') msg = 'Adresse email invalide.';
+        if (err.code === 'auth/weak-password') msg = 'Mot de passe trop faible.';
+        messageEl.textContent = msg;
+        messageEl.className = 'message error';
+      }
+    });
+  </script>
+</body>
+</html>

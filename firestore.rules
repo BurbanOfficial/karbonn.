@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Vérifie si l'utilisateur connecté est Manager
+    function isManager() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Manager';
+    }
+
+    // Vérifie si l'utilisateur connecté est l'auteur du document
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Configuration publique : indique si le setup initial est terminé
+    match /config/setupComplete {
+      allow read: if true;
+      allow write: if isManager();
+    }
+
+    // Collection users
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if isOwner(userId) || isManager();
+      allow update: if isManager();
+      allow delete: if isManager();
+    }
+
+    // Collection roles
+    match /roles/{roleId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isManager();
+    }
+
+    // Collection statuses
+    match /statuses/{statusId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isManager();
+    }
+
+    // Collection clients
+    match /clients/{clientId} {
+      allow read: if true;
+      allow create, update: if request.auth != null;
+      allow delete: if isManager();
+    }
+
+    // Collection projets
+    match /projets/{projetId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+
+    // Collection billings (Facturation & Devis)
+    match /billings/{billingId} {
+      allow read, create, update, delete: if isManager();
+    }
+  }
+}

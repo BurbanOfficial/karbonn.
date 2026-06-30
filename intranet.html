@@ -1,0 +1,3135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Intranet — Karbonn.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #fafafa;
+      --text: #111111;
+      --muted: #6b6b6b;
+      --accent: #111111;
+      --border: #e8e8e8;
+      --sidebar-width: 72px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      height: 100vh;
+      display: flex;
+    }
+
+    #app-content {
+      display: flex;
+      width: 100%;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: fixed;
+      top: 72px;
+      left: 0;
+      width: var(--sidebar-width);
+      height: calc(100vh - 72px);
+      background-color: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .nav-menu {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 0;
+      gap: 8px;
+    }
+
+    .nav-item {
+      position: relative;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      text-decoration: none;
+      border-radius: 10px;
+      transition: color 0.2s ease, background-color 0.2s ease;
+    }
+
+    .nav-item:hover,
+    .nav-item.active {
+      color: var(--accent);
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    .nav-item i {
+      font-size: 1.15rem;
+    }
+
+    .nav-item::after {
+      content: attr(data-label);
+      position: absolute;
+      left: 64px;
+      top: 50%;
+      transform: translateY(-50%);
+      background-color: var(--text);
+      color: var(--bg);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    .nav-item:hover::after {
+      opacity: 1;
+      transform: translateY(-50%) translateX(6px);
+    }
+
+    .main {
+      margin-left: var(--sidebar-width);
+      width: calc(100% - var(--sidebar-width));
+      height: 100vh;
+      padding-top: 72px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 48px;
+      background-color: var(--bg);
+      border-bottom: 1px solid var(--border);
+      z-index: 110;
+    }
+
+    .top-bar .brand {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+    }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background-color: var(--text);
+      color: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .user-info {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.3;
+    }
+
+    .user-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .user-role {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    #logout-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.9rem;
+      padding: 8px;
+      margin-left: 8px;
+      transition: color 0.2s ease;
+    }
+
+    #logout-btn:hover {
+      color: var(--text);
+    }
+
+    .login-overlay {
+      position: fixed;
+      inset: 0;
+      background-color: var(--bg);
+      display: flex;
+      z-index: 200;
+    }
+
+    .login-overlay.hidden {
+      display: none;
+    }
+
+    .login-left {
+      flex: 1;
+      background-color: var(--text);
+      color: var(--bg);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 64px;
+      clip-path: polygon(0 0, 80% 0, 100% 50%, 80% 100%, 0 100%);
+    }
+
+    .login-left .brand {
+      color: var(--bg);
+      text-decoration: none;
+      font-size: 2.2rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 16px;
+    }
+
+    .login-left .welcome {
+      font-size: 1.6rem;
+      font-weight: 500;
+      line-height: 1.3;
+      max-width: 320px;
+    }
+
+    .login-right {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 380px;
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+    }
+
+    .login-card h1 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 28px;
+    }
+
+    .login-card .form-group {
+      margin-bottom: 18px;
+    }
+
+    .login-card label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .login-card input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background-color: var(--panel);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .login-card input:focus {
+      border-color: var(--text);
+    }
+
+    .login-card button[type="submit"] {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background-color: var(--text);
+      color: var(--bg);
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+      margin-top: 8px;
+    }
+
+    .login-card button[type="submit"]:hover {
+      opacity: 0.85;
+    }
+
+    .login-card .error {
+      color: #d32f2f;
+      font-size: 0.85rem;
+      margin-top: 14px;
+      text-align: center;
+      min-height: 1.2em;
+    }
+
+    .login-card .hint {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .login-left {
+        display: none;
+      }
+
+      .login-right {
+        flex: 1;
+        padding: 24px;
+      }
+    }
+
+    #app-content.hidden {
+      display: none;
+    }
+
+    .content {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .placeholder {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+      letter-spacing: 0.02em;
+      margin: auto;
+    }
+
+    .placeholder i {
+      color: var(--border);
+      margin-bottom: 12px;
+    }
+
+    .placeholder p {
+      margin: 0;
+    }
+
+    .section-page {
+      display: none;
+      width: 100%;
+      height: 100%;
+      flex-direction: column;
+      padding: 40px 48px;
+      overflow-y: auto;
+    }
+
+    .section-page.active {
+      display: flex;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .section-header-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .section-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .action-btns {
+      display: inline-flex;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    .action-btn {
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 0.8rem;
+    }
+
+    .action-btn:hover {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+    }
+
+    .section-header h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      min-width: 260px;
+    }
+
+    .search-bar i {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .search-bar input {
+      border: none;
+      background: none;
+      outline: none;
+      font-family: inherit;
+      font-size: 0.9rem;
+      color: var(--text);
+      width: 100%;
+    }
+
+    .search-bar input::placeholder {
+      color: var(--muted);
+    }
+
+    .btn-create {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background-color: var(--text);
+      color: var(--bg);
+      border: none;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+    }
+
+    .btn-create:hover {
+      opacity: 0.85;
+    }
+
+    .table-wrapper {
+      flex: 1;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    .data-table thead {
+      background-color: var(--panel);
+      position: sticky;
+      top: 0;
+    }
+
+    .data-table th {
+      text-align: left;
+      padding: 14px 18px;
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .data-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .data-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .data-table tbody tr:hover {
+      background-color: rgba(0, 0, 0, 0.02);
+    }
+
+    .data-table .empty-row td {
+      text-align: center;
+      color: var(--muted);
+      padding: 48px 18px;
+    }
+
+    .data-table .actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 0.85rem;
+    }
+
+    .btn-icon:hover {
+      background: var(--panel);
+      border-color: var(--text);
+    }
+
+    .btn-icon-danger {
+      color: #d32f2f;
+    }
+
+    .btn-icon-danger:hover {
+      background: rgba(211, 47, 47, 0.08);
+      border-color: #d32f2f;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: var(--panel);
+      border: 1px solid var(--border);
+    }
+
+    .status-badge.actif { background: rgba(46, 125, 50, 0.1); color: #2e7d32; border-color: rgba(46, 125, 50, 0.2); }
+    .status-badge.inactif { background: rgba(211, 47, 47, 0.1); color: #d32f2f; border-color: rgba(211, 47, 47, 0.2); }
+    .status-badge.en-conges { background: rgba(245, 124, 0, 0.1); color: #f57c00; border-color: rgba(245, 124, 0, 0.2); }
+
+    .role-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+
+    .role-badge.manager { background: rgba(17, 17, 17, 0.08); color: var(--text); border-color: var(--border); }
+    .role-badge.developpeur { background: rgba(59, 130, 246, 0.1); color: #3b82f6; border-color: rgba(59, 130, 246, 0.2); }
+    .role-badge.designer { background: rgba(168, 85, 247, 0.1); color: #a855f7; border-color: rgba(168, 85, 247, 0.2); }
+
+    .facturation-filters {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .facturation-filter {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .facturation-filter:hover {
+      border-color: var(--text);
+      color: var(--text);
+    }
+
+    .facturation-filter.active {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+    }
+
+    .form-section-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin: 20px 0 12px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-add-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: transparent;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-top: 8px;
+    }
+
+    .btn-add-line:hover {
+      border-color: var(--text);
+      color: var(--text);
+    }
+
+    .facturation-line {
+      display: grid;
+      grid-template-columns: 1fr 80px 110px 110px 120px 40px;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+
+    .facturation-line input,
+    .facturation-line select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.85rem;
+    }
+
+    .facturation-line .btn-remove-line {
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: #d32f2f;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .facturation-line .btn-remove-line:hover {
+      background: rgba(211, 47, 47, 0.08);
+      border-color: #d32f2f;
+    }
+
+    .billing-status {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .billing-status.draft { background: rgba(158, 158, 158, 0.1); color: #757575; border: 1px solid rgba(158, 158, 158, 0.2); }
+    .billing-status.finalized { background: rgba(33, 150, 243, 0.1); color: #2196f3; border: 1px solid rgba(33, 150, 243, 0.2); }
+    .billing-status.signed { background: rgba(46, 125, 50, 0.1); color: #2e7d32; border: 1px solid rgba(46, 125, 50, 0.2); }
+    .billing-status.refused { background: rgba(211, 47, 47, 0.1); color: #d32f2f; border: 1px solid rgba(211, 47, 47, 0.2); }
+    .billing-status.paid { background: rgba(46, 125, 50, 0.1); color: #2e7d32; border: 1px solid rgba(46, 125, 50, 0.2); }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    .badge-particulier {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .badge-professionnel {
+      background-color: #e3f2fd;
+      color: #1565c0;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .modal-overlay.visible {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal-card {
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 480px;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12);
+      transform: translateY(12px);
+      transition: transform 0.25s ease;
+    }
+
+    .modal-overlay.visible .modal-card {
+      transform: translateY(0);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+
+    .modal-header h2 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .modal-close {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .modal-close:hover {
+      background-color: var(--border);
+      color: var(--text);
+      border-color: transparent;
+    }
+
+    .modal-step {
+      display: none;
+    }
+
+    .modal-step.active {
+      display: block;
+    }
+
+    .type-selector {
+      display: flex;
+      gap: 16px;
+    }
+
+    .type-card {
+      flex: 1;
+      padding: 24px 20px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+    }
+
+    .type-card:hover {
+      border-color: var(--text);
+      background-color: var(--panel);
+      transform: translateY(-2px);
+    }
+
+    .type-card i {
+      font-size: 1.6rem;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .type-card span {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .modal-form .form-group {
+      margin-bottom: 16px;
+    }
+
+    .modal-form label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .modal-form input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background-color: var(--panel);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .modal-form input:focus,
+    .modal-form select:focus {
+      border-color: var(--text);
+    }
+
+    .modal-form select {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background-color: var(--panel);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6b6b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      cursor: pointer;
+      transition: border-color 0.2s ease;
+    }
+
+    .modal-form .form-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .modal-form .form-row .form-group {
+      flex: 1;
+    }
+
+    .modal-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 24px;
+      gap: 12px;
+    }
+
+    .modal-actions .btn-back {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.2s ease, color 0.2s ease;
+    }
+
+    .modal-actions .btn-back:hover {
+      border-color: var(--text);
+      color: var(--text);
+    }
+
+    .modal-actions .btn-submit {
+      padding: 12px 24px;
+      background-color: var(--text);
+      color: var(--bg);
+      border: none;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+    }
+
+    .modal-actions .btn-submit:hover {
+      opacity: 0.85;
+    }
+
+    .modal-error {
+      color: #d32f2f;
+      font-size: 0.85rem;
+      margin-top: 12px;
+      text-align: center;
+      min-height: 1.2em;
+    }
+
+    .client-id-notification {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 400;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .client-id-notification-content {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    .client-id-notification-content > i {
+      color: #2e7d32;
+      font-size: 1.3rem;
+    }
+
+    .client-id-notification-content .notif-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 2px;
+    }
+
+    .client-id-notification-content .notif-id {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .client-id-notification-content .notif-id strong {
+      color: var(--text);
+      letter-spacing: 0.04em;
+    }
+
+    .client-id-notification-content .notif-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 4px;
+      margin-left: 8px;
+    }
+
+    /* Toast notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 600;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .toast {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--muted);
+      border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+      min-width: 300px;
+      max-width: 420px;
+      pointer-events: auto;
+      animation: toastIn 0.3s ease;
+    }
+
+    .toast.toast-hide {
+      animation: toastOut 0.3s ease forwards;
+    }
+
+    @keyframes toastIn {
+      from { transform: translateX(120%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    @keyframes toastOut {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(120%); opacity: 0; }
+    }
+
+    .toast.success { border-left-color: #22c55e; }
+    .toast.error { border-left-color: #ef4444; }
+    .toast.info { border-left-color: #3b82f6; }
+
+    .toast__icon {
+      font-size: 1.2rem;
+      margin-top: 1px;
+    }
+
+    .toast.success .toast__icon { color: #22c55e; }
+    .toast.error .toast__icon { color: #ef4444; }
+    .toast.info .toast__icon { color: #3b82f6; }
+
+    .toast__body { flex: 1; }
+
+    .toast__title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+
+    .toast__message {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.4;
+      white-space: pre-line;
+    }
+
+    .toast__close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 2px;
+      font-size: 0.9rem;
+      line-height: 1;
+    }
+
+    .toast__close:hover { color: var(--text); }
+
+    /* Custom confirm dialog */
+    .app-confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 700;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .app-confirm-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .app-confirm-card {
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      max-width: 440px;
+      width: calc(100% - 48px);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+      transform: scale(0.95);
+      transition: transform 0.2s ease;
+    }
+
+    .app-confirm-overlay.visible .app-confirm-card {
+      transform: scale(1);
+    }
+
+    .app-confirm-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      margin-bottom: 16px;
+      background: rgba(59, 130, 246, 0.1);
+      color: #3b82f6;
+    }
+
+    .app-confirm-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .app-confirm-message {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+
+    .app-confirm-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .app-confirm-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .app-confirm-btn--cancel {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app-confirm-btn--cancel:hover {
+      background: var(--panel);
+    }
+
+    .app-confirm-btn--confirm {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .app-confirm-btn--confirm:hover {
+      opacity: 0.85;
+    }
+
+    /* Download progress overlay */
+    .download-progress-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 700;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .download-progress-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .download-progress-card {
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      max-width: 440px;
+      width: calc(100% - 48px);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+    }
+
+    .download-progress-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .download-progress-header i {
+      font-size: 1.2rem;
+      color: var(--accent);
+    }
+
+    .download-progress-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .download-progress-status {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+      min-height: 1.2em;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #3b82f6, #6366f1);
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+
+    .progress-bar-percent {
+      text-align: right;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Client detail modal */
+    .detail-modal .modal-card {
+      max-width: 580px;
+    }
+
+    .detail-section {
+      margin-bottom: 28px;
+    }
+
+    .detail-section-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .detail-field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .detail-field:last-child {
+      border-bottom: none;
+    }
+
+    .detail-field-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .detail-field-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .detail-field-value {
+      font-size: 0.9rem;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .detail-field-input {
+      display: none;
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background-color: var(--panel);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.88rem;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .detail-field-input:focus {
+      border-color: var(--text);
+    }
+
+    .detail-field.editing .detail-field-value {
+      display: none;
+    }
+
+    .detail-field.editing .detail-field-input {
+      display: block;
+    }
+
+    .detail-field-edit {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      transition: color 0.2s ease, background-color 0.2s ease;
+      margin-left: 12px;
+      flex-shrink: 0;
+    }
+
+    .detail-field-edit:hover {
+      color: var(--text);
+      background-color: var(--panel);
+    }
+
+    .detail-field.editing .detail-field-edit {
+      color: #2e7d32;
+    }
+
+    .detail-projets-list {
+      list-style: none;
+    }
+
+    .detail-projets-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.88rem;
+    }
+
+    .detail-projets-list li:last-child {
+      border-bottom: none;
+    }
+
+    .detail-projets-list li i {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .detail-projets-empty {
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .detail-client-id {
+      display: inline-block;
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+
+    .data-table tbody tr {
+      cursor: pointer;
+    }
+
+    .btn-delete-projet {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #c62828;
+      border-radius: 10px;
+      background: none;
+      color: #c62828;
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+      margin-top: 8px;
+    }
+
+    .btn-delete-projet:hover {
+      background-color: #c62828;
+      color: #fff;
+    }
+
+    .projets-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      width: fit-content;
+    }
+
+    .projets-tab {
+      padding: 8px 20px;
+      border: none;
+      border-radius: 8px;
+      background: none;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .projets-tab.active {
+      background-color: var(--bg);
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .projets-tab:hover:not(.active) {
+      color: var(--text);
+    }
+
+    /* File Explorer */
+    .file-explorer {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background-color: var(--panel);
+      padding: 12px;
+    }
+
+    .file-tree {
+      font-size: 0.85rem;
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+      color: var(--text);
+    }
+
+    .tree-node {
+      user-select: none;
+    }
+
+    .tree-node-content {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.15s ease;
+    }
+
+    .tree-node-content:hover {
+      background-color: var(--bg);
+    }
+
+    .tree-node-content i {
+      font-size: 0.75rem;
+      width: 14px;
+      text-align: center;
+    }
+
+    .tree-node-content i.fa-folder {
+      color: #ffa726;
+    }
+
+    .tree-node-content i.fa-folder-open {
+      color: #ffa726;
+    }
+
+    .tree-node-content i.fa-file-pdf {
+      color: #e53935;
+    }
+
+    .tree-node-content i.fa-file-archive {
+      color: #43a047;
+    }
+
+    .tree-node-content i.fa-file-code {
+      color: #1e88e5;
+    }
+
+    .tree-node-content i.fa-file-image {
+      color: #8e24aa;
+    }
+
+    .tree-node-content i.fa-file-excel {
+      color: #43a047;
+    }
+
+    .tree-node-content i.fa-file-word {
+      color: #1976d2;
+    }
+
+    .tree-node-content i.fa-file {
+      color: var(--muted);
+    }
+
+    .tree-children {
+      margin-left: 20px;
+      display: none;
+    }
+
+    .tree-node.expanded > .tree-children {
+      display: block;
+    }
+
+    .tree-node.empty > .tree-children {
+      display: none;
+    }
+
+    .tree-node-actions {
+      margin-left: auto;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    .tree-node-content:hover .tree-node-actions {
+      opacity: 1;
+    }
+
+    .tree-node-actions button {
+      background: none;
+      border: none;
+      padding: 2px 4px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.75rem;
+      border-radius: 3px;
+      transition: all 0.15s ease;
+    }
+
+    .tree-node-actions button:hover {
+      background-color: var(--bg);
+      color: var(--text);
+    }
+
+    .folder-date {
+      font-size: 0.75rem;
+      color: var(--primary);
+      background: rgba(67, 97, 238, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+
+    /* Planning Styles */
+    .planning-container {
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+
+    .planning-header {
+      margin-bottom: 24px;
+    }
+
+    .planning-week-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .planning-week-info h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: 1.1rem;
+    }
+
+    .planning-nav {
+      display: flex;
+      gap: 8px;
+    }
+
+    .planning-nav button {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .planning-nav button:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .planning-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+    }
+
+    .planning-day {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .planning-day-header {
+      background: var(--primary);
+      color: var(--text);
+      padding: 12px 16px;
+      text-align: center;
+    }
+
+    .planning-day-header h4 {
+      margin: 0 0 4px 0;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .planning-date {
+      font-size: 0.85rem;
+      opacity: 0.9;
+    }
+
+    .planning-day-content {
+      padding: 12px;
+      min-height: 300px;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    .planning-project {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .planning-project:hover {
+      border-color: var(--primary);
+      box-shadow: 0 2px 8px rgba(67, 97, 238, 0.15);
+    }
+
+    .planning-project.completed {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
+      border-color: #22c55e;
+      box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2);
+    }
+
+    .planning-project.completed:hover {
+      border-color: #16a34a;
+      box-shadow: 0 2px 12px rgba(34, 197, 94, 0.3);
+    }
+
+    .planning-project.completed .planning-project-title {
+      color: #16a34a;
+      font-weight: 700;
+    }
+
+    .planning-project.completed .planning-project-id {
+      background: rgba(34, 197, 94, 0.2);
+      color: #16a34a;
+    }
+
+    .planning-project-title {
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+      font-size: 0.95rem;
+    }
+
+    .planning-project-id {
+      background: rgba(67, 97, 238, 0.1);
+      color: var(--primary);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+      display: inline-block;
+    }
+
+    .planning-project-company {
+      color: var(--text);
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+    }
+
+    .planning-project-folder {
+      font-size: 0.8rem;
+      color: var(--primary);
+      font-weight: 500;
+      padding: 2px 6px;
+      background: rgba(67, 97, 238, 0.05);
+      border-radius: 3px;
+      border-left: 3px solid var(--primary);
+    }
+
+    /* Task Modal Styles */
+    .task-project-info {
+      background: var(--bg);
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .task-project-info h3 {
+      margin: 0 0 8px 0;
+      color: var(--text);
+      font-size: 1.1rem;
+    }
+
+    .task-project-meta {
+      display: flex;
+      gap: 16px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .task-project-meta span {
+      background: rgba(67, 97, 238, 0.1);
+      color: var(--primary);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .task-content {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .task-folder-section {
+      margin-bottom: 24px;
+    }
+
+    .task-folder-title {
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      background: var(--panel);
+      border-radius: 6px;
+      border-left: 4px solid var(--primary);
+    }
+
+    .task-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .task-item {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      margin-bottom: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .task-item:hover {
+      border-color: var(--primary);
+      box-shadow: 0 2px 4px rgba(67, 97, 238, 0.1);
+    }
+
+    .task-item.completed {
+      opacity: 0.7;
+      background: rgba(67, 97, 238, 0.05);
+    }
+
+    .task-upload-icon {
+      background: #2563eb;
+      color: white !important;
+      border: 2px solid #1d4ed8;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      margin-right: 12px;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+    }
+
+    .task-upload-icon:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.5);
+      background: #1d4ed8;
+    }
+
+    .task-uploaded-icon {
+      background: #16a34a;
+      color: white !important;
+      border: 2px solid #15803d;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      margin-right: 12px;
+      box-shadow: 0 2px 8px rgba(22, 163, 74, 0.4);
+    }
+
+    .task-label {
+      flex: 1;
+      color: var(--text);
+      font-size: 0.95rem;
+      transition: all 0.2s ease;
+    }
+
+    .task-item.uploaded .task-label {
+      text-decoration: line-through;
+      color: var(--muted);
+      opacity: 0.7;
+    }
+
+    .task-status {
+      font-size: 0.8rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .task-status.uploaded {
+      background: rgba(34, 197, 94, 0.1);
+      color: #22c55e;
+    }
+
+    .task-status.pending {
+      background: rgba(249, 115, 22, 0.1);
+      color: #f97316;
+    }
+
+    
+    .empty-tasks {
+      text-align: center;
+      color: var(--muted);
+      padding: 40px;
+      font-style: italic;
+    }
+
+    @media (max-width: 1200px) {
+      .planning-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      
+      .planning-day:nth-child(4),
+      .planning-day:nth-child(5) {
+        grid-column: span 1;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .planning-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .planning-week-info {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+      }
+    }
+
+    .btn-back-projet {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 18px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+
+    .btn-back-projet:hover {
+      background-color: var(--panel);
+    }
+
+    .projet-page-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 24px 0 32px;
+    }
+
+    .projet-page-header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+    }
+
+    .projet-page-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+    }
+
+    .projet-page-grid .detail-section:last-child {
+      grid-column: 1 / -1;
+    }
+
+    @media (max-width: 768px) {
+      .projet-page-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .detail-info-item-editable {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .detail-info-item-editable .detail-info-content {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .detail-info-item-editable .detail-field-input {
+      display: none;
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background-color: var(--panel);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    select.detail-field-input {
+      cursor: pointer;
+      appearance: auto;
+    }
+
+    .detail-info-item-editable.editing .detail-info-value {
+      display: none;
+    }
+
+    .detail-info-item-editable.editing .detail-field-input {
+      display: block;
+    }
+
+    .detail-info-item-editable.editing .detail-field-edit {
+      color: #2e7d32;
+    }
+
+    .detail-resume-wrapper {
+      position: relative;
+    }
+
+    .detail-resume-wrapper .detail-field-edit {
+      position: absolute;
+      top: 0;
+      right: 0;
+    }
+
+    .detail-resume-wrapper textarea {
+      display: none;
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background-color: var(--panel);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.88rem;
+      outline: none;
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .detail-resume-wrapper.editing .detail-resume,
+    .detail-resume-wrapper.editing .detail-resume-empty {
+      display: none;
+    }
+
+    .detail-resume-wrapper.editing textarea {
+      display: block;
+    }
+
+    .detail-resume-wrapper.editing .detail-field-edit {
+      color: #2e7d32;
+    }
+
+    .detail-team-editable {
+      position: relative;
+    }
+
+    .detail-team-editable .detail-field-edit {
+      position: absolute;
+      top: -4px;
+      right: 0;
+    }
+
+    .detail-team-checkboxes {
+      display: none;
+    }
+
+    .detail-team-editable.editing .detail-team-list,
+    .detail-team-editable.editing .detail-resume-empty {
+      display: none;
+    }
+
+    .detail-team-editable.editing .detail-team-checkboxes {
+      display: block;
+    }
+
+    .detail-team-editable.editing .detail-field-edit {
+      color: #2e7d32;
+    }
+
+    /* Delivery status badges */
+    .badge-en-avance {
+      background-color: #e3f2fd;
+      color: #1565c0;
+    }
+
+    .badge-dans-les-temps {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .badge-en-retard {
+      background-color: #ffebee;
+      color: #c62828;
+    }
+
+    .badge-livre {
+      background-color: #ede7f6;
+      color: #5e35b1;
+    }
+
+    /* Project detail */
+    .detail-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+
+    .detail-info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .detail-info-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .detail-info-value {
+      font-size: 0.9rem;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .detail-resume {
+      font-size: 0.88rem;
+      color: var(--text);
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .detail-resume-empty {
+      font-size: 0.85rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .detail-team-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .team-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .team-tag i {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    /* Modal form textarea */
+    .modal-form textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background-color: var(--panel);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      resize: vertical;
+      min-height: 80px;
+      transition: border-color 0.2s ease;
+    }
+
+    .modal-form textarea:focus {
+      border-color: var(--text);
+    }
+
+    /* Team checkboxes */
+    .team-checkbox-list {
+      padding: 4px 0;
+    }
+
+    .team-group-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-top: 10px;
+      margin-bottom: 6px;
+    }
+
+    .team-group-label:first-child {
+      margin-top: 0;
+    }
+
+    .team-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .team-role-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      background-color: var(--panel);
+    }
+
+    .team-role-card-title {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .team-role-card-members {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .team-role-card-member {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .team-role-card-member i {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .team-role-card-empty {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    @media (max-width: 768px) {
+      .team-cards-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .team-checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .team-checkbox-item:hover {
+      background-color: var(--panel);
+    }
+
+    .team-checkbox-item input[type="checkbox"] {
+      width: auto;
+      accent-color: var(--text);
+    }
+
+    .team-checkbox-item label {
+      margin-bottom: 0;
+      cursor: pointer;
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    @media (max-width: 768px) {
+      :root {
+        --sidebar-width: 64px;
+      }
+
+      .nav-item {
+        width: 44px;
+        height: 44px;
+      }
+
+      .nav-item::after {
+        display: none;
+      }
+
+      .section-page {
+        padding: 24px 16px;
+      }
+
+      .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .section-header-left {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .search-bar {
+        min-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-overlay" id="login-screen">
+    <div class="login-left">
+      <a href="index.html" class="brand">Karbonn.</a>
+      <p class="welcome">Bienvenue sur votre espace.</p>
+    </div>
+    <div class="login-right">
+      <div class="login-card">
+        <h1>Connexion à l'intranet</h1>
+        <form id="login-form">
+          <div class="form-group">
+            <label for="login-email">Adresse email</label>
+            <input type="email" id="login-email" name="email" placeholder="vous@karbonn.com" required />
+          </div>
+          <div class="form-group">
+            <label for="login-password">Mot de passe</label>
+            <input type="password" id="login-password" name="password" placeholder="Votre mot de passe" required />
+          </div>
+          <button type="submit">Se connecter</button>
+          <p class="error" id="login-error"></p>
+        </form>
+        <p class="hint">Uniquement connexion. Contactez un manager pour obtenir un accès.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="app-content" class="hidden">
+    <aside class="sidebar">
+      <nav class="nav-menu">
+        <a href="#" class="nav-item active" data-label="Dashboard">
+          <i class="fa-solid fa-house"></i>
+        </a>
+        <a href="#" class="nav-item" data-label="Clients">
+          <i class="fa-solid fa-users"></i>
+        </a>
+        <a href="#" class="nav-item" data-label="Pipeline Commercial">
+          <i class="fa-solid fa-filter-circle-dollar"></i>
+        </a>
+        <a href="#" class="nav-item" data-label="Tâches & Planning">
+          <i class="fa-solid fa-list-check"></i>
+        </a>
+        <a href="#" class="nav-item" data-label="Analytics">
+          <i class="fa-solid fa-chart-line"></i>
+        </a>
+        <a href="#" class="nav-item" data-label="Projets & Services">
+          <i class="fa-solid fa-diagram-project"></i>
+        </a>
+        <a href="#" class="nav-item" data-label="Facturation & Devis">
+          <i class="fa-solid fa-file-invoice-dollar"></i>
+        </a>
+        <a href="#" class="nav-item" data-label="Équipe">
+          <i class="fa-solid fa-people-group"></i>
+        </a>
+        <a href="#" class="nav-item" data-label="Paramètres" style="margin-top: auto;">
+          <i class="fa-solid fa-gear"></i>
+        </a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <div class="top-bar">
+        <a href="index.html" class="brand">Karbonn.</a>
+        <div class="user-profile">
+          <div class="user-avatar" id="user-avatar"></div>
+          <div class="user-info">
+            <span class="user-name" id="user-name"></span>
+            <span class="user-role" id="user-role"></span>
+          </div>
+          <button id="logout-btn" title="Se déconnecter"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+        </div>
+      </div>
+      <div class="content">
+        <!-- Dashboard -->
+        <section class="section-page active" id="section-dashboard">
+          <div class="placeholder">
+            <i class="fa-solid fa-layer-group fa-2x"></i>
+            <p>Dashboard — à venir.</p>
+          </div>
+        </section>
+
+        <!-- Clients -->
+        <section class="section-page" id="section-clients">
+          <div class="section-header">
+            <div class="section-header-left">
+              <h1>Clients</h1>
+              <div class="search-bar">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="clients-search" placeholder="Rechercher un client..." />
+              </div>
+            </div>
+            <button class="btn-create" id="create-client-btn">
+              <i class="fa-solid fa-plus"></i> Créer un client
+            </button>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table" id="clients-table">
+              <thead>
+                <tr>
+                  <th>Nom</th>
+                  <th>Email</th>
+                  <th>Téléphone</th>
+                  <th>Type</th>
+                  <th>Entreprise</th>
+                  <th>Date de création</th>
+                </tr>
+              </thead>
+              <tbody id="clients-tbody">
+                <tr class="empty-row">
+                  <td colspan="6">Chargement des clients...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Pipeline Commercial -->
+        <section class="section-page" id="section-pipeline">
+          <div class="placeholder">
+            <i class="fa-solid fa-filter-circle-dollar fa-2x"></i>
+            <p>Pipeline Commercial — à venir.</p>
+          </div>
+        </section>
+
+        <!-- Tâches & Planning -->
+        <section class="section-page" id="section-taches">
+          <div class="section-header">
+            <div class="section-header-left">
+              <h2 class="section-title">Planning Hebdomadaire</h2>
+            </div>
+            <div class="section-header-right">
+              <!-- Search removed -->
+            </div>
+          </div>
+          
+          <div class="planning-container">
+            <div class="planning-header">
+              <div class="planning-week-info">
+                <h3 id="planning-week-title">Semaine du <span id="week-start-date"></span> au <span id="week-end-date"></span></h3>
+                <div class="planning-nav">
+                  <button id="planning-prev-week" title="Semaine précédente">
+                    <i class="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <button id="planning-today" title="Aujourd'hui">
+                    <i class="fa-solid fa-calendar-day"></i>
+                  </button>
+                  <button id="planning-next-week" title="Semaine suivante">
+                    <i class="fa-solid fa-chevron-right"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div class="planning-grid">
+              <div class="planning-day" data-day="monday">
+                <div class="planning-day-header">
+                  <h4>Lundi</h4>
+                  <span class="planning-date" id="monday-date"></span>
+                </div>
+                <div class="planning-day-content" id="monday-projects">
+                  <!-- Projects will be added here -->
+                </div>
+              </div>
+              
+              <div class="planning-day" data-day="tuesday">
+                <div class="planning-day-header">
+                  <h4>Mardi</h4>
+                  <span class="planning-date" id="tuesday-date"></span>
+                </div>
+                <div class="planning-day-content" id="tuesday-projects">
+                  <!-- Projects will be added here -->
+                </div>
+              </div>
+              
+              <div class="planning-day" data-day="wednesday">
+                <div class="planning-day-header">
+                  <h4>Mercredi</h4>
+                  <span class="planning-date" id="wednesday-date"></span>
+                </div>
+                <div class="planning-day-content" id="wednesday-projects">
+                  <!-- Projects will be added here -->
+                </div>
+              </div>
+              
+              <div class="planning-day" data-day="thursday">
+                <div class="planning-day-header">
+                  <h4>Jeudi</h4>
+                  <span class="planning-date" id="thursday-date"></span>
+                </div>
+                <div class="planning-day-content" id="thursday-projects">
+                  <!-- Projects will be added here -->
+                </div>
+              </div>
+              
+              <div class="planning-day" data-day="friday">
+                <div class="planning-day-header">
+                  <h4>Vendredi</h4>
+                  <span class="planning-date" id="friday-date"></span>
+                </div>
+                <div class="planning-day-content" id="friday-projects">
+                  <!-- Projects will be added here -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Analytics -->
+        <section class="section-page" id="section-analytics">
+          <div class="placeholder">
+            <i class="fa-solid fa-chart-line fa-2x"></i>
+            <p>Analytics — à venir.</p>
+          </div>
+        </section>
+
+        <!-- Projets & Services -->
+        <section class="section-page" id="section-projets">
+          <!-- Liste des projets -->
+          <div id="projets-list-view">
+            <div class="section-header">
+              <div class="section-header-left">
+                <h1>Projets & Services</h1>
+                <div class="search-bar">
+                  <i class="fa-solid fa-magnifying-glass"></i>
+                  <input type="text" id="projets-search" placeholder="Rechercher un projet..." />
+                </div>
+              </div>
+              <button class="btn-create" id="create-projet-btn">
+                <i class="fa-solid fa-plus"></i> Créer un projet
+              </button>
+            </div>
+
+            <div class="projets-tabs">
+              <button class="projets-tab active" id="tab-actifs">Projets actifs</button>
+              <button class="projets-tab" id="tab-acheves">Projets achevés</button>
+            </div>
+
+            <!-- Tableau projets actifs -->
+            <div id="projets-actifs-view">
+              <div class="table-wrapper">
+                <table class="data-table" id="projets-table">
+                  <thead>
+                    <tr>
+                      <th>Nom du projet</th>
+                      <th>Client</th>
+                      <th>Équipe</th>
+                      <th>Date de création</th>
+                      <th>Livraison prévue</th>
+                      <th>Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody id="projets-tbody">
+                    <tr class="empty-row">
+                      <td colspan="6">Chargement des projets...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Tableau projets achevés -->
+            <div id="projets-acheves-view" style="display:none;">
+              <div class="table-wrapper">
+                <table class="data-table" id="projets-acheves-table">
+                  <thead>
+                    <tr>
+                      <th>Nom du projet</th>
+                      <th>Client</th>
+                      <th>Équipe</th>
+                      <th>Date de création</th>
+                      <th>Date de fin</th>
+                      <th>Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody id="projets-acheves-tbody">
+                    <tr class="empty-row">
+                      <td colspan="6">Aucun projet achevé.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Page détail d'un projet -->
+          <div id="projet-page-view" style="display:none;">
+            <div class="section-header">
+              <div class="section-header-left">
+                <button class="btn-back-projet" id="projet-back-btn"><i class="fa-solid fa-arrow-left"></i> Retour aux projets</button>
+              </div>
+              <button class="btn-delete-projet" id="btn-delete-projet" style="width:auto;padding:10px 20px;margin-top:0;"><i class="fa-solid fa-trash"></i> Supprimer</button>
+            </div>
+
+            <div class="projet-page-header">
+              <h1 id="projet-page-title">—</h1>
+              <span class="detail-client-id" id="projet-page-id">—</span>
+            </div>
+
+            <div class="projet-page-grid">
+              <div class="detail-section">
+                <div class="detail-section-title">Informations</div>
+                <div class="detail-info-grid" id="projet-page-info"></div>
+              </div>
+
+              <div class="detail-section">
+                <div class="detail-section-title">Résumé</div>
+                <div class="detail-resume-wrapper" id="projet-page-resume">
+                  <p class="detail-resume" id="projet-page-resume-text"></p>
+                  <textarea id="projet-page-resume-input"></textarea>
+                  <button class="detail-field-edit" id="projet-page-resume-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
+                </div>
+              </div>
+
+              <div class="detail-section">
+                <div class="detail-section-title">Équipe assignée</div>
+                <div class="detail-team-editable" id="projet-page-team">
+                  <div class="detail-team-list" id="projet-page-team-display"></div>
+                  <div class="detail-team-checkboxes" id="projet-page-team-edit-list"></div>
+                  <button class="detail-field-edit" id="projet-page-team-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
+                </div>
+              </div>
+
+              <div class="detail-section">
+                <div class="detail-section-title">Projet</div>
+                <button class="btn-create" id="btn-add-file" style="margin-bottom:16px;">
+                  <i class="fa-solid fa-plus"></i> Ajouter un fichier
+                </button>
+                <div class="file-explorer" id="projet-file-explorer">
+                  <div class="file-tree" id="projet-file-tree">
+                    <!-- Dynamically rendered -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Facturation & Devis -->
+        <section class="section-page" id="section-facturation">
+          <div class="section-header">
+            <div class="section-header-left">
+              <h1>Facturation & Devis</h1>
+              <div class="search-bar">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="facturation-search" placeholder="Rechercher un document..." />
+              </div>
+            </div>
+            <div class="section-header-actions">
+              <button class="btn-create" id="btn-sync-all-clients" style="margin-right:8px;background:transparent;color:var(--text);border:1px solid var(--border);">
+                <i class="fa-solid fa-rotate"></i> Synchroniser clients Abby
+              </button>
+              <button class="btn-create" id="btn-create-devis">
+                <i class="fa-solid fa-plus"></i> Devis
+              </button>
+              <button class="btn-create" id="btn-create-facture" style="margin-left:8px;">
+                <i class="fa-solid fa-plus"></i> Facture
+              </button>
+            </div>
+          </div>
+          <div class="facturation-filters">
+            <button class="facturation-filter active" data-filter="all">Tous</button>
+            <button class="facturation-filter" data-filter="estimate">Devis</button>
+            <button class="facturation-filter" data-filter="invoice">Factures</button>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table" id="facturation-table">
+              <thead>
+                <tr>
+                  <th>Numéro</th>
+                  <th>Type</th>
+                  <th>Client</th>
+                  <th>Titre</th>
+                  <th>Montant TTC</th>
+                  <th>Statut</th>
+                  <th>Date</th>
+                  <th style="text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="facturation-table-body">
+                <tr class="empty-row"><td colspan="8">Chargement des documents...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Équipe -->
+        <section class="section-page" id="section-equipe">
+          <div class="section-header">
+            <div class="section-header-left">
+              <h1>Équipe</h1>
+              <div class="search-bar">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="equipe-search" placeholder="Rechercher un membre..." />
+              </div>
+            </div>
+            <button class="btn-create" id="btn-create-user">
+              <i class="fa-solid fa-plus"></i> Ajouter un membre
+            </button>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table" id="equipe-table">
+              <thead>
+                <tr>
+                  <th>Nom</th>
+                  <th>Email</th>
+                  <th>Rôle</th>
+                  <th>Statut</th>
+                  <th style="text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="equipe-table-body">
+                <tr><td colspan="5" class="empty">Chargement de l'équipe…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Paramètres -->
+        <section class="section-page" id="section-parametres">
+          <div class="placeholder">
+            <i class="fa-solid fa-gear fa-2x"></i>
+            <p>Paramètres — à venir.</p>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal Créer un client -->
+  <div class="modal-overlay" id="client-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="modal-title">Nouveau client</h2>
+        <button class="modal-close" id="modal-close"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="14" y2="14"/><line x1="14" y1="6" x2="6" y2="14"/></svg></button>
+      </div>
+
+      <!-- Étape 1 : choix du type -->
+      <div class="modal-step active" id="modal-step-1">
+        <p style="font-size:0.88rem;color:var(--muted);margin-bottom:20px;">Quel type de client souhaitez-vous créer ?</p>
+        <div class="type-selector">
+          <div class="type-card" id="type-particulier">
+            <i class="fa-solid fa-user"></i>
+            <span>Particulier</span>
+          </div>
+          <div class="type-card" id="type-professionnel">
+            <i class="fa-solid fa-building"></i>
+            <span>Professionnel</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Étape 2 : formulaire particulier -->
+      <div class="modal-step" id="modal-step-particulier">
+        <form class="modal-form" id="form-particulier">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="part-nom">Nom</label>
+              <input type="text" id="part-nom" name="nom" required />
+            </div>
+            <div class="form-group">
+              <label for="part-prenom">Prénom</label>
+              <input type="text" id="part-prenom" name="prenom" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="part-telephone">Téléphone</label>
+            <input type="tel" id="part-telephone" name="telephone" />
+          </div>
+          <div class="form-group">
+            <label for="part-email">Adresse email</label>
+            <input type="email" id="part-email" name="email" required />
+          </div>
+          <div class="form-group">
+            <label for="part-adresse">Adresse de domicile</label>
+            <input type="text" id="part-adresse" name="adresse" />
+          </div>
+          <p class="modal-error" id="modal-error-particulier"></p>
+          <div class="modal-actions">
+            <button type="button" class="btn-back" id="back-from-particulier">Retour</button>
+            <button type="submit" class="btn-submit">Créer le client</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Étape 2 : formulaire professionnel -->
+      <div class="modal-step" id="modal-step-professionnel">
+        <form class="modal-form" id="form-professionnel">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="pro-nom">Nom</label>
+              <input type="text" id="pro-nom" name="nom" required />
+            </div>
+            <div class="form-group">
+              <label for="pro-prenom">Prénom</label>
+              <input type="text" id="pro-prenom" name="prenom" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="pro-telephone">Téléphone</label>
+            <input type="tel" id="pro-telephone" name="telephone" />
+          </div>
+          <div class="form-group">
+            <label for="pro-email">Email professionnel</label>
+            <input type="email" id="pro-email" name="email" required />
+          </div>
+          <div class="form-group">
+            <label for="pro-siret">Numéro SIRET</label>
+            <input type="text" id="pro-siret" name="siret" />
+          </div>
+          <div class="form-group">
+            <label for="pro-adresse">Adresse du siège social</label>
+            <input type="text" id="pro-adresse" name="adresse" />
+          </div>
+          <p class="modal-error" id="modal-error-professionnel"></p>
+          <div class="modal-actions">
+            <button type="button" class="btn-back" id="back-from-professionnel">Retour</button>
+            <button type="submit" class="btn-submit">Créer le client</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Créer un projet -->
+  <div class="modal-overlay" id="projet-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Nouveau projet</h2>
+        <button class="modal-close" id="projet-modal-close"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="14" y2="14"/><line x1="14" y1="6" x2="6" y2="14"/></svg></button>
+      </div>
+      <form class="modal-form" id="form-projet">
+        <div class="form-group">
+          <label for="projet-nom">Nom du projet</label>
+          <input type="text" id="projet-nom" name="nom" required />
+        </div>
+        <div class="form-group">
+          <label for="projet-client">Client associé</label>
+          <select id="projet-client" name="clientId" required>
+            <option value="">Sélectionner un client...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="projet-livraison">Date de livraison prévue</label>
+          <input type="date" id="projet-livraison" name="dateLivraison" />
+        </div>
+        <div class="form-group">
+          <label for="projet-resume">Résumé du projet</label>
+          <textarea id="projet-resume" name="resume" placeholder="Décrivez brièvement le projet..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Équipe assignée</label>
+          <div class="team-checkbox-list" id="projet-team-list">
+            <p style="font-size:0.85rem;color:var(--muted);">Chargement...</p>
+          </div>
+        </div>
+        <p class="modal-error" id="modal-error-projet"></p>
+        <div class="modal-actions">
+          <span></span>
+          <button type="submit" class="btn-submit">Créer le projet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Détail Client -->
+  <div class="modal-overlay detail-modal" id="client-detail-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="detail-modal-title">Détail client</h2>
+        <button class="modal-close" id="detail-modal-close"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="14" y2="14"/><line x1="14" y1="6" x2="6" y2="14"/></svg></button>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Informations</div>
+        <div id="detail-fields"></div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Identifiant client</div>
+        <span class="detail-client-id" id="detail-client-id"></span>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Projets associés</div>
+        <div id="detail-projets"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Modal Récapitulatif Projet Achevé -->
+  <div class="modal-overlay detail-modal" id="projet-recap-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="projet-recap-title">Récapitulatif du projet</h2>
+        <button class="modal-close" id="projet-recap-close"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="14" y2="14"/><line x1="14" y1="6" x2="6" y2="14"/></svg></button>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Informations</div>
+        <div class="detail-info-grid" id="projet-recap-info"></div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Résumé</div>
+        <div id="projet-recap-resume"></div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Équipe assignée</div>
+        <div id="projet-recap-team"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Upload Fichier -->
+  <div class="modal-overlay" id="file-upload-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Ajouter un fichier</h2>
+        <button class="modal-close" id="file-upload-close"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="14" y2="14"/><line x1="14" y1="6" x2="6" y2="14"/></svg></button>
+      </div>
+
+      <div class="form-group">
+        <label for="file-upload-folder">Dossier de destination</label>
+        <select id="file-upload-folder">
+          <option value="01 - Administration">01 - Administration</option>
+          <option value="02 - Analyse">02 - Analyse</option>
+          <option value="03 - Design">03 - Design</option>
+          <option value="04 - Développement">04 - Développement</option>
+          <option value="05 - Tests">05 - Tests</option>
+          <option value="06 - Livraison">06 - Livraison</option>
+          <option value="07 - Archives">07 - Archives</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="file-upload-input">Fichier</label>
+        <input type="file" id="file-upload-input" />
+      </div>
+
+      <div class="form-group">
+        <label for="file-upload-name">Nom du fichier (optionnel)</label>
+        <input type="text" id="file-upload-name" placeholder="Laisser vide pour conserver le nom original" />
+      </div>
+
+      <p class="modal-error" id="file-upload-error"></p>
+      <div class="modal-actions">
+        <span></span>
+        <button type="button" class="btn-submit" id="file-upload-submit">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Folder Delivery Date Modal -->
+  <div class="modal-overlay" id="folder-date-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Date de livraison du dossier</h2>
+        <button class="modal-close" id="folder-date-close"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="14" y2="14"/><line x1="14" y1="6" x2="6" y2="14"/></svg></button>
+      </div>
+
+      <div class="form-group">
+        <label for="folder-date-name">Dossier</label>
+        <input type="text" id="folder-date-name" readonly>
+      </div>
+      <div class="form-group">
+        <label for="folder-date-input">Date de livraison</label>
+        <input type="date" id="folder-date-input">
+      </div>
+      <p class="modal-error" id="folder-date-error"></p>
+      <div class="modal-actions">
+        <span></span>
+        <button type="button" class="btn-submit" id="folder-date-submit">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task Modal -->
+  <div class="modal-overlay" id="task-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Tâches du projet</h2>
+        <button class="modal-close" id="task-modal-close"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="14" y2="14"/><line x1="14" y1="6" x2="6" y2="14"/></svg></button>
+      </div>
+
+      <div class="task-project-info">
+        <h3 id="task-project-name"></h3>
+        <div class="task-project-meta">
+          <span id="task-project-id"></span>
+          <span id="task-project-client"></span>
+        </div>
+      </div>
+
+      <div class="task-content">
+        <div class="task-folder-sections" id="task-folder-sections">
+          <!-- Folder sections will be added here -->
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <span></span>
+        <button type="button" class="btn-submit" id="task-modal-close-btn">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Utilisateur -->
+  <div class="modal-overlay" id="user-modal">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <h2 id="user-modal-title">Ajouter un membre</h2>
+        <button class="modal-close" id="user-modal-close"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="14" y2="14"/><line x1="14" y1="6" x2="6" y2="14"/></svg></button>
+      </div>
+      <form class="modal-form" id="form-user">
+        <input type="hidden" id="user-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="user-prenom">Prénom</label>
+            <input type="text" id="user-prenom" required />
+          </div>
+          <div class="form-group">
+            <label for="user-nom">Nom</label>
+            <input type="text" id="user-nom" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="user-email">Email</label>
+          <input type="email" id="user-email" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="user-role">Rôle</label>
+            <select id="user-role" required>
+              <option value="Manager">Manager</option>
+              <option value="Développeur">Développeur</option>
+              <option value="Designer Graphique">Designer Graphique</option>
+              <option value="Autre">Autre</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="user-statut">Statut</label>
+            <select id="user-statut" required>
+              <option value="Actif">Actif</option>
+              <option value="Inactif">Inactif</option>
+              <option value="En congés">En congés</option>
+            </select>
+          </div>
+        </div>
+        <p class="modal-error" id="user-modal-error"></p>
+        <div class="modal-actions">
+          <span></span>
+          <button type="submit" class="btn-submit" id="user-modal-submit">Créer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Facturation -->
+  <div class="modal-overlay" id="facturation-modal">
+    <div class="modal-card" style="max-width: 640px;">
+      <div class="modal-header">
+        <h2 id="facturation-modal-title">Nouveau document</h2>
+        <button class="modal-close" id="facturation-modal-close"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="14" y2="14"/><line x1="14" y1="6" x2="6" y2="14"/></svg></button>
+      </div>
+      <form class="modal-form" id="form-facturation">
+        <input type="hidden" id="facturation-type" />
+        <div class="form-group">
+          <label for="facturation-client">Client</label>
+          <select id="facturation-client" required>
+            <option value="">Sélectionner un client...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="facturation-title">Titre du document</label>
+          <input type="text" id="facturation-title" placeholder="Ex : Projet site web" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="facturation-payment-delay">Délai de paiement</label>
+            <select id="facturation-payment-delay">
+              <option value="at_reception">À réception</option>
+              <option value="seven_days">7 jours</option>
+              <option value="fifteen_days">15 jours</option>
+              <option value="thirty_days" selected>30 jours</option>
+              <option value="thirty_days_end_of_month">30 jours fin de mois</option>
+              <option value="forty_five_days">45 jours</option>
+              <option value="sixty_days">60 jours</option>
+            </select>
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;gap:8px;padding-bottom:8px;">
+            <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="facturation-finalize" />
+              Finaliser immédiatement
+            </label>
+          </div>
+        </div>
+
+        <div class="form-section-title">Lignes de facturation</div>
+        <div id="facturation-lines">
+          <!-- Dynamic lines -->
+        </div>
+        <button type="button" class="btn-add-line" id="btn-add-line">
+          <i class="fa-solid fa-plus"></i> Ajouter une ligne
+        </button>
+
+        <p class="modal-error" id="facturation-modal-error"></p>
+        <div class="modal-actions">
+          <span></span>
+          <button type="submit" class="btn-submit" id="facturation-modal-submit">Créer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="intranet.js"></script>
+</body>
+</html>

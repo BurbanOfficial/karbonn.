@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestion des employés — CARBON.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #fafafa;
+      --text: #111111;
+      --muted: #6b6b6b;
+      --border: #e8e8e8;
+      --error: #d32f2f;
+      --success: #2e7d32;
+      --sidebar-width: 72px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: fixed;
+      top: 72px;
+      left: 0;
+      width: var(--sidebar-width);
+      height: calc(100vh - 72px);
+      background-color: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 100;
+    }
+
+    .nav-menu {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 0;
+      gap: 8px;
+    }
+
+    .nav-item {
+      position: relative;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      text-decoration: none;
+      border-radius: 10px;
+      transition: color 0.2s ease, background-color 0.2s ease;
+    }
+
+    .nav-item:hover,
+    .nav-item.active {
+      color: var(--text);
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    .nav-item i {
+      font-size: 1.15rem;
+    }
+
+    .nav-item::after {
+      content: attr(data-label);
+      position: absolute;
+      left: 64px;
+      top: 50%;
+      transform: translateY(-50%);
+      background-color: var(--text);
+      color: var(--bg);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    .nav-item:hover::after {
+      opacity: 1;
+      transform: translateY(-50%) translateX(6px);
+    }
+
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 48px;
+      background-color: var(--bg);
+      border-bottom: 1px solid var(--border);
+      z-index: 110;
+    }
+
+    .top-bar .brand {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+
+    .main {
+      margin-left: var(--sidebar-width);
+      margin-top: 72px;
+      padding: 40px 48px;
+      min-height: calc(100vh - 72px);
+    }
+
+    .page-header {
+      margin-bottom: 32px;
+    }
+
+    .page-header h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .page-header p {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .card {
+      background-color: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card h2 i {
+      color: var(--muted);
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      background-color: var(--text);
+      color: var(--bg);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+    }
+
+    .btn:hover {
+      opacity: 0.85;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background-color: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-danger {
+      background-color: var(--error);
+    }
+
+    .btn-sm {
+      padding: 6px 10px;
+      font-size: 0.75rem;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 500;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+    }
+
+    .badge-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+    }
+
+    .message {
+      margin-top: 12px;
+      font-size: 0.85rem;
+      min-height: 1.2em;
+    }
+
+    .message.error {
+      color: var(--error);
+    }
+
+    .message.success {
+      color: var(--success);
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 16px 0;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      :root {
+        --sidebar-width: 64px;
+      }
+
+      .main {
+        padding: 24px;
+      }
+
+      .nav-item::after {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <a href="index.html" class="brand">CARBON.</a>
+    <a href="intranet.html" class="btn btn-secondary">Retour à l'intranet</a>
+  </div>
+
+  <aside class="sidebar">
+    <nav class="nav-menu">
+      <a href="intranet.html" class="nav-item" data-label="Dashboard">
+        <i class="fa-solid fa-house"></i>
+      </a>
+      <a href="#" class="nav-item" data-label="Espace commercial">
+        <i class="fa-solid fa-store"></i>
+      </a>
+      <a href="#" class="nav-item" data-label="Gestion de projets">
+        <i class="fa-solid fa-diagram-project"></i>
+      </a>
+      <a href="#" class="nav-item" data-label="Gestion documentaire">
+        <i class="fa-solid fa-cloud"></i>
+      </a>
+      <a href="admin-employes.html" class="nav-item active" data-label="Employés">
+        <i class="fa-solid fa-users"></i>
+      </a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="page-header">
+      <h1>Gestion des employés</h1>
+      <p>Créez des comptes, attribuez des rôles et gérez les statuts.</p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2><i class="fa-solid fa-users"></i> Employés</h2>
+        <form id="employee-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="emp-prenom">Prénom</label>
+              <input type="text" id="emp-prenom" required />
+            </div>
+            <div class="form-group">
+              <label for="emp-nom">Nom</label>
+              <input type="text" id="emp-nom" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="emp-email">Email</label>
+            <input type="email" id="emp-email" required />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="emp-role">Rôle</label>
+              <select id="emp-role" required></select>
+            </div>
+            <div class="form-group">
+              <label for="emp-status">Statut</label>
+              <select id="emp-status" required></select>
+            </div>
+          </div>
+          <button type="submit" class="btn" id="emp-btn">Ajouter l'employé</button>
+          <p class="message" id="emp-message"></p>
+        </form>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Email</th>
+                <th>Rôle</th>
+                <th>Statut</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="employees-list"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" style="margin-bottom: 24px;">
+          <h2><i class="fa-solid fa-user-tag"></i> Rôles</h2>
+          <div class="form-group">
+            <label for="role-input">Nouveau rôle</label>
+            <input type="text" id="role-input" placeholder="Ex: Comptable" />
+          </div>
+          <button class="btn btn-sm" id="add-role-btn">Ajouter le rôle</button>
+          <p class="message" id="role-message"></p>
+          <div class="badge-list" id="roles-list"></div>
+        </div>
+
+        <div class="card">
+          <h2><i class="fa-solid fa-signal"></i> Statuts</h2>
+          <div class="form-group">
+            <label for="status-input">Nouveau statut</label>
+            <input type="text" id="status-input" placeholder="Ex: En congés" />
+          </div>
+          <button class="btn btn-sm" id="add-status-btn">Ajouter le statut</button>
+          <p class="message" id="status-message"></p>
+          <div class="badge-list" id="statuses-list"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const empForm = document.getElementById('employee-form');
+    const empBtn = document.getElementById('emp-btn');
+    const empMessage = document.getElementById('emp-message');
+    const employeesList = document.getElementById('employees-list');
+    const empRoleSelect = document.getElementById('emp-role');
+    const empStatusSelect = document.getElementById('emp-status');
+
+    const roleInput = document.getElementById('role-input');
+    const addRoleBtn = document.getElementById('add-role-btn');
+    const roleMessage = document.getElementById('role-message');
+    const rolesList = document.getElementById('roles-list');
+
+    const statusInput = document.getElementById('status-input');
+    const addStatusBtn = document.getElementById('add-status-btn');
+    const statusMessage = document.getElementById('status-message');
+    const statusesList = document.getElementById('statuses-list');
+
+    let roles = [];
+    let statuses = [];
+
+    async function loadRoles() {
+      const snap = await db.collection('roles').orderBy('label').get();
+      roles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (roles.length === 0) {
+        await db.collection('roles').doc('gerant').set({ label: 'Gérant' });
+        await db.collection('roles').doc('employe').set({ label: 'Employé' });
+        roles = [
+          { id: 'gerant', label: 'Gérant' },
+          { id: 'employe', label: 'Employé' }
+        ];
+      }
+      renderRoles();
+      updateRoleSelect();
+    }
+
+    async function loadStatuses() {
+      const snap = await db.collection('statuses').orderBy('label').get();
+      statuses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (statuses.length === 0) {
+        await db.collection('statuses').doc('actif').set({ label: 'Actif' });
+        await db.collection('statuses').doc('inactif').set({ label: 'Inactif' });
+        statuses = [
+          { id: 'actif', label: 'Actif' },
+          { id: 'inactif', label: 'Inactif' }
+        ];
+      }
+      renderStatuses();
+      updateStatusSelect();
+    }
+
+    function updateRoleSelect() {
+      empRoleSelect.innerHTML = roles.map(r => `<option value="${r.id}">${r.label}</option>`).join('');
+    }
+
+    function updateStatusSelect() {
+      empStatusSelect.innerHTML = statuses.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+    }
+
+    function renderRoles() {
+      rolesList.innerHTML = roles.map(r => `
+        <span class="badge">${r.label}
+          <button class="btn-sm btn-danger" onclick="deleteRole('${r.id}')" style="border:none;background:none;color:inherit;cursor:pointer;padding:0;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </span>
+      `).join('') || '<p class="empty">Aucun rôle personnalisé.</p>';
+    }
+
+    function renderStatuses() {
+      statusesList.innerHTML = statuses.map(s => `
+        <span class="badge">${s.label}
+          <button class="btn-sm btn-danger" onclick="deleteStatus('${s.id}')" style="border:none;background:none;color:inherit;cursor:pointer;padding:0;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </span>
+      `).join('') || '<p class="empty">Aucun statut personnalisé.</p>';
+    }
+
+    async function deleteRole(id) {
+      if (!confirm('Supprimer ce rôle ?')) return;
+      await db.collection('roles').doc(id).delete();
+      await loadRoles();
+    }
+
+    async function deleteStatus(id) {
+      if (!confirm('Supprimer ce statut ?')) return;
+      await db.collection('statuses').doc(id).delete();
+      await loadStatuses();
+    }
+
+    addRoleBtn.addEventListener('click', async () => {
+      const label = roleInput.value.trim();
+      if (!label) return;
+      roleMessage.textContent = '';
+      try {
+        const id = label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-');
+        await db.collection('roles').doc(id).set({ label });
+        roleInput.value = '';
+        await loadRoles();
+      } catch (err) {
+        console.error(err);
+        roleMessage.textContent = 'Erreur lors de l\'ajout du rôle.';
+        roleMessage.className = 'message error';
+      }
+    });
+
+    addStatusBtn.addEventListener('click', async () => {
+      const label = statusInput.value.trim();
+      if (!label) return;
+      statusMessage.textContent = '';
+      try {
+        const id = label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-');
+        await db.collection('statuses').doc(id).set({ label });
+        statusInput.value = '';
+        await loadStatuses();
+      } catch (err) {
+        console.error(err);
+        statusMessage.textContent = 'Erreur lors de l\'ajout du statut.';
+        statusMessage.className = 'message error';
+      }
+    });
+
+    async function loadEmployees() {
+      const snap = await db.collection('users').orderBy('createdAt', 'desc').get();
+      employeesList.innerHTML = snap.docs.map(doc => {
+        const u = doc.data();
+        const role = roles.find(r => r.id === u.role)?.label || u.role || '—';
+        const status = statuses.find(s => s.id === u.status)?.label || u.status || '—';
+        return `
+          <tr>
+            <td>${u.displayName || '—'}</td>
+            <td>${u.email || '—'}</td>
+            <td><span class="tag">${role}</span></td>
+            <td><span class="tag">${status}</span></td>
+            <td>
+              <button class="btn btn-sm btn-danger" onclick="deleteEmployee('${doc.id}')">Supprimer</button>
+            </td>
+          </tr>
+        `;
+      }).join('') || '<tr><td colspan="5" class="empty">Aucun employé enregistré.</td></tr>';
+    }
+
+    async function deleteEmployee(id) {
+      if (!confirm('Supprimer cet employé ? Cette action ne supprime pas le compte Firebase automatiquement.')) return;
+      await db.collection('users').doc(id).delete();
+      await loadEmployees();
+    }
+
+    empForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      empMessage.textContent = '';
+      empMessage.className = 'message';
+
+      const prenom = document.getElementById('emp-prenom').value.trim();
+      const nom = document.getElementById('emp-nom').value.trim();
+      const email = document.getElementById('emp-email').value.trim();
+      const role = empRoleSelect.value;
+      const status = empStatusSelect.value;
+      const password = 'Carbon2024!';
+
+      empBtn.disabled = true;
+      empBtn.textContent = 'Création en cours...';
+
+      try {
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        await cred.user.updateProfile({ displayName: `${prenom} ${nom}` });
+        await db.collection('users').doc(cred.user.uid).set({
+          email,
+          displayName: `${prenom} ${nom}`,
+          prenom,
+          nom,
+          role,
+          status,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        empForm.reset();
+        empMessage.textContent = 'Employé créé avec succès.';
+        empMessage.className = 'message success';
+        await loadEmployees();
+      } catch (err) {
+        console.error(err);
+        let msg = 'Erreur lors de la création de l\'employé.';
+        if (err.code === 'auth/email-already-in-use') msg = 'Cette adresse email est déjà utilisée.';
+        if (err.code === 'auth/invalid-email') msg = 'Adresse email invalide.';
+        empMessage.textContent = msg;
+        empMessage.className = 'message error';
+      } finally {
+        empBtn.disabled = false;
+        empBtn.textContent = 'Ajouter l\'employé';
+      }
+    });
+
+    auth.onAuthStateChanged(async user => {
+      if (!user) {
+        window.location.href = 'intranet.html';
+        return;
+      }
+      const profile = await db.collection('users').doc(user.uid).get();
+      if (!profile.exists || profile.data().role !== 'Manager') {
+        alert('Accès réservé aux managers.');
+        window.location.href = 'intranet.html';
+        return;
+      }
+      await loadRoles();
+      await loadStatuses();
+      await loadEmployees();
+    });
+  </script>
+</body>
+</html>
