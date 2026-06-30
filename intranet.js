@@ -3177,29 +3177,36 @@ function getStatusLabel(status) {
 
 function getBillingActions(billing) {
   const actions = [];
+  const id = billing.abbyBillingId;
+
+  if (billing.status === 'draft') {
+    actions.push(`<button class="action-btn" onclick="finalizeBilling('${id}')" title="Finaliser"><i class="fa-solid fa-check-double"></i></button>`);
+  }
+
   if (billing.type === 'estimate') {
     if (billing.status === 'finalized') {
-      actions.push(`<button class="action-btn" onclick="signBilling('${billing.abbyBillingId}')" title="Signé"><i class="fa-solid fa-pen-nib"></i></button>`);
-      actions.push(`<button class="action-btn" onclick="refuseBilling('${billing.abbyBillingId}')" title="Refusé"><i class="fa-solid fa-ban"></i></button>`);
+      actions.push(`<button class="action-btn" onclick="sendBilling('${id}')" title="Envoyer par email"><i class="fa-solid fa-paper-plane"></i></button>`);
+      actions.push(`<button class="action-btn" onclick="activateEsignature('${id}')" title="Activer signature électronique"><i class="fa-solid fa-signature"></i></button>`);
+      actions.push(`<button class="action-btn" onclick="signBilling('${id}')" title="Marquer comme signé"><i class="fa-solid fa-pen-nib"></i></button>`);
+      actions.push(`<button class="action-btn" onclick="refuseBilling('${id}')" title="Marquer comme refusé"><i class="fa-solid fa-ban"></i></button>`);
     }
     if (billing.status === 'signed') {
-      actions.push(`<button class="action-btn" onclick="unsignBilling('${billing.abbyBillingId}')" title="Annuler signature"><i class="fa-solid fa-rotate-left"></i></button>`);
+      actions.push(`<button class="action-btn" onclick="unsignBilling('${id}')" title="Annuler la signature"><i class="fa-solid fa-rotate-left"></i></button>`);
     }
     if (billing.status === 'refused') {
-      actions.push(`<button class="action-btn" onclick="unrefuseBilling('${billing.abbyBillingId}')" title="Annuler refus"><i class="fa-solid fa-rotate-left"></i></button>`);
+      actions.push(`<button class="action-btn" onclick="unrefuseBilling('${id}')" title="Annuler le refus"><i class="fa-solid fa-rotate-left"></i></button>`);
     }
   } else if (billing.type === 'invoice') {
     if (billing.status === 'finalized') {
-      actions.push(`<button class="action-btn" onclick="markPaid('${billing.abbyBillingId}')" title="Marquer payé"><i class="fa-solid fa-check"></i></button>`);
+      actions.push(`<button class="action-btn" onclick="sendBilling('${id}')" title="Envoyer par email"><i class="fa-solid fa-paper-plane"></i></button>`);
+      actions.push(`<button class="action-btn" onclick="markPaid('${id}')" title="Marquer comme payé"><i class="fa-solid fa-check"></i></button>`);
     }
     if (billing.status === 'paid') {
-      actions.push(`<button class="action-btn" onclick="markUnpaid('${billing.abbyBillingId}')" title="Marquer non payé"><i class="fa-solid fa-rotate-left"></i></button>`);
+      actions.push(`<button class="action-btn" onclick="markUnpaid('${id}')" title="Marquer comme non payé"><i class="fa-solid fa-rotate-left"></i></button>`);
     }
   }
-  if (billing.status === 'draft') {
-    actions.push(`<button class="action-btn" onclick="finalizeBilling('${billing.abbyBillingId}')" title="Finaliser"><i class="fa-solid fa-check-double"></i></button>`);
-  }
-  actions.push(`<button class="action-btn" onclick="downloadBilling('${billing.abbyBillingId}')" title="Télécharger PDF"><i class="fa-solid fa-download"></i></button>`);
+
+  actions.push(`<button class="action-btn" onclick="downloadBilling('${id}')" title="Télécharger PDF"><i class="fa-solid fa-download"></i></button>`);
   return actions.join('');
 }
 
@@ -3289,13 +3296,13 @@ async function syncAllClients() {
   }
 }
 
-async function billingAction(path, successMessage) {
+async function billingAction(path, successMessage, method = 'PATCH') {
   if (!API_BASE_URL) {
     showToast('URL du backend non configurée. Voir README-ABBY.md.', 'error');
     return;
   }
   try {
-    await apiRequest(path, { method: 'PATCH' });
+    await apiRequest(path, { method });
     showToast(successMessage, 'success');
     loadBillings();
   } catch (err) {
@@ -3310,6 +3317,8 @@ window.refuseBilling = (id) => billingAction(`/api/billing/${id}/refuse`, 'Devis
 window.unrefuseBilling = (id) => billingAction(`/api/billing/${id}/unrefuse`, 'Refus annulé.');
 window.markPaid = (id) => billingAction(`/api/billing/${id}/mark-paid`, 'Facture marquée comme payée.');
 window.markUnpaid = (id) => billingAction(`/api/billing/${id}/mark-unpaid`, 'Facture marquée comme non payée.');
+window.sendBilling = (id) => billingAction(`/api/billing/${id}/send`, 'Document envoyé par email.', 'POST');
+window.activateEsignature = (id) => billingAction(`/api/billing/${id}/activate-esignature`, 'Signature électronique activée.', 'POST');
 
 window.downloadBilling = async (id) => {
   try {

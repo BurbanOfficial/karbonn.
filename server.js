@@ -503,17 +503,16 @@ app.post('/api/create-estimate', async (req, res) => {
       body: JSON.stringify({ lines: abbyLines }),
     });
 
-    if (withElectronicSignature) {
-      try {
-        await abbyRequest(`/v2/billing/estimate/${estimate.id}/electronic-signature`, { method: 'POST' });
-        console.log(`Electronic signature activated on estimate ${estimate.id}`);
-      } catch (sigErr) {
-        console.warn('Could not activate electronic signature (non-fatal):', sigErr.message);
-      }
-    }
-
     if (finalize) {
       await abbyRequest(`/v2/billing/${estimate.id}/finalize`, { method: 'PATCH' });
+      if (withElectronicSignature) {
+        try {
+          await abbyRequest(`/v2/billing/estimate/${estimate.id}/electronic-signature`, { method: 'POST' });
+          console.log(`Electronic signature activated on estimate ${estimate.id}`);
+        } catch (sigErr) {
+          console.warn('Could not activate electronic signature (non-fatal):', sigErr.message);
+        }
+      }
     }
 
     await db.collection('billings').add({
@@ -748,6 +747,28 @@ app.get('/api/billing/:id/download', async (req, res) => {
   } catch (err) {
     console.error('Download error:', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Send billing by email
+app.post('/api/billing/:id/send', async (req, res) => {
+  try {
+    const data = await abbyRequest(`/v2/billing/${req.params.id}/send-by-email`, { method: 'POST', body: JSON.stringify({}) });
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Send email error:', err.message, err.data);
+    res.status(500).json({ error: err.message, details: err.data });
+  }
+});
+
+// Activate electronic signature on a finalized estimate
+app.post('/api/billing/:id/activate-esignature', async (req, res) => {
+  try {
+    const data = await abbyRequest(`/v2/billing/estimate/${req.params.id}/electronic-signature`, { method: 'POST' });
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('E-signature error:', err.message, err.data);
+    res.status(500).json({ error: err.message, details: err.data });
   }
 });
 
