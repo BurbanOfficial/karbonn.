@@ -85,6 +85,15 @@ async function qontoRequest(path, options = {}) {
   return data;
 }
 
+function buildQontoBody(payload) {
+  return JSON.stringify({
+    data: {
+      type: 'client',
+      attributes: payload
+    }
+  });
+}
+
 function parseAddress(str) {
   if (!str) return { address: '', city: '', zipCode: '' };
   const parts = str.split(',').map(p => p.trim()).filter(Boolean);
@@ -109,7 +118,7 @@ function buildQontoPayload(client) {
   const isPro = client.type === 'professionnel';
   const addr = buildAddress(client);
   const payload = {
-    type: isPro ? 'company' : 'individual',
+    type: isPro ? 'company' : 'person',
     email: client.email || undefined,
     address: addr.address || undefined,
     city: addr.city || undefined,
@@ -139,9 +148,9 @@ app.post('/api/clients', async (req, res) => {
 
   try {
     const payload = buildQontoPayload(client);
-    console.log('Qonto payload:', JSON.stringify({ client: payload }, null, 2));
-    const qontoData = await qontoRequest('/clients', { method: 'POST', body: JSON.stringify({ client: payload }) });
-    const qontoClientId = qontoData?.client?.id;
+    console.log('Qonto payload:', JSON.stringify({ data: { type: 'client', attributes: payload } }, null, 2));
+    const qontoData = await qontoRequest('/clients', { method: 'POST', body: buildQontoBody(payload) });
+    const qontoClientId = qontoData?.data?.id;
 
     const docRef = await db.collection('clients').add({
       ...client,
@@ -172,7 +181,7 @@ app.put('/api/clients/:id', async (req, res) => {
 
     if (qontoClientId) {
       const payload = buildQontoPayload({ ...existing, ...client });
-      await qontoRequest(`/clients/${qontoClientId}`, { method: 'PUT', body: JSON.stringify({ client: payload }) });
+      await qontoRequest(`/clients/${qontoClientId}`, { method: 'PUT', body: buildQontoBody(payload) });
     }
 
     await db.collection('clients').doc(req.params.id).update({
