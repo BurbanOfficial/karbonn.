@@ -143,7 +143,7 @@ app.post('/api/clients', async (req, res) => {
 
   try {
     const payload = buildQontoPayload(client);
-    const qontoData = await qontoRequest('/clients', { method: 'POST', body: JSON.stringify({ client: payload }) });
+    const qontoData = await qontoRequest('/clients', { method: 'POST', body: JSON.stringify(payload) });
     const qontoClientId = qontoData?.client?.id;
 
     const docRef = await db.collection('clients').add({
@@ -175,7 +175,7 @@ app.put('/api/clients/:id', async (req, res) => {
 
     if (qontoClientId) {
       const payload = buildQontoPayload({ ...existing, ...client });
-      await qontoRequest(`/clients/${qontoClientId}`, { method: 'PUT', body: JSON.stringify({ client: payload }) });
+      await qontoRequest(`/clients/${qontoClientId}`, { method: 'PUT', body: JSON.stringify(payload) });
     }
 
     await db.collection('clients').doc(req.params.id).update({
