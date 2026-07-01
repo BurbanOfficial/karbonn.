@@ -170,6 +170,9 @@ function parseAddress(addressString) {
     }
   }
 
+  // Strip parenthetical suffixes e.g. "Mainneville (France)" → "Mainneville"
+  city = city.replace(/\s*\([^)]*\)\s*$/, '').trim();
+
   return { address, city, zipCode, country: 'FR' };
 }
 
@@ -558,7 +561,7 @@ app.post('/api/create-estimate', async (req, res) => {
 
 // Create invoice
 app.post('/api/create-invoice', async (req, res) => {
-  const { clientId, abbyCustomerId, title, lines, paymentDelay, finalize } = req.body;
+  const { clientId, abbyCustomerId, abbyContactId, title, lines, paymentDelay, finalize } = req.body;
 
   if (!abbyCustomerId || !lines || !Array.isArray(lines) || lines.length === 0) {
     return res.status(400).json({ error: 'Missing customerId or lines' });
