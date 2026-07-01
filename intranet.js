@@ -1123,6 +1123,13 @@ function renderDetailFields(client) {
           currentDetailClient[key] = newValue;
           field.querySelector('.detail-field-value').textContent = newValue || '—';
           field.classList.remove('editing');
+          // Sync to Qonto
+          if (isManager()) {
+            apiRequest(`/api/clients/${currentDetailClient.id}`, {
+              method: 'PUT',
+              body: JSON.stringify({ client: { [key]: newValue } }),
+            }).catch(err => console.warn('Qonto sync error:', err.message));
+          }
           // Update table
           const idx = allClients.findIndex(c => c.id === currentDetailClient.id);
           if (idx !== -1) allClients[idx] = { ...currentDetailClient };

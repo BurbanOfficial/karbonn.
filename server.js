@@ -175,8 +175,32 @@ app.put('/api/clients/:id', async (req, res) => {
     const qontoClientId = existing.qontoClientId;
 
     if (qontoClientId) {
-      const payload = buildQontoPayload({ ...existing, ...client });
-      await qontoRequest(`/clients/${qontoClientId}`, { method: 'PUT', body: JSON.stringify(payload) });
+      const merged = { ...existing, ...client };
+      const isPro = merged.type === 'professionnel';
+      const addr = buildAddress(merged);
+      const patch = {};
+      if (merged.email) patch.email = merged.email;
+      if (merged.telephone) {
+        const phone = merged.telephone.replace(/\s/g, '');
+        patch.phone = { country_code: '+33', number: phone.replace(/^(\+33|0033|0)/, '') };
+      }
+      if (addr.address) patch.billing_address = {
+        street_address: addr.address,
+        city: addr.city || undefined,
+        zip_code: addr.zipCode || undefined,
+        country_code: 'FR',
+      };
+      if (isPro) {
+        if (merged.entreprise) patch.name = merged.entreprise;
+        if (merged.prenom) patch.first_name = merged.prenom;
+        if (merged.nom) patch.last_name = merged.nom;
+        if (merged.siret) patch.tax_identification_number = merged.siret;
+        if (merged.tva) patch.vat_number = merged.tva;
+      } else {
+        if (merged.prenom) patch.first_name = merged.prenom;
+        if (merged.nom) patch.last_name = merged.nom;
+      }
+      await qontoRequest(`/clients/${qontoClientId}`, { method: 'PATCH', body: JSON.stringify(patch) });
     }
 
     await db.collection('clients').doc(req.params.id).update({
