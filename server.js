@@ -299,6 +299,7 @@ app.post('/api/invoices', async (req, res) => {
     const { client_id, description, amount_cents, vat_rate, due_date } = req.body;
     console.log('Create invoice payload received:', JSON.stringify({ client_id, description, amount_cents, vat_rate, due_date, iban: qontoBankIban }));
     const today = new Date().toISOString().split('T')[0];
+    const vatDecimal = String(parseFloat(vat_rate) / 100);
     const payload = {
       client_invoice: {
         client_id,
@@ -310,10 +311,11 @@ app.post('/api/invoices', async (req, res) => {
           title: description,
           quantity: '1',
           unit_price: { value: (amount_cents / 100).toFixed(2), currency: 'EUR' },
-          vat_rate: (parseFloat(vat_rate) / 100).toFixed(4)
+          vat_rate: vatDecimal
         }]
       }
     };
+    console.log('Qonto payload:', JSON.stringify(payload));
     const data = await qontoRequest('/client_invoices', { method: 'POST', body: JSON.stringify(payload) });
     res.json(data);
   } catch (err) {
