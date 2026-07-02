@@ -11,6 +11,7 @@ let qontoBankIban = null;
 async function loadQontoBankAccount() {
   try {
     const data = await qontoRequest('/bank_accounts?includes[]=iban');
+    console.log('Bank accounts response:', JSON.stringify(data));
     const main = (data.bank_accounts || []).find(a => a.main) || data.bank_accounts?.[0];
     if (main) qontoBankIban = main.iban;
     console.log('Qonto IBAN loaded:', qontoBankIban);
