@@ -2999,6 +2999,36 @@ async function markInvoicePaid(id) {
   }
 }
 
+// Custom select helper
+function initCustomSelect(wrapperId, hiddenId, labelId, dropdownId, options, defaultValue) {
+  const wrapper = document.getElementById(wrapperId);
+  const hidden = document.getElementById(hiddenId);
+  const label = document.getElementById(labelId);
+  const dropdown = document.getElementById(dropdownId);
+  dropdown.innerHTML = options.map(o =>
+    `<div class="custom-select-option${o.value === defaultValue ? ' selected' : ''}" data-value="${o.value}">${o.label}</div>`
+  ).join('');
+  wrapper.querySelector('.custom-select-trigger').onclick = e => {
+    e.stopPropagation();
+    document.querySelectorAll('.custom-select-wrapper.open').forEach(w => { if (w !== wrapper) w.classList.remove('open'); });
+    wrapper.classList.toggle('open');
+  };
+  dropdown.querySelectorAll('.custom-select-option').forEach(opt => {
+    opt.onclick = () => {
+      hidden.value = opt.dataset.value;
+      label.textContent = opt.textContent;
+      dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      wrapper.classList.remove('open');
+    };
+  });
+}
+
+// Fermer les dropdowns au clic extérieur
+document.addEventListener('click', () => {
+  document.querySelectorAll('.custom-select-wrapper.open').forEach(w => w.classList.remove('open'));
+});
+
 // Modal création facture
 const invoiceModal = document.getElementById('invoice-modal');
 const invoiceModalError = document.getElementById('invoice-modal-error');
@@ -3006,27 +3036,49 @@ const invoiceModalError = document.getElementById('invoice-modal-error');
 function openInvoiceModal() {
   const modal = document.getElementById('invoice-modal');
   if (!modal) return;
-  const select = document.getElementById('inv-client');
-  select.innerHTML = '<option value="">— Sélectionner un client —</option>';
-  allClients.filter(c => c.qontoClientId).forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.qontoClientId;
-    opt.textContent = c.nom || c.name || c.email || c.qontoClientId;
-    select.appendChild(opt);
-  });
-  // Date échéance par défaut : +30 jours
+
+  // Populate client select
+  const clientOptions = allClients.filter(c => c.qontoClientId).map(c => ({
+    value: c.qontoClientId,
+    label: c.nom || c.name || c.email || c.qontoClientId
+  }));
+  initCustomSelect('inv-client-wrapper', 'inv-client', 'inv-client-label', 'inv-client-dropdown',
+    clientOptions, '');
+  document.getElementById('inv-client-label').textContent = '— Sélectionner un client —';
+  document.getElementById('inv-client').value = '';
+
+  // TVA select
+  initCustomSelect('inv-vat-wrapper', 'inv-vat', 'inv-vat-label', 'inv-vat-dropdown',
+    [{value:'0',label:'0%'},{value:'5.5',label:'5,5%'},{value:'10',label:'10%'},{value:'20',label:'20%'}], '20');
+
+  // Date échéance : défaut +30j
   const d = new Date(); d.setDate(d.getDate() + 30);
-  document.getElementById('inv-due-date').value = d.toISOString().split('T')[0];
+  const iso = d.toISOString().split('T')[0];
+  document.getElementById('inv-due-date').value = iso;
+  document.getElementById('inv-due-label').textContent = d.toLocaleDateString('fr-FR');
+
+  // Sync label quand date change
+  document.getElementById('inv-due-date').onchange = function() {
+    const parts = this.value.split('-');
+    document.getElementById('inv-due-label').textContent = parts.length === 3
+      ? `${parts[2]}/${parts[1]}/${parts[0]}` : '— Sélectionner une date —';
+  };
+
+  // Toggle date picker
+  document.getElementById('inv-due-trigger').onclick = e => {
+    e.stopPropagation();
+    document.getElementById('inv-due-wrapper').classList.toggle('open');
+  };
+
   document.getElementById('inv-description').value = '';
   document.getElementById('inv-amount').value = '';
-  document.getElementById('inv-vat').value = '20';
   invoiceModalError.textContent = '';
-  modal.style.display = 'flex';
+  modal.classList.add('visible');
 }
 
 function closeInvoiceModal() {
   const modal = document.getElementById('invoice-modal');
-  if (modal) modal.style.display = 'none';
+  if (modal) modal.classList.remove('visible');
 }
 
 async function createInvoice() {

@@ -721,6 +721,31 @@
     .invoice-status.paid { background: rgba(46,125,50,0.1); color: #2e7d32; border: 1px solid rgba(46,125,50,0.2); }
     .invoice-status.canceled { background: rgba(211,47,47,0.1); color: #d32f2f; border: 1px solid rgba(211,47,47,0.2); }
 
+    .custom-select-wrapper { position: relative; }
+    .custom-select-trigger {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--panel); color: var(--text); font-family: inherit;
+      font-size: 0.9rem; cursor: pointer; transition: border-color 0.2s ease;
+      user-select: none;
+    }
+    .custom-select-trigger:hover, .custom-select-wrapper.open .custom-select-trigger { border-color: var(--text); }
+    .custom-select-trigger i { font-size: 0.75rem; color: var(--muted); transition: transform 0.2s ease; }
+    .custom-select-wrapper.open .custom-select-trigger i.fa-chevron-down { transform: rotate(180deg); }
+    .custom-select-dropdown {
+      display: none; position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+      z-index: 400; max-height: 200px; overflow-y: auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    }
+    .custom-select-wrapper.open .custom-select-dropdown { display: block; }
+    .custom-select-option {
+      padding: 10px 14px; font-size: 0.9rem; cursor: pointer;
+      transition: background 0.15s ease; color: var(--text);
+    }
+    .custom-select-option:hover { background: var(--hover); }
+    .custom-select-option.selected { font-weight: 600; }
+
     .badge {
       display: inline-block;
       padding: 4px 10px;
@@ -3111,43 +3136,68 @@
   </div>
 
   <!-- Modal Créer une facture -->
-  <div class="modal-overlay" id="invoice-modal" style="display:none">
-    <div class="modal" style="max-width:520px">
+  <div class="modal-overlay" id="invoice-modal">
+    <div class="modal-card" style="max-width:520px">
       <div class="modal-header">
-        <h2 class="modal-title">Nouvelle facture</h2>
+        <h2>Nouvelle facture</h2>
         <button class="modal-close" id="invoice-modal-close"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="modal-body">
+      <form class="modal-form" id="invoice-form" novalidate>
         <div class="form-group">
           <label>Client</label>
-          <select id="inv-client" required>
-            <option value="">— Sélectionner un client —</option>
-          </select>
+          <div class="custom-select-wrapper" id="inv-client-wrapper">
+            <div class="custom-select-trigger" id="inv-client-trigger">
+              <span id="inv-client-label">— Sélectionner un client —</span>
+              <i class="fa-solid fa-chevron-down"></i>
+            </div>
+            <div class="custom-select-dropdown" id="inv-client-dropdown"></div>
+          </div>
+          <input type="hidden" id="inv-client" />
         </div>
         <div class="form-group">
           <label>Objet / Description</label>
-          <input type="text" id="inv-description" placeholder="Ex: Développement site web" required />
+          <input type="text" id="inv-description" placeholder="Ex: Développement site web" />
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row">
           <div class="form-group">
             <label>Montant HT (€)</label>
-            <input type="number" id="inv-amount" min="0" step="0.01" placeholder="0.00" required />
+            <input type="number" id="inv-amount" min="0" step="0.01" placeholder="0.00" />
           </div>
           <div class="form-group">
             <label>TVA (%)</label>
-            <input type="number" id="inv-vat" min="0" max="100" step="0.1" value="20" />
+            <div class="custom-select-wrapper" id="inv-vat-wrapper">
+              <div class="custom-select-trigger" id="inv-vat-trigger">
+                <span id="inv-vat-label">20%</span>
+                <i class="fa-solid fa-chevron-down"></i>
+              </div>
+              <div class="custom-select-dropdown" id="inv-vat-dropdown">
+                <div class="custom-select-option" data-value="0">0%</div>
+                <div class="custom-select-option" data-value="5.5">5,5%</div>
+                <div class="custom-select-option" data-value="10">10%</div>
+                <div class="custom-select-option selected" data-value="20">20%</div>
+              </div>
+            </div>
+            <input type="hidden" id="inv-vat" value="20" />
           </div>
         </div>
         <div class="form-group">
           <label>Date d'échéance</label>
-          <input type="date" id="inv-due-date" required />
+          <div class="custom-select-wrapper" id="inv-due-wrapper">
+            <div class="custom-select-trigger" id="inv-due-trigger">
+              <span id="inv-due-label">— Sélectionner une date —</span>
+              <i class="fa-solid fa-calendar"></i>
+            </div>
+            <div class="custom-select-dropdown" id="inv-due-dropdown" style="padding:12px">
+              <input type="date" id="inv-due-date" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-family:inherit;font-size:0.9rem;outline:none" />
+            </div>
+          </div>
         </div>
-        <p id="invoice-modal-error" style="color:var(--danger);font-size:13px;margin-top:8px"></p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="invoice-modal-cancel">Annuler</button>
-        <button class="btn-primary" id="invoice-modal-submit">Créer le brouillon</button>
-      </div>
+        <p class="modal-error" id="invoice-modal-error"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn-back" id="invoice-modal-cancel">Annuler</button>
+          <button type="button" class="btn-submit" id="invoice-modal-submit">Créer le brouillon</button>
+        </div>
+      </form>
     </div>
   </div>
 
