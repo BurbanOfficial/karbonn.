@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const QONTO_BASE_URL = 'https://thirdparty.qonto.com/v2';
 
-let qontoBankIban = process.env.QONTO_IBAN || null;
+let qontoBankIban = process.env.QONTO_IBAN ? process.env.QONTO_IBAN.replace(/\s/g, '') : null;
 async function loadQontoBankAccount() {
   if (qontoBankIban) {
     console.log('Qonto IBAN loaded from env:', qontoBankIban);
@@ -362,4 +362,6 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Karbonn API running on port ${PORT}`);
   loadQontoBankAccount();
+  const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+  setInterval(() => fetch(`${SELF_URL}/health`).catch(() => {}), 30 * 1000);
 });

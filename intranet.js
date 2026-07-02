@@ -52,25 +52,21 @@ function showApp(user, profile) {
   if (userAvatarEl) userAvatarEl.textContent = initials;
 
   // Restrict team and billing management to managers
-  const restrictedLabels = ['Équipe', 'Factures & Devis'];
-  restrictedLabels.forEach(label => {
-    const nav = document.querySelector(`.nav-item[data-label="${label}"]`);
-    if (nav) {
-      if (role === 'Manager') {
-        nav.style.display = 'flex';
-      } else {
-        nav.style.display = 'none';
-        const sectionId = label === 'Équipe' ? 'section-equipe' : 'section-factures';
-        const section = document.getElementById(sectionId);
-        if (section && section.classList.contains('active')) {
-          navItems.forEach(n => n.classList.remove('active'));
-          navItems[0].classList.add('active');
-          sections.forEach(s => s.classList.remove('active'));
-          document.getElementById('section-dashboard').classList.add('active');
-        }
+  const equipeNav = document.querySelector(`.nav-item[data-label="Équipe"]`);
+  if (equipeNav) {
+    if (role === 'Manager') {
+      equipeNav.style.display = 'flex';
+    } else {
+      equipeNav.style.display = 'none';
+      const section = document.getElementById('section-equipe');
+      if (section && section.classList.contains('active')) {
+        navItems.forEach(n => n.classList.remove('active'));
+        navItems[0].classList.add('active');
+        sections.forEach(s => s.classList.remove('active'));
+        document.getElementById('section-dashboard').classList.add('active');
       }
     }
-  });
+  }
 
   // Re-render role-dependent UI
   if (document.getElementById('clients-tbody')) {
@@ -207,7 +203,6 @@ const sectionMap = [
   'section-taches',
   'section-analytics',
   'section-projets',
-  'section-factures',
   'section-equipe',
   'section-parametres'
 ];
@@ -217,8 +212,7 @@ navItems.forEach((item, index) => {
     e.preventDefault();
 
     const sectionId = sectionMap[index];
-    // Restrict team and billing management to managers
-    if ((sectionId === 'section-equipe' || sectionId === 'section-factures') && currentUserRole !== 'Manager') {
+    if (sectionId === 'section-equipe' && currentUserRole !== 'Manager') {
       showToast('Accès réservé aux managers.', 'error');
       return;
     }
@@ -233,9 +227,7 @@ navItems.forEach((item, index) => {
     if (sectionId === 'section-equipe' && currentUserRole === 'Manager') {
       loadTeamMembers();
     }
-    if (sectionId === 'section-factures' && currentUserRole === 'Manager') {
-      loadInvoices();
-    }
+
   });
 });
 
@@ -2923,198 +2915,3 @@ equipeSearch?.addEventListener('input', () => {
   renderEquipeTable(filtered);
 });
 
-// ===========================
-// Factures & Devis (Qonto API)
-// ===========================
-
-let allInvoices = [];
-let invoiceStatusFilter = 'all';
-
-async function loadInvoices() {
-  const tbody = document.getElementById('factures-tbody');
-  tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Chargement...</td></tr>';
-  try {
-    const params = invoiceStatusFilter !== 'all' ? `?filter[status]=${invoiceStatusFilter}` : '';
-    const data = await apiRequest(`/api/invoices${params}`);
-    allInvoices = data.client_invoices || [];
-    renderInvoices(allInvoices);
-  } catch (err) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="7">Erreur : ${err.message}</td></tr>`;
-  }
-}
-
-function renderInvoices(invoices) {
-  const tbody = document.getElementById('factures-tbody');
-  const search = (document.getElementById('factures-search')?.value || '').toLowerCase();
-  const filtered = invoices.filter(inv => {
-    const clientName = inv.client?.name || `${inv.client?.first_name || ''} ${inv.client?.last_name || ''}`.trim();
-    return !search || inv.number?.toLowerCase().includes(search) || clientName.toLowerCase().includes(search);
-  });
-  if (!filtered.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Aucune facture trouvée.</td></tr>';
-    return;
-  }
-  const statusLabels = { draft: 'Brouillon', unpaid: 'Non payée', paid: 'Payée', canceled: 'Annulée' };
-  tbody.innerHTML = filtered.map(inv => {
-    const clientName = inv.client?.name || `${inv.client?.first_name || ''} ${inv.client?.last_name || ''}`.trim() || '—';
-    const amount = inv.total_amount ? `${parseFloat(inv.total_amount.value).toFixed(2)} ${inv.total_amount.currency}` : '—';
-    const issueDate = inv.issue_date ? new Date(inv.issue_date).toLocaleDateString('fr-FR') : '—';
-    const dueDate = inv.due_date ? new Date(inv.due_date).toLocaleDateString('fr-FR') : '—';
-    const status = inv.status || 'draft';
-    return `<tr>
-      <td><strong>${inv.number || '—'}</strong></td>
-      <td>${clientName}</td>
-      <td>${amount}</td>
-      <td>${issueDate}</td>
-      <td>${dueDate}</td>
-      <td><span class="invoice-status ${status}">${statusLabels[status] || status}</span></td>
-      <td>
-        <div class="actions">
-          ${inv.invoice_url ? `<a href="${inv.invoice_url}" target="_blank" class="btn-icon" title="Voir la facture"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>` : ''}
-          ${status === 'draft' ? `<button class="btn-icon" title="Finaliser" onclick="finalizeInvoice('${inv.id}')"><i class="fa-solid fa-check"></i></button>` : ''}
-          ${status === 'unpaid' ? `<button class="btn-icon" title="Marquer payée" onclick="markInvoicePaid('${inv.id}')"><i class="fa-solid fa-circle-check"></i></button>` : ''}
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-}
-
-async function finalizeInvoice(id) {
-  try {
-    await apiRequest(`/api/invoices/${id}/finalize`, { method: 'POST' });
-    showToast('Facture finalisée.', 'success');
-    loadInvoices();
-  } catch (err) {
-    showToast(`Erreur : ${err.message}`, 'error');
-  }
-}
-
-async function markInvoicePaid(id) {
-  try {
-    await apiRequest(`/api/invoices/${id}/mark_as_paid`, { method: 'POST', body: JSON.stringify({}) });
-    showToast('Facture marquée comme payée.', 'success');
-    loadInvoices();
-  } catch (err) {
-    showToast(`Erreur : ${err.message}`, 'error');
-  }
-}
-
-// Custom select helper
-function initCustomSelect(wrapperId, hiddenId, labelId, dropdownId, options, defaultValue) {
-  const wrapper = document.getElementById(wrapperId);
-  const hidden = document.getElementById(hiddenId);
-  const label = document.getElementById(labelId);
-  const dropdown = document.getElementById(dropdownId);
-  dropdown.innerHTML = options.map(o =>
-    `<div class="custom-select-option${o.value === defaultValue ? ' selected' : ''}" data-value="${o.value}">${o.label}</div>`
-  ).join('');
-  wrapper.querySelector('.custom-select-trigger').onclick = e => {
-    e.stopPropagation();
-    document.querySelectorAll('.custom-select-wrapper.open').forEach(w => { if (w !== wrapper) w.classList.remove('open'); });
-    wrapper.classList.toggle('open');
-  };
-  dropdown.querySelectorAll('.custom-select-option').forEach(opt => {
-    opt.onclick = () => {
-      hidden.value = opt.dataset.value;
-      label.textContent = opt.textContent;
-      dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
-      opt.classList.add('selected');
-      wrapper.classList.remove('open');
-    };
-  });
-}
-
-// Fermer les dropdowns au clic extérieur
-document.addEventListener('click', () => {
-  document.querySelectorAll('.custom-select-wrapper.open').forEach(w => w.classList.remove('open'));
-});
-
-// Modal création facture
-const invoiceModal = document.getElementById('invoice-modal');
-const invoiceModalError = document.getElementById('invoice-modal-error');
-
-function openInvoiceModal() {
-  const modal = document.getElementById('invoice-modal');
-  if (!modal) return;
-
-  // Populate client select
-  const clientOptions = allClients.filter(c => c.qontoClientId).map(c => ({
-    value: c.qontoClientId,
-    label: c.nom || c.name || c.email || c.qontoClientId
-  }));
-  initCustomSelect('inv-client-wrapper', 'inv-client', 'inv-client-label', 'inv-client-dropdown',
-    clientOptions, '');
-  document.getElementById('inv-client-label').textContent = '— Sélectionner un client —';
-  document.getElementById('inv-client').value = '';
-
-  // TVA select
-  initCustomSelect('inv-vat-wrapper', 'inv-vat', 'inv-vat-label', 'inv-vat-dropdown',
-    [{value:'0',label:'0%'},{value:'5.5',label:'5,5%'},{value:'10',label:'10%'},{value:'20',label:'20%'}], '20');
-
-  // Date échéance : défaut +30j
-  const d = new Date(); d.setDate(d.getDate() + 30);
-  document.getElementById('inv-due-date').value = d.toISOString().split('T')[0];
-
-  document.getElementById('inv-description').value = '';
-  document.getElementById('inv-amount').value = '';
-  invoiceModalError.textContent = '';
-  modal.classList.add('visible');
-}
-
-function closeInvoiceModal() {
-  const modal = document.getElementById('invoice-modal');
-  if (modal) modal.classList.remove('visible');
-}
-
-async function createInvoice() {
-  const clientId = document.getElementById('inv-client').value;
-  const description = document.getElementById('inv-description').value.trim();
-  const amount = parseFloat(document.getElementById('inv-amount').value);
-  const vat = parseFloat(document.getElementById('inv-vat').value) || 0;
-  const dueDate = document.getElementById('inv-due-date').value;
-  if (!clientId || !description || isNaN(amount) || !dueDate) {
-    invoiceModalError.textContent = 'Veuillez remplir tous les champs obligatoires.';
-    return;
-  }
-  const btn = document.getElementById('invoice-modal-submit');
-  btn.disabled = true;
-  btn.textContent = 'Création...';
-  try {
-    await apiRequest('/api/invoices', {
-      method: 'POST',
-      body: JSON.stringify({
-        client_id: clientId,
-        description,
-        amount_cents: Math.round(amount * 100),
-        vat_rate: vat,
-        due_date: dueDate
-      })
-    });
-    showToast('Brouillon créé avec succès.', 'success');
-    closeInvoiceModal();
-    loadInvoices();
-  } catch (err) {
-    invoiceModalError.textContent = `Erreur : ${err.message}`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Créer le brouillon';
-  }
-}
-
-document.addEventListener('click', e => {
-  if (e.target.closest('#create-invoice-btn')) openInvoiceModal();
-  else if (e.target.closest('#invoice-modal-close') || e.target.closest('#invoice-modal-cancel')) closeInvoiceModal();
-  else if (e.target.closest('#invoice-modal-submit')) createInvoice();
-  else if (e.target.id === 'invoice-modal') closeInvoiceModal();
-});
-
-document.getElementById('factures-search')?.addEventListener('input', () => renderInvoices(allInvoices));
-
-document.getElementById('invoice-filters')?.addEventListener('click', e => {
-  const btn = e.target.closest('.facturation-filter');
-  if (!btn) return;
-  document.querySelectorAll('#invoice-filters .facturation-filter').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  invoiceStatusFilter = btn.dataset.status;
-  loadInvoices();
-});
