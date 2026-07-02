@@ -3004,6 +3004,8 @@ const invoiceModal = document.getElementById('invoice-modal');
 const invoiceModalError = document.getElementById('invoice-modal-error');
 
 function openInvoiceModal() {
+  const modal = document.getElementById('invoice-modal');
+  if (!modal) return;
   const select = document.getElementById('inv-client');
   select.innerHTML = '<option value="">— Sélectionner un client —</option>';
   allClients.filter(c => c.qontoClientId).forEach(c => {
@@ -3019,10 +3021,13 @@ function openInvoiceModal() {
   document.getElementById('inv-amount').value = '';
   document.getElementById('inv-vat').value = '20';
   invoiceModalError.textContent = '';
-  invoiceModal.style.display = 'flex';
+  modal.style.display = 'flex';
 }
 
-function closeInvoiceModal() { invoiceModal.style.display = 'none'; }
+function closeInvoiceModal() {
+  const modal = document.getElementById('invoice-modal');
+  if (modal) modal.style.display = 'none';
+}
 
 async function createInvoice() {
   const clientId = document.getElementById('inv-client').value;
@@ -3059,11 +3064,12 @@ async function createInvoice() {
   }
 }
 
-document.getElementById('create-invoice-btn')?.addEventListener('click', openInvoiceModal);
-document.getElementById('invoice-modal-close')?.addEventListener('click', closeInvoiceModal);
-document.getElementById('invoice-modal-cancel')?.addEventListener('click', closeInvoiceModal);
-document.getElementById('invoice-modal-submit')?.addEventListener('click', createInvoice);
-invoiceModal?.addEventListener('click', e => { if (e.target === invoiceModal) closeInvoiceModal(); });
+document.addEventListener('click', e => {
+  if (e.target.closest('#create-invoice-btn')) openInvoiceModal();
+  else if (e.target.closest('#invoice-modal-close') || e.target.closest('#invoice-modal-cancel')) closeInvoiceModal();
+  else if (e.target.closest('#invoice-modal-submit')) createInvoice();
+  else if (e.target.id === 'invoice-modal') closeInvoiceModal();
+});
 
 document.getElementById('factures-search')?.addEventListener('input', () => renderInvoices(allInvoices));
 
