@@ -300,7 +300,7 @@ app.post('/api/invoices', async (req, res) => {
   }
 });
 
- async (req, res) => {
+app.post('/api/invoices/:id/finalize', async (req, res) => {
   try {
     const data = await qontoRequest(`/client_invoices/${req.params.id}/finalize`, { method: 'POST' });
     res.json(data);
