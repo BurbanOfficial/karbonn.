@@ -7,13 +7,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const QONTO_BASE_URL = 'https://thirdparty.qonto.com/v2';
 
-let qontoBankAccountId = null;
+let qontoBankIban = null;
 async function loadQontoBankAccount() {
   try {
     const data = await qontoRequest('/bank_accounts?includes[]=iban');
     const main = (data.bank_accounts || []).find(a => a.main) || data.bank_accounts?.[0];
-    if (main) qontoBankAccountId = main.id;
-    console.log('Qonto bank account id:', qontoBankAccountId);
+    if (main) qontoBankIban = main.iban;
+    console.log('Qonto IBAN loaded:', qontoBankIban);
   } catch (err) {
     console.error('Failed to load Qonto bank account:', err.message);
   }
@@ -293,16 +293,19 @@ app.get('/api/invoices', async (req, res) => {
 app.post('/api/invoices', async (req, res) => {
   try {
     const { client_id, description, amount_cents, vat_rate, due_date } = req.body;
+    const today = new Date().toISOString().split('T')[0];
     const payload = {
       client_invoice: {
         client_id,
+        issue_date: today,
         due_date,
-        beneficiary_account_id: qontoBankAccountId,
+        currency: 'EUR',
+        payment_methods: { iban: qontoBankIban },
         items: [{
           title: description,
           quantity: '1',
-          unit_price: (amount_cents / 100).toFixed(2),
-          vat_rate: String(vat_rate ?? 20)
+          unit_price: { value: (amount_cents / 100).toFixed(2), currency: 'EUR' },
+          vat_rate: (parseFloat(vat_rate) / 100).toFixed(4)
         }]
       }
     };
