@@ -7,6 +7,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const QONTO_BASE_URL = 'https://thirdparty.qonto.com/v2';
 
+let qontoBankAccountId = null;
+async function loadQontoBankAccount() {
+  try {
+    const data = await qontoRequest('/bank_accounts?includes[]=iban');
+    const main = (data.bank_accounts || []).find(a => a.main) || data.bank_accounts?.[0];
+    if (main) qontoBankAccountId = main.id;
+    console.log('Qonto bank account id:', qontoBankAccountId);
+  } catch (err) {
+    console.error('Failed to load Qonto bank account:', err.message);
+  }
+}
+
 function initFirebaseAdmin() {
   if (admin.apps.length > 0) return;
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
@@ -285,6 +297,7 @@ app.post('/api/invoices', async (req, res) => {
       client_invoice: {
         client_id,
         due_date,
+        beneficiary_account_id: qontoBankAccountId,
         items: [{
           title: description,
           quantity: '1',
@@ -335,4 +348,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-app.listen(PORT, () => console.log(`Karbonn API running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Karbonn API running on port ${PORT}`);
+  loadQontoBankAccount();
+});
