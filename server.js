@@ -319,6 +319,7 @@ app.post('/api/invoices', async (req, res) => {
     const data = await qontoRequest('/client_invoices', { method: 'POST', body: JSON.stringify(payload) });
     res.json(data);
   } catch (err) {
+    console.error('Qonto error:', JSON.stringify(err.data));
     res.status(err.status || 500).json({ error: err.message, detail: err.data });
   }
 });
