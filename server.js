@@ -7,11 +7,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const QONTO_BASE_URL = 'https://thirdparty.qonto.com/v2';
 
-let qontoBankIban = null;
+let qontoBankIban = process.env.QONTO_IBAN || null;
 async function loadQontoBankAccount() {
+  if (qontoBankIban) {
+    console.log('Qonto IBAN loaded from env:', qontoBankIban);
+    return;
+  }
   try {
     const data = await qontoRequest('/bank_accounts?includes[]=iban');
-    console.log('Bank accounts response:', JSON.stringify(data));
     const main = (data.bank_accounts || []).find(a => a.main) || data.bank_accounts?.[0];
     if (main) qontoBankIban = main.iban;
     console.log('Qonto IBAN loaded:', qontoBankIban);
