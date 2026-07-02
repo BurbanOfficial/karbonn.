@@ -3053,22 +3053,7 @@ function openInvoiceModal() {
 
   // Date échéance : défaut +30j
   const d = new Date(); d.setDate(d.getDate() + 30);
-  const iso = d.toISOString().split('T')[0];
-  document.getElementById('inv-due-date').value = iso;
-  document.getElementById('inv-due-label').textContent = d.toLocaleDateString('fr-FR');
-
-  // Sync label quand date change
-  document.getElementById('inv-due-date').onchange = function() {
-    const parts = this.value.split('-');
-    document.getElementById('inv-due-label').textContent = parts.length === 3
-      ? `${parts[2]}/${parts[1]}/${parts[0]}` : '— Sélectionner une date —';
-  };
-
-  // Toggle date picker
-  document.getElementById('inv-due-trigger').onclick = e => {
-    e.stopPropagation();
-    document.getElementById('inv-due-wrapper').classList.toggle('open');
-  };
+  document.getElementById('inv-due-date').value = d.toISOString().split('T')[0];
 
   document.getElementById('inv-description').value = '';
   document.getElementById('inv-amount').value = '';

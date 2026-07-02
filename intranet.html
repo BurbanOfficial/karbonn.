@@ -744,7 +744,8 @@
       transition: background 0.15s ease; color: var(--text);
     }
     .custom-select-option:hover { background: var(--hover); }
-    .custom-select-option.selected { font-weight: 600; }
+    .custom-select-wrapper.open .custom-select-option.selected { font-weight: 600; }
+    .modal-form input[type="date"] { color-scheme: dark; }
 
     .badge {
       display: inline-block;
@@ -3182,15 +3183,7 @@
         </div>
         <div class="form-group">
           <label>Date d'échéance</label>
-          <div class="custom-select-wrapper" id="inv-due-wrapper">
-            <div class="custom-select-trigger" id="inv-due-trigger">
-              <span id="inv-due-label">— Sélectionner une date —</span>
-              <i class="fa-solid fa-calendar"></i>
-            </div>
-            <div class="custom-select-dropdown" id="inv-due-dropdown" style="padding:12px">
-              <input type="date" id="inv-due-date" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-family:inherit;font-size:0.9rem;outline:none" />
-            </div>
-          </div>
+          <input type="date" id="inv-due-date" />
         </div>
         <p class="modal-error" id="invoice-modal-error"></p>
         <div class="modal-actions">

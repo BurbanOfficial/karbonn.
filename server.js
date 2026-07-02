@@ -297,6 +297,7 @@ app.get('/api/invoices', async (req, res) => {
 app.post('/api/invoices', async (req, res) => {
   try {
     const { client_id, description, amount_cents, vat_rate, due_date } = req.body;
+    console.log('Create invoice payload received:', JSON.stringify({ client_id, description, amount_cents, vat_rate, due_date, iban: qontoBankIban }));
     const today = new Date().toISOString().split('T')[0];
     const payload = {
       client_invoice: {
