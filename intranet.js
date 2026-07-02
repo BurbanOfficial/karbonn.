@@ -2999,6 +2999,72 @@ async function markInvoicePaid(id) {
   }
 }
 
+// Modal création facture
+const invoiceModal = document.getElementById('invoice-modal');
+const invoiceModalError = document.getElementById('invoice-modal-error');
+
+function openInvoiceModal() {
+  const select = document.getElementById('inv-client');
+  select.innerHTML = '<option value="">— Sélectionner un client —</option>';
+  allClients.filter(c => c.qontoClientId).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.qontoClientId;
+    opt.textContent = c.nom || c.name || c.email || c.qontoClientId;
+    select.appendChild(opt);
+  });
+  // Date échéance par défaut : +30 jours
+  const d = new Date(); d.setDate(d.getDate() + 30);
+  document.getElementById('inv-due-date').value = d.toISOString().split('T')[0];
+  document.getElementById('inv-description').value = '';
+  document.getElementById('inv-amount').value = '';
+  document.getElementById('inv-vat').value = '20';
+  invoiceModalError.textContent = '';
+  invoiceModal.style.display = 'flex';
+}
+
+function closeInvoiceModal() { invoiceModal.style.display = 'none'; }
+
+async function createInvoice() {
+  const clientId = document.getElementById('inv-client').value;
+  const description = document.getElementById('inv-description').value.trim();
+  const amount = parseFloat(document.getElementById('inv-amount').value);
+  const vat = parseFloat(document.getElementById('inv-vat').value) || 0;
+  const dueDate = document.getElementById('inv-due-date').value;
+  if (!clientId || !description || isNaN(amount) || !dueDate) {
+    invoiceModalError.textContent = 'Veuillez remplir tous les champs obligatoires.';
+    return;
+  }
+  const btn = document.getElementById('invoice-modal-submit');
+  btn.disabled = true;
+  btn.textContent = 'Création...';
+  try {
+    await apiRequest('/api/invoices', {
+      method: 'POST',
+      body: JSON.stringify({
+        client_id: clientId,
+        description,
+        amount_cents: Math.round(amount * 100),
+        vat_rate: vat,
+        due_date: dueDate
+      })
+    });
+    showToast('Brouillon créé avec succès.', 'success');
+    closeInvoiceModal();
+    loadInvoices();
+  } catch (err) {
+    invoiceModalError.textContent = `Erreur : ${err.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Créer le brouillon';
+  }
+}
+
+document.getElementById('create-invoice-btn')?.addEventListener('click', openInvoiceModal);
+document.getElementById('invoice-modal-close')?.addEventListener('click', closeInvoiceModal);
+document.getElementById('invoice-modal-cancel')?.addEventListener('click', closeInvoiceModal);
+document.getElementById('invoice-modal-submit')?.addEventListener('click', createInvoice);
+invoiceModal?.addEventListener('click', e => { if (e.target === invoiceModal) closeInvoiceModal(); });
+
 document.getElementById('factures-search')?.addEventListener('input', () => renderInvoices(allInvoices));
 
 document.getElementById('invoice-filters')?.addEventListener('click', e => {
