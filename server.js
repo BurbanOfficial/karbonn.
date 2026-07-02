@@ -260,6 +260,54 @@ app.get('/api/clients', async (req, res) => {
   }
 });
 
+// ===========================
+// Invoices (Qonto proxy)
+// ===========================
+
+app.get('/api/invoices', async (req, res) => {
+  try {
+    const qs = new URLSearchParams();
+    if (req.query['filter[status]']) qs.set('filter[status]', req.query['filter[status]']);
+    if (req.query.page) qs.set('page', req.query.page);
+    if (req.query.per_page) qs.set('per_page', req.query.per_page);
+    const query = qs.toString() ? `?${qs}` : '';
+    const data = await qontoRequest(`/client_invoices${query}`);
+    res.json(data);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post('/api/invoices/:id/finalize', async (req, res) => {
+  try {
+    const data = await qontoRequest(`/client_invoices/${req.params.id}/finalize`, { method: 'POST' });
+    res.json(data);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post('/api/invoices/:id/mark_as_paid', async (req, res) => {
+  try {
+    const data = await qontoRequest(`/client_invoices/${req.params.id}/mark_as_paid`, {
+      method: 'POST',
+      body: JSON.stringify(req.body || {}),
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post('/api/invoices/:id/mark_as_canceled', async (req, res) => {
+  try {
+    const data = await qontoRequest(`/client_invoices/${req.params.id}/mark_as_canceled`, { method: 'POST' });
+    res.json(data);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: err.message || 'Internal server error' });

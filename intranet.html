@@ -715,6 +715,12 @@
     .billing-status.refused { background: rgba(211, 47, 47, 0.1); color: #d32f2f; border: 1px solid rgba(211, 47, 47, 0.2); }
     .billing-status.paid { background: rgba(46, 125, 50, 0.1); color: #2e7d32; border: 1px solid rgba(46, 125, 50, 0.2); }
 
+    .invoice-status { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 500; }
+    .invoice-status.draft { background: rgba(158,158,158,0.1); color: #757575; border: 1px solid rgba(158,158,158,0.2); }
+    .invoice-status.unpaid { background: rgba(33,150,243,0.1); color: #2196f3; border: 1px solid rgba(33,150,243,0.2); }
+    .invoice-status.paid { background: rgba(46,125,50,0.1); color: #2e7d32; border: 1px solid rgba(46,125,50,0.2); }
+    .invoice-status.canceled { background: rgba(211,47,47,0.1); color: #d32f2f; border: 1px solid rgba(211,47,47,0.2); }
+
     .badge {
       display: inline-block;
       padding: 4px 10px;
@@ -2380,6 +2386,9 @@
         <a href="#" class="nav-item" data-label="Projets & Services">
           <i class="fa-solid fa-diagram-project"></i>
         </a>
+        <a href="#" class="nav-item" data-label="Factures & Devis">
+          <i class="fa-solid fa-file-invoice"></i>
+        </a>
         <a href="#" class="nav-item" data-label="Équipe">
           <i class="fa-solid fa-people-group"></i>
         </a>
@@ -2667,6 +2676,49 @@
           </div>
         </section>
 
+
+        <!-- Factures & Devis -->
+        <section class="section-page" id="section-factures">
+          <div class="section-header">
+            <div class="section-header-left">
+              <h1>Factures & Devis</h1>
+              <div class="search-bar">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="factures-search" placeholder="Rechercher une facture..." />
+              </div>
+            </div>
+            <button class="btn-create" id="create-invoice-btn">
+              <i class="fa-solid fa-plus"></i> Créer une facture
+            </button>
+          </div>
+          <div class="facturation-filters" id="invoice-filters">
+            <button class="facturation-filter active" data-status="all">Toutes</button>
+            <button class="facturation-filter" data-status="draft">Brouillon</button>
+            <button class="facturation-filter" data-status="unpaid">Non payée</button>
+            <button class="facturation-filter" data-status="paid">Payée</button>
+            <button class="facturation-filter" data-status="canceled">Annulée</button>
+          </div>
+          <div class="table-wrapper">
+            <table class="data-table" id="factures-table">
+              <thead>
+                <tr>
+                  <th>Numéro</th>
+                  <th>Client</th>
+                  <th>Montant TTC</th>
+                  <th>Date d'émission</th>
+                  <th>Échéance</th>
+                  <th>Statut</th>
+                  <th style="text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="factures-tbody">
+                <tr class="empty-row">
+                  <td colspan="7">Chargement des factures...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         <!-- Équipe -->
         <!-- Équipe -->

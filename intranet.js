@@ -52,7 +52,7 @@ function showApp(user, profile) {
   if (userAvatarEl) userAvatarEl.textContent = initials;
 
   // Restrict team and billing management to managers
-  const restrictedLabels = ['Équipe', 'Facturation & Devis'];
+  const restrictedLabels = ['Équipe', 'Factures & Devis'];
   restrictedLabels.forEach(label => {
     const nav = document.querySelector(`.nav-item[data-label="${label}"]`);
     if (nav) {
@@ -60,7 +60,7 @@ function showApp(user, profile) {
         nav.style.display = 'flex';
       } else {
         nav.style.display = 'none';
-        const sectionId = label === 'Équipe' ? 'section-equipe' : 'section-facturation';
+        const sectionId = label === 'Équipe' ? 'section-equipe' : 'section-factures';
         const section = document.getElementById(sectionId);
         if (section && section.classList.contains('active')) {
           navItems.forEach(n => n.classList.remove('active'));
@@ -207,7 +207,7 @@ const sectionMap = [
   'section-taches',
   'section-analytics',
   'section-projets',
-  'section-facturation',
+  'section-factures',
   'section-equipe',
   'section-parametres'
 ];
@@ -218,7 +218,7 @@ navItems.forEach((item, index) => {
 
     const sectionId = sectionMap[index];
     // Restrict team and billing management to managers
-    if ((sectionId === 'section-equipe' || sectionId === 'section-facturation') && currentUserRole !== 'Manager') {
+    if ((sectionId === 'section-equipe' || sectionId === 'section-factures') && currentUserRole !== 'Manager') {
       showToast('Accès réservé aux managers.', 'error');
       return;
     }
@@ -232,6 +232,9 @@ navItems.forEach((item, index) => {
     // Load team data when opening the team section
     if (sectionId === 'section-equipe' && currentUserRole === 'Manager') {
       loadTeamMembers();
+    }
+    if (sectionId === 'section-factures' && currentUserRole === 'Manager') {
+      loadInvoices();
     }
   });
 });
@@ -2921,7 +2924,88 @@ equipeSearch?.addEventListener('input', () => {
 });
 
 // ===========================
+// Factures & Devis (Qonto API)
+// ===========================
 
-// ===========================
-// Facturation & Devis (désactivé - Qonto ne gère pas les devis/factures via cette interface)
-// ===========================
+let allInvoices = [];
+let invoiceStatusFilter = 'all';
+
+async function loadInvoices() {
+  const tbody = document.getElementById('factures-tbody');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Chargement...</td></tr>';
+  try {
+    const params = invoiceStatusFilter !== 'all' ? `?filter[status]=${invoiceStatusFilter}` : '';
+    const data = await apiRequest(`/api/invoices${params}`);
+    allInvoices = data.client_invoices || [];
+    renderInvoices(allInvoices);
+  } catch (err) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="7">Erreur : ${err.message}</td></tr>`;
+  }
+}
+
+function renderInvoices(invoices) {
+  const tbody = document.getElementById('factures-tbody');
+  const search = (document.getElementById('factures-search')?.value || '').toLowerCase();
+  const filtered = invoices.filter(inv => {
+    const clientName = inv.client?.name || `${inv.client?.first_name || ''} ${inv.client?.last_name || ''}`.trim();
+    return !search || inv.number?.toLowerCase().includes(search) || clientName.toLowerCase().includes(search);
+  });
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Aucune facture trouvée.</td></tr>';
+    return;
+  }
+  const statusLabels = { draft: 'Brouillon', unpaid: 'Non payée', paid: 'Payée', canceled: 'Annulée' };
+  tbody.innerHTML = filtered.map(inv => {
+    const clientName = inv.client?.name || `${inv.client?.first_name || ''} ${inv.client?.last_name || ''}`.trim() || '—';
+    const amount = inv.total_amount ? `${parseFloat(inv.total_amount.value).toFixed(2)} ${inv.total_amount.currency}` : '—';
+    const issueDate = inv.issue_date ? new Date(inv.issue_date).toLocaleDateString('fr-FR') : '—';
+    const dueDate = inv.due_date ? new Date(inv.due_date).toLocaleDateString('fr-FR') : '—';
+    const status = inv.status || 'draft';
+    return `<tr>
+      <td><strong>${inv.number || '—'}</strong></td>
+      <td>${clientName}</td>
+      <td>${amount}</td>
+      <td>${issueDate}</td>
+      <td>${dueDate}</td>
+      <td><span class="invoice-status ${status}">${statusLabels[status] || status}</span></td>
+      <td>
+        <div class="actions">
+          ${inv.invoice_url ? `<a href="${inv.invoice_url}" target="_blank" class="btn-icon" title="Voir la facture"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>` : ''}
+          ${status === 'draft' ? `<button class="btn-icon" title="Finaliser" onclick="finalizeInvoice('${inv.id}')"><i class="fa-solid fa-check"></i></button>` : ''}
+          ${status === 'unpaid' ? `<button class="btn-icon" title="Marquer payée" onclick="markInvoicePaid('${inv.id}')"><i class="fa-solid fa-circle-check"></i></button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function finalizeInvoice(id) {
+  try {
+    await apiRequest(`/api/invoices/${id}/finalize`, { method: 'POST' });
+    showToast('Facture finalisée.', 'success');
+    loadInvoices();
+  } catch (err) {
+    showToast(`Erreur : ${err.message}`, 'error');
+  }
+}
+
+async function markInvoicePaid(id) {
+  try {
+    await apiRequest(`/api/invoices/${id}/mark_as_paid`, { method: 'POST', body: JSON.stringify({}) });
+    showToast('Facture marquée comme payée.', 'success');
+    loadInvoices();
+  } catch (err) {
+    showToast(`Erreur : ${err.message}`, 'error');
+  }
+}
+
+document.getElementById('factures-search')?.addEventListener('input', () => renderInvoices(allInvoices));
+
+document.getElementById('invoice-filters')?.addEventListener('click', e => {
+  const btn = e.target.closest('.facturation-filter');
+  if (!btn) return;
+  document.querySelectorAll('#invoice-filters .facturation-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  invoiceStatusFilter = btn.dataset.status;
+  loadInvoices();
+});
