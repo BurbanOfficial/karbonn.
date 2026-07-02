@@ -77,7 +77,7 @@ async function qontoRequest(path, options = {}) {
   let data = null;
   if (text) try { data = JSON.parse(text); } catch { data = text; }
   if (!response.ok) {
-    const err = new Error(`Qonto API error ${response.status}`);
+    const err = new Error(data?.errors?.[0]?.detail || data?.error || `Qonto API error ${response.status}`);
     err.status = response.status;
     err.data = data;
     throw err;
@@ -287,16 +287,16 @@ app.post('/api/invoices', async (req, res) => {
         due_date,
         items: [{
           title: description,
-          quantity: 1,
-          unit_price: { value: (amount_cents / 100).toFixed(2), currency: 'EUR' },
-          vat_rate: vat_rate ?? 20
+          quantity: '1',
+          unit_price: (amount_cents / 100).toFixed(2),
+          vat_rate: String(vat_rate ?? 20)
         }]
       }
     };
     const data = await qontoRequest('/client_invoices', { method: 'POST', body: JSON.stringify(payload) });
     res.json(data);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message, detail: err.data });
   }
 });
 
