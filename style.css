@@ -197,7 +197,7 @@ html, body {
 .logo-text {
   display: block;
   font-family: "Source Code Pro", Sans-serif;
-  font-size: 230px;
+  font-size: 200px;
   font-weight: 500;
   line-height: 1;
   color: var(--accent);
@@ -1222,7 +1222,7 @@ html, body {
   }
 
   .logo-text {
-    font-size: clamp(64px, 22vw, 130px);
+    font-size: clamp(64px, 20vw, 130px);
     text-align: left;
     margin-bottom: 12px;
     letter-spacing: -0.01em;

@@ -1522,35 +1522,28 @@ const taskFolderSections = document.getElementById('task-folder-sections');
 const defaultFolderStructure = {
   '01 - Administration': {
     'Contrat': { required: true },
-    'Devis': { required: true },
-    'Factures': { required: true }
+    'Devis': { required: true }
   },
   '02 - Analyse': {
     'Cahier des charges': { required: true },
-    'Arborescence': { required: true },
-    'Planning': { required: true }
+    'Arborescence': { required: true }
   },
   '03 - Design': {
     'Maquette': { required: true },
-    'Prototype': { required: true },
     'Charte graphique': { required: true },
     'Assets': { required: true }
   },
   '04 - Développement': {
-    'Documentation API': { required: true },
-    'Base de données': { required: true },
-    'Variables': { required: true }
+    'Site Web': { required: true }
   },
   '05 - Tests': {
-    'Rapport QA': { required: true },
-    'Bugs': { required: true }
+    'Rapport QA': { required: true }
   },
   '06 - Livraison': {
     'Documentation': { required: true },
     'Identifiants': { required: true },
     'Guide utilisateur': { required: true }
-  },
-  '07 - Archives': {}
+  }
 };
 
 function getFileIcon(filename) {
