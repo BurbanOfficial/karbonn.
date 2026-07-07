@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const API_URL = window.KARBONN_API_URL || 'https://karbonn-intranet-api.onrender.com';
+  const API_URL = window.KARBONN_API_URL || 'https://karbonn-x-abby.onrender.com';
 
   // Photo de profil de Kaï — remplace cette URL par la vraie photo
   const KAI_AVATAR = 'https://ui-avatars.com/api/?name=Ka%C3%AF&background=0c04ff&color=fff&bold=true&size=128&font-size=0.45';
