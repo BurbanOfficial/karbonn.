@@ -4,7 +4,7 @@
   const API_URL = window.KARBONN_API_URL || 'https://karbonn-x-abby.onrender.com';
 
   // Photo de profil de Kaï — remplace cette URL par la vraie photo
-  const KAI_AVATAR = 'images/chatbot/kai.jpeg';
+  const KAI_AVATAR = 'images/chatbot/kai-favicon.png';
 
   const WELCOME_MESSAGE = '👋 Salut ! Moi, c\'est Kaï 😊 Décrivez-moi votre projet, même en quelques mots. Je vous dirai en quelques secondes si c\'est faisable et comment on peut vous aider. Prêt à commencer ? 🚀';
 
