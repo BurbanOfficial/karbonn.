@@ -383,7 +383,7 @@ Règles importantes :
 
 Contact Karbonn : hello@karbonn.fr`;
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', cors(), async (req, res) => {
   const { messages } = req.body;
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Missing messages array' });
