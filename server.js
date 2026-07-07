@@ -73,7 +73,14 @@ async function requireManager(req, res, next) {
   }
 }
 
-app.options('/api/chat', cors());
+const chatCors = cors({ origin: '*', credentials: false });
+
+app.options('/api/chat', chatCors, (req, res) => {
+  console.log('[CHAT CORS] OPTIONS preflight hit — origin:', req.headers.origin);
+  console.log('[CHAT CORS] Response headers:', res.getHeaders());
+  res.sendStatus(204);
+});
+
 app.options('/api/*', cors());
 app.use('/api', (req, res, next) => {
   if (req.path === '/chat') return next();
@@ -383,14 +390,24 @@ Règles importantes :
 
 Contact Karbonn : hello@karbonn.fr`;
 
-app.post('/api/chat', cors(), async (req, res) => {
+app.post('/api/chat', chatCors, async (req, res) => {
+  console.log('[CHAT] POST /api/chat hit');
+  console.log('[CHAT] Origin:', req.headers.origin);
+  console.log('[CHAT] CORS headers sent:', {
+    'access-control-allow-origin': res.getHeader('access-control-allow-origin'),
+  });
+
   const { messages } = req.body;
   if (!Array.isArray(messages) || messages.length === 0) {
+    console.warn('[CHAT] Bad request: missing or empty messages array');
     return res.status(400).json({ error: 'Missing messages array' });
   }
+
   if (!process.env.HF_TOKEN) {
+    console.error('[CHAT] HF_TOKEN is not set in environment variables!');
     return res.status(503).json({ error: 'Chatbot not configured' });
   }
+  console.log('[CHAT] HF_TOKEN present, length:', process.env.HF_TOKEN.length);
 
   const payload = {
     model: 'mistralai/Mistral-7B-Instruct-v0.3',
@@ -402,6 +419,8 @@ app.post('/api/chat', cors(), async (req, res) => {
     temperature: 0.7,
   };
 
+  console.log('[CHAT] Calling HF API, model:', payload.model, '— messages count:', payload.messages.length);
+
   try {
     const hfRes = await fetch('https://router.huggingface.co/hf-inference/v1/chat/completions', {
       method: 'POST',
@@ -411,15 +430,21 @@ app.post('/api/chat', cors(), async (req, res) => {
       },
       body: JSON.stringify(payload),
     });
+
+    console.log('[CHAT] HF response status:', hfRes.status);
+
     const data = await hfRes.json();
+
     if (!hfRes.ok) {
-      console.error('HF error:', JSON.stringify(data));
+      console.error('[CHAT] HF error response:', JSON.stringify(data));
       return res.status(hfRes.status).json({ error: data?.error || 'HF API error' });
     }
+
     const reply = data?.choices?.[0]?.message?.content || '';
+    console.log('[CHAT] Reply length:', reply.length);
     res.json({ reply });
   } catch (err) {
-    console.error('Chatbot error:', err.message);
+    console.error('[CHAT] Fetch to HF failed:', err.message, err.stack);
     res.status(500).json({ error: 'Chatbot unavailable' });
   }
 });
