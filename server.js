@@ -415,7 +415,7 @@ app.post('/api/chat', chatCors, async (req, res) => {
   console.log('[CHAT] HF_TOKEN present, length:', process.env.HF_TOKEN.length);
 
   const payload = {
-    model: 'meta-llama/Llama-3.2-3B-Instruct',
+    model: 'meta-llama/Llama-3.2-3B-Instruct:fastest',
     messages: [
       { role: 'system', content: CHATBOT_SYSTEM_PROMPT },
       ...messages.map(m => ({ role: m.role, content: String(m.content) })),
@@ -427,7 +427,7 @@ app.post('/api/chat', chatCors, async (req, res) => {
   console.log('[CHAT] Calling HF API, model:', payload.model, '— messages count:', payload.messages.length);
 
   try {
-    const hfRes = await fetch('https://router.huggingface.co/hf-inference/v1/chat/completions', {
+    const hfRes = await fetch('https://router.huggingface.co/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.HF_TOKEN}`,
