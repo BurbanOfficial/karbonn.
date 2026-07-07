@@ -36,7 +36,8 @@ initFirebaseAdmin();
 const db = admin.firestore();
 
 app.use(express.json());
-app.use(cors({
+
+const allowedOriginsCors = cors({
   origin: (origin, callback) => {
     const allowed = process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
@@ -45,7 +46,12 @@ app.use(cors({
     else callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
   credentials: true,
-}));
+});
+
+app.use((req, res, next) => {
+  if (req.path === '/api/chat') return next();
+  allowedOriginsCors(req, res, next);
+});
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
@@ -77,11 +83,10 @@ const chatCors = cors({ origin: '*', credentials: false });
 
 app.options('/api/chat', chatCors, (req, res) => {
   console.log('[CHAT CORS] OPTIONS preflight hit — origin:', req.headers.origin);
-  console.log('[CHAT CORS] Response headers:', res.getHeaders());
   res.sendStatus(204);
 });
 
-app.options('/api/*', cors());
+app.options('/api/*', allowedOriginsCors);
 app.use('/api', (req, res, next) => {
   if (req.path === '/chat') return next();
   if (req.method === 'OPTIONS') return next();
