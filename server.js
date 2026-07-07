@@ -73,11 +73,16 @@ async function requireManager(req, res, next) {
   }
 }
 
+app.options('/api/chat', cors());
 app.options('/api/*', cors());
 app.use('/api', (req, res, next) => {
+  if (req.path === '/chat') return next();
   if (req.method === 'OPTIONS') return next();
   verifyAuth(req, res, next);
-}, requireManager);
+}, (req, res, next) => {
+  if (req.path === '/chat') return next();
+  requireManager(req, res, next);
+});
 
 async function qontoRequest(path, options = {}) {
   const response = await fetch(`${QONTO_BASE_URL}${path}`, {
@@ -355,7 +360,7 @@ app.post('/api/invoices/:id/mark_as_canceled', async (req, res) => {
 });
 
 // ===========================
-// Chatbot IA (public)
+// Chatbot IA (public) — doit être AVANT le middleware /api auth
 // ===========================
 
 const CHATBOT_SYSTEM_PROMPT = `Tu es l'assistant virtuel de l'agence Karbonn, une agence de communication digitale et de développement web basée en France.
