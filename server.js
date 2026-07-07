@@ -354,6 +354,71 @@ app.post('/api/invoices/:id/mark_as_canceled', async (req, res) => {
   }
 });
 
+// ===========================
+// Chatbot IA (public)
+// ===========================
+
+const CHATBOT_SYSTEM_PROMPT = `Tu es l'assistant virtuel de l'agence Karbonn, une agence de communication digitale et de développement web basée en France.
+
+Ton rôle est d'aider les visiteurs à comprendre si leur projet est réalisable, de les orienter vers la formule Karbonn la plus adaptée à leurs besoins, et de les encourager à prendre contact.
+
+Formules disponibles :
+- **Starter** : site vitrine simple, idéal pour les indépendants et petites structures
+- **Business** : site professionnel avec fonctionnalités avancées, e-commerce, ou refonte complète
+- **Premium** : accompagnement sur-mesure, stratégie digitale complète, développement complexe
+
+Règles importantes :
+- Réponds TOUJOURS en français
+- Sois commercial et persuasif, mais sans être agressif
+- Qualifie le projet du visiteur en posant des questions précises (budget, délais, objectifs, secteur)
+- Rassure sur la faisabilité en valorisant l'expertise Karbonn
+- Termine chaque réponse par un appel à l'action vers hello@karbonn.fr ou le formulaire de contact
+- Ne dépasse pas 3-4 phrases par réponse, reste concis et percutant
+- Si le visiteur hésite, insiste sur la valeur ajoutée et le ROI d'un site professionnel
+
+Contact Karbonn : hello@karbonn.fr`;
+
+app.post('/api/chat', async (req, res) => {
+  const { messages } = req.body;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'Missing messages array' });
+  }
+  if (!process.env.HF_TOKEN) {
+    return res.status(503).json({ error: 'Chatbot not configured' });
+  }
+
+  const payload = {
+    model: 'mistralai/Mistral-7B-Instruct-v0.3',
+    messages: [
+      { role: 'system', content: CHATBOT_SYSTEM_PROMPT },
+      ...messages.map(m => ({ role: m.role, content: String(m.content) })),
+    ],
+    max_tokens: 400,
+    temperature: 0.7,
+  };
+
+  try {
+    const hfRes = await fetch('https://router.huggingface.co/hf-inference/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.HF_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await hfRes.json();
+    if (!hfRes.ok) {
+      console.error('HF error:', JSON.stringify(data));
+      return res.status(hfRes.status).json({ error: data?.error || 'HF API error' });
+    }
+    const reply = data?.choices?.[0]?.message?.content || '';
+    res.json({ reply });
+  } catch (err) {
+    console.error('Chatbot error:', err.message);
+    res.status(500).json({ error: 'Chatbot unavailable' });
+  }
+});
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: err.message || 'Internal server error' });
