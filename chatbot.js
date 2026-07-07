@@ -4,14 +4,15 @@
   const API_URL = window.KARBONN_API_URL || 'https://karbonn-x-abby.onrender.com';
 
   // Photo de profil de Kaï — remplace cette URL par la vraie photo
-  const KAI_AVATAR = 'https://ui-avatars.com/api/?name=Ka%C3%AF&background=0c04ff&color=fff&bold=true&size=128&font-size=0.45';
+  const KAI_AVATAR = 'images/chatbot/kai.jpeg';
 
-  const WELCOME_MESSAGE = 'Salut ! Moi c\'est Kaï. Parlez-moi de votre projet — je vous dis en quelques secondes si c\'est faisable et comment on peut vous aider.';
+  const WELCOME_MESSAGE = '👋 Salut ! Moi, c\'est Kaï 😊 Décrivez-moi votre projet, même en quelques mots. Je vous dirai en quelques secondes si c\'est faisable et comment on peut vous aider. Prêt à commencer ? 🚀';
 
   const SUGGESTIONS = [
-    'Mon projet est-il faisable ?',
-    'Quelle formule me correspond ?',
-    'Combien ça coûte ?',
+    '💡 J’ai une idée de projet',
+    '💰 Combien ça coûte ?',
+    '🚀 Mon projet est-il réalisable ?',
+    '📅 En combien de temps ?',
   ];
 
   const TAGLINE_PHRASES = [
@@ -45,7 +46,7 @@
       <div id="kai-invite" role="button" tabindex="0" aria-label="Ouvrir le chat avec Kaï">
         <img class="kai-invite-avatar" src="${KAI_AVATAR}" alt="Kaï" />
         <div class="kai-invite-text">
-          <span class="kai-invite-name">Kaï · Lil Kaï Guy</span>
+          <span class="kai-invite-name">Kaï · Assistant IA</span>
           <span class="kai-invite-tagline" id="kai-tagline"></span>
         </div>
         <span class="kai-invite-pulse"></span>
