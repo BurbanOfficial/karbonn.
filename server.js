@@ -415,7 +415,7 @@ app.post('/api/chat', chatCors, async (req, res) => {
   console.log('[CHAT] HF_TOKEN present, length:', process.env.HF_TOKEN.length);
 
   const payload = {
-    model: 'mistralai/Mistral-7B-Instruct-v0.3',
+    model: 'meta-llama/Llama-3.2-3B-Instruct',
     messages: [
       { role: 'system', content: CHATBOT_SYSTEM_PROMPT },
       ...messages.map(m => ({ role: m.role, content: String(m.content) })),
