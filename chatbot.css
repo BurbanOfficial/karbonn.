@@ -434,6 +434,10 @@
     max-height: calc(100vh - 220px);
   }
 
+  .chat-input {
+    font-size: 16px;
+  }
+
   #kai-invite,
   #kai-close-btn {
     right: 14px;
