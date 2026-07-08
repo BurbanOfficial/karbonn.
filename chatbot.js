@@ -59,28 +59,30 @@
 
       <!-- Fenêtre de chat -->
       <div id="karbonn-chat-window" role="dialog" aria-label="Chat avec Kaï">
-        <div class="chat-header">
-          <img class="chat-header-avatar" src="${KAI_AVATAR}" alt="Kaï" />
-          <div class="chat-header-info">
-            <span class="chat-header-name">Kaï</span>
-            <div class="chat-header-status">
-              <span class="chat-status-dot"></span>
-              <span class="chat-status-label">En ligne · répond instantanément</span>
+        <div class="chat-glass-inner">
+          <div class="chat-header">
+            <img class="chat-header-avatar" src="${KAI_AVATAR}" alt="Kaï" />
+            <div class="chat-header-info">
+              <span class="chat-header-name">Kaï</span>
+              <div class="chat-header-status">
+                <span class="chat-status-dot"></span>
+                <span class="chat-status-label">En ligne · répond instantanément</span>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="chat-messages" id="chat-messages"></div>
-        <div class="chat-input-area">
-          <textarea
-            class="chat-input"
-            id="chat-input"
-            placeholder="Décrivez votre projet…"
-            rows="1"
-            aria-label="Message"
-          ></textarea>
-          <button class="chat-send-btn" id="chat-send-btn" aria-label="Envoyer">
-            <i class="fa-solid fa-paper-plane"></i>
-          </button>
+          <div class="chat-messages" id="chat-messages"></div>
+          <div class="chat-input-area">
+            <textarea
+              class="chat-input"
+              id="chat-input"
+              placeholder="Décrivez votre projet…"
+              rows="1"
+              aria-label="Message"
+            ></textarea>
+            <button class="chat-send-btn" id="chat-send-btn" aria-label="Envoyer">
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -102,6 +104,10 @@
       invite.classList.add('hidden');
       closeBtn.classList.add('visible');
       backdrop && backdrop.classList.add('visible');
+      const scrollbarW = window.innerWidth - document.documentElement.clientWidth;
+      document.body.style.paddingRight = scrollbarW + 'px';
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
       clearTimeout(taglineTimer);
       setTimeout(() => input.focus(), 300);
     }
@@ -111,6 +117,9 @@
       invite.classList.remove('hidden');
       closeBtn.classList.remove('visible');
       backdrop && backdrop.classList.remove('visible');
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+      document.documentElement.style.overflow = '';
       startTypewriter();
     }
 

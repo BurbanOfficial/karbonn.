@@ -157,9 +157,15 @@ if (cq1) generateCaptchaContact(cq1, 'captcha-a1');
 if (cq2) generateCaptchaContact(cq2, 'captcha-a2');
 
 // ── SOUMISSION FORMULAIRES ───────────────────────────────
+const FORMSPREE_ENDPOINTS = {
+  'form-particulier': 'https://formspree.io/f/xdarvypz',
+  'form-professionnel': 'https://formspree.io/f/mjgqdjpw',
+};
+
 document.querySelectorAll('.contact-form').forEach(form => {
-  form.addEventListener('submit', (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
+
     const captchaInput = form.querySelector('[name="captcha"]');
     const expected = parseInt(captchaInput.dataset.expected);
     if (parseInt(captchaInput.value) !== expected) {
@@ -169,12 +175,46 @@ document.querySelectorAll('.contact-form').forEach(form => {
     }
     captchaInput.style.borderColor = '';
 
-    const right = document.querySelector('.contact-main__right');
-    right.querySelectorAll('.contact-form').forEach(f => f.classList.remove('active'));
-    right.querySelector('.contact-tabs').style.display = 'none';
+    const submitBtn = form.querySelector('.form-submit');
+    submitBtn.disabled = true;
+    submitBtn.querySelector('span').textContent = 'Envoi en cours…';
 
-    const successEl = document.getElementById('formSuccess');
-    successEl.classList.add('is-visible');
+    const endpoint = FORMSPREE_ENDPOINTS[form.id];
+    const data = new FormData(form);
+    data.delete('captcha');
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        body: data,
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (res.ok) {
+        const right = document.querySelector('.contact-main__right');
+        right.querySelectorAll('.contact-form').forEach(f => f.classList.remove('active'));
+        right.querySelector('.contact-tabs').style.display = 'none';
+        document.getElementById('formSuccess').classList.add('is-visible');
+      } else {
+        const json = await res.json();
+        const msg = json?.errors?.map(e => e.message).join(', ') || 'Une erreur est survenue.';
+        submitBtn.querySelector('span').textContent = msg;
+        submitBtn.style.background = '#ef4444';
+        setTimeout(() => {
+          submitBtn.disabled = false;
+          submitBtn.querySelector('span').textContent = 'Envoyer le message';
+          submitBtn.style.background = '';
+        }, 3000);
+      }
+    } catch {
+      submitBtn.querySelector('span').textContent = 'Erreur réseau, réessayez.';
+      submitBtn.style.background = '#ef4444';
+      setTimeout(() => {
+        submitBtn.disabled = false;
+        submitBtn.querySelector('span').textContent = 'Envoyer le message';
+        submitBtn.style.background = '';
+      }, 3000);
+    }
   });
 });
 

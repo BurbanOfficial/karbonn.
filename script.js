@@ -129,17 +129,49 @@ document.querySelectorAll('.contact-tab').forEach(tab => {
   });
 });
 
+const FORMSPREE_INDEX = {
+  'form-particulier': 'https://formspree.io/f/xdarvypz',
+  'form-professionnel': 'https://formspree.io/f/mjgqdjpw',
+};
+
 document.querySelectorAll('.contact-form').forEach(form => {
-  form.addEventListener('submit', (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const captchaInput = form.querySelector('[name="captcha"]');
     const expected = parseInt(captchaInput.dataset.expected);
     if (parseInt(captchaInput.value) !== expected) {
       captchaInput.style.borderColor = '#ff0000';
+      captchaInput.focus();
       return;
     }
     captchaInput.style.borderColor = '';
-    alert('Message envoyé !');
+
+    const submitBtn = form.querySelector('.form-submit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Envoi en cours…';
+
+    const endpoint = FORMSPREE_INDEX[form.id];
+    const data = new FormData(form);
+    data.delete('captcha');
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        body: data,
+        headers: { 'Accept': 'application/json' },
+      });
+      if (res.ok) {
+        form.innerHTML = '<p style="color:#22c55e;font-family:Space Grotesk,sans-serif;padding:16px 0">Message envoyé ! Nous vous répondrons dans les 24h. À très vite.</p>';
+      } else {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Envoyer le message';
+        alert('Une erreur est survenue. Merci de réessayer.');
+      }
+    } catch {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Envoyer le message';
+      alert('Erreur réseau. Merci de réessayer.');
+    }
   });
 });
 
