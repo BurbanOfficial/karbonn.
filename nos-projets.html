@@ -783,12 +783,14 @@
           modal.classList.add('is-open');
           modal.setAttribute('aria-hidden', 'false');
           document.body.style.overflow = 'hidden';
+          document.documentElement.style.overflow = 'hidden';
         }
 
         function closeModal() {
           modal.classList.remove('is-open');
           modal.setAttribute('aria-hidden', 'true');
           document.body.style.overflow = '';
+          document.documentElement.style.overflow = '';
         }
 
         document.querySelectorAll('.projects-list__item[data-modal="true"]').forEach(item => {
