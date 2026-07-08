@@ -545,6 +545,9 @@
       globe.controls().enableZoom = false;
       globe.controls().minDistance = 350;
       globe.controls().maxDistance = 350;
+      if (window.matchMedia('(hover: none)').matches) {
+        globe.controls().enableRotate = false;
+      }
       globe.pointOfView({ altitude: 2.5 });
 
       function resizeGlobe() {
@@ -722,8 +725,11 @@
         if (animating) requestAnimationFrame(animateImg);
       }
 
+      const isTouchDevice = () => window.matchMedia('(hover: none)').matches;
+
       items.forEach(item => {
         item.addEventListener('mouseenter', () => {
+          if (isTouchDevice()) return;
           const src = item.dataset.img;
           if (src) {
             hoverImgEl.src = src;
@@ -733,6 +739,7 @@
           }
         });
         item.addEventListener('mouseleave', () => {
+          if (isTouchDevice()) return;
           hoverImg.classList.remove('is-visible');
           animating = false;
         });
@@ -829,6 +836,10 @@
             e.preventDefault();
             openModal(item);
           });
+          item.addEventListener('touchend', e => {
+            e.preventDefault();
+            openModal(item);
+          }, { passive: false });
         });
 
         overlay.addEventListener('click', closeModal);
