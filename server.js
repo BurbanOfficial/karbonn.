@@ -64,7 +64,7 @@ const allowedOriginsCors = cors({
     const allowed = process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
       : ['*'];
-    if (!origin || allowed.includes('*') || allowed.includes(origin)) callback(null, true);
+    if (!origin || allowed.includes('*') || allowed.includes(origin)) callback(null, origin || '*');
     else callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
   credentials: true,
@@ -109,6 +109,7 @@ app.options('/api/chat', chatCors, (req, res) => {
 });
 
 app.options('/api/*', allowedOriginsCors);
+app.options('/notify/email', allowedOriginsCors);
 
 // Notification endpoint: authenticated, any role
 app.post('/notify/email', verifyAuth, async (req, res) => {
