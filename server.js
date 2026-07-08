@@ -51,7 +51,10 @@ async function sendEmail({ to, subject, text, html }) {
   const data = { from, to, subject };
   if (text) data.text = text;
   if (html) data.html = html;
-  return await mg.messages.create(domain, data);
+  console.log(`[EMAIL] Sending email to ${to.join(', ')} from ${from} | subject: ${subject}`);
+  const result = await mg.messages.create(domain, data);
+  console.log(`[EMAIL] Sent successfully. Mailgun id: ${result.id}`);
+  return result;
 }
 
 app.use(express.json());
@@ -111,13 +114,18 @@ app.options('/api/*', allowedOriginsCors);
 app.post('/notify/email', verifyAuth, async (req, res) => {
   try {
     const { to, subject, text, html } = req.body;
+    console.log(`[EMAIL REQUEST] from ${req.user?.email || req.user?.uid} | to: ${(to || []).join(', ')} | subject: ${subject}`);
     if (!to || !Array.isArray(to) || to.length === 0) return res.status(400).json({ error: 'Missing recipients' });
     if (!subject) return res.status(400).json({ error: 'Missing subject' });
     if (!text && !html) return res.status(400).json({ error: 'Missing body' });
+    if (!process.env.MAILGUN_API_KEY) {
+      console.error('[EMAIL REQUEST] Missing MAILGUN_API_KEY environment variable');
+      return res.status(500).json({ error: 'Mailgun not configured' });
+    }
     const result = await sendEmail({ to, subject, text, html });
     res.json({ success: true, id: result.id });
   } catch (err) {
-    console.error('Mailgun error:', err);
+    console.error('[EMAIL REQUEST] Mailgun error:', err);
     res.status(500).json({ error: err.message });
   }
 });
