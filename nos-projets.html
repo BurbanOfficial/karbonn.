@@ -547,6 +547,12 @@
       globe.controls().maxDistance = 350;
       if (window.matchMedia('(hover: none)').matches) {
         globe.controls().enableRotate = false;
+        function applyTouchAction() {
+          const globeCanvas = container.querySelector('canvas');
+          if (globeCanvas) { globeCanvas.style.touchAction = 'pan-y'; }
+          else { requestAnimationFrame(applyTouchAction); }
+        }
+        applyTouchAction();
       }
       globe.pointOfView({ altitude: 2.5 });
 
