@@ -38,13 +38,15 @@ async function apiRequest(path, options = {}) {
 
 async function sendNotificationEmail({ to, subject, text, html }) {
   if (!to || to.length === 0) return;
+  console.log('[CLIENT EMAIL] Sending to:', to, '| subject:', subject);
   try {
-    await apiRequest('/notify/email', {
+    const result = await apiRequest('/notify/email', {
       method: 'POST',
       body: JSON.stringify({ to, subject, text, html })
     });
+    console.log('[CLIENT EMAIL] Success:', result);
   } catch (err) {
-    console.error('Erreur envoi e-mail:', err);
+    console.error('[CLIENT EMAIL] Error:', err);
   }
 }
 
@@ -52,19 +54,82 @@ function getCurrentUserEmail() {
   return auth.currentUser?.email || '';
 }
 
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function buildEmailHtml({ title, intro, lines, buttonText, buttonHref }) {
+  const linesHtml = (lines || []).map(line => `<div>${escapeHtml(line)}<br></div>`).join('');
+  return `<div>
+    <table style="padding: 40px 0" width="100%">
+      <tbody>
+        <tr>
+          <td align="center">
+            <table style="background: rgb(255, 255, 255); border-radius: 14px; overflow: hidden" width="600">
+              <tbody>
+                <tr>
+                  <td style="background: rgb(255, 255, 255); padding: 0px; text-align: center">
+                    <img style="display: block; margin: 0 auto 10px auto; max-width: 140px; max-height: 70px; width: auto; height: auto" alt="Karbonn" src="https://i.imgur.com/61Dv12I.png">
+                    <div style="color: rgb(170, 170, 170); font-size: 12px; letter-spacing: 1.5px">
+                      <div>KARBONN.<br></div>
+                      <div><br></div>
+                      <div>Communication Digitale &amp; Développement Web<br></div>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 40px">
+                    <h2 style="text-align: center; margin: 0 0 10px 0; color: rgb(17, 17, 17)">${escapeHtml(title)}<br></h2>
+                    <div><br></div>
+                    <div style="text-align: center; color: rgb(68, 68, 68); font-size: 14px; line-height: 1.6">
+                      ${intro ? `<div>${escapeHtml(intro)}<br></div><div><br></div>` : ''}
+                      ${linesHtml}
+                    </div>
+                    <div style="text-align: center; margin-top: 30px">
+                      <a target="_blank" style="background: rgb(11, 11, 11); color: rgb(255, 255, 255); padding: 12px 22px; border-radius: 2px; text-decoration: none; font-size: 14px" href="${escapeHtml(buttonHref)}">
+                        ${escapeHtml(buttonText)}
+                      </a><br>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background: rgb(255, 255, 255); text-align: center; padding: 15px; font-size: 11px; color: rgb(119, 119, 119)">
+                    © Karbonn. Tous droits réservés.<br>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div><br></div>
+  </div>`;
+}
+
 function getManagerEmails() {
   const currentEmail = getCurrentUserEmail();
-  return (allUsers || [])
+  const managers = (allUsers || [])
     .filter(u => u.role === 'Manager' && u.email && u.email !== currentEmail)
     .map(u => u.email);
+  console.log('[CLIENT EMAIL] Manager recipients:', managers, '| allUsers loaded:', allUsers.length);
+  return managers;
 }
 
 function getProjectTeamEmails(projet) {
   const currentEmail = getCurrentUserEmail();
   const teamUids = (projet.team || []).map(m => m.uid);
-  return (allUsers || [])
+  const recipients = (allUsers || [])
     .filter(u => teamUids.includes(u.uid) && u.email && u.email !== currentEmail)
     .map(u => u.email);
+  console.log('[CLIENT EMAIL] Team recipients:', recipients, '| teamUids:', teamUids, '| allUsers loaded:', allUsers.length);
+  return recipients;
 }
 
 function notifyFileChange(folder, filename, isEdit) {
@@ -73,25 +138,36 @@ function notifyFileChange(folder, filename, isEdit) {
   const projetName = currentPageProjet?.nom || 'Projet';
   const action = isEdit ? 'modifié' : 'ajouté';
   const userName = currentUserProfile?.displayName || auth.currentUser?.displayName || 'Un utilisateur';
-  sendNotificationEmail({
-    to: managers,
-    subject: `[Karbonn] Fichier ${action} – ${projetName}`,
-    text: `${userName} a ${action} un fichier dans le projet « ${projetName} ».\n\nDossier : ${folder}\nFichier : ${filename}\n`
+  const subject = `[Karbonn] Fichier ${action} – ${projetName}`;
+  const text = `${userName} a ${action} un fichier dans le projet « ${projetName} ».\n\nDossier : ${folder}\nFichier : ${filename}\n`;
+  const html = buildEmailHtml({
+    title: `Fichier ${action}`,
+    intro: `${userName} a ${action} un fichier dans le projet ${projetName}.`,
+    lines: [`Dossier : ${folder}`, `Fichier : ${filename}`],
+    buttonText: 'Voir le projet',
+    buttonHref: `${window.location.origin}/intranet.html`
   });
+  sendNotificationEmail({ to: managers, subject, text, html });
 }
 
 function notifyProjectDateChange(dateLabel, dateValue, folderName = null) {
   const recipients = getProjectTeamEmails(currentPageProjet);
+  console.log('[CLIENT EMAIL] notifyProjectDateChange recipients:', recipients, '| projet:', currentPageProjet?.nom);
   if (recipients.length === 0) return;
   const projetName = currentPageProjet?.nom || 'Projet';
   const userName = currentUserProfile?.displayName || auth.currentUser?.displayName || 'Un manager';
   const formattedDate = dateValue ? new Date(dateValue).toLocaleDateString('fr-FR') : 'non définie';
   const target = folderName ? `Dossier : ${folderName}` : `Type : ${dateLabel}`;
-  sendNotificationEmail({
-    to: recipients,
-    subject: `[Karbonn] Nouvelle date d'échéance – ${projetName}`,
-    text: `${userName} a défini une nouvelle date d'échéance pour le projet « ${projetName} ».\n\n${target}\nDate : ${formattedDate}\n`
+  const subject = `[Karbonn] Nouvelle date d'échéance – ${projetName}`;
+  const text = `${userName} a défini une nouvelle date d'échéance pour le projet « ${projetName} ».\n\n${target}\nDate : ${formattedDate}\n`;
+  const html = buildEmailHtml({
+    title: `Nouvelle date d'échéance`,
+    intro: `${userName} a défini une nouvelle date d'échéance pour le projet ${projetName}.`,
+    lines: [target, `Date : ${formattedDate}`],
+    buttonText: 'Voir le projet',
+    buttonHref: `${window.location.origin}/intranet.html`
   });
+  sendNotificationEmail({ to: recipients, subject, text, html });
 }
 
 function showApp(user, profile) {
