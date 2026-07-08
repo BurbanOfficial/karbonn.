@@ -62,10 +62,69 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="chatbot.css" />
+  <!-- Microsoft Clarity -->
+  <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "xj9hh2lox7");
+  </script>
 </head>
 <body>
   <div class="cursor-dot"></div>
   <div class="cursor-ring"></div>
+
+  <!-- Bannière cookies -->
+  <div id="cookieBanner" role="region" aria-label="Cookies" style="
+    display:none;
+    position:fixed;
+    bottom:0;
+    left:0;
+    right:0;
+    z-index:99999;
+    background:#0a0a0a;
+    border-top:1px solid rgba(255,255,255,0.1);
+    padding:32px 28px 36px;
+    box-shadow:0 -12px 48px rgba(0,0,0,0.7);
+    font-family:'Space Grotesk',sans-serif;
+    color:#fff;
+  ">
+    <p style="margin:0 0 8px;font-size:15px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;">Cookies &amp; Capteurs</p>
+    <p style="margin:0 0 24px;font-size:13px;line-height:1.65;color:rgba(255,255,255,0.65);max-width:640px;">Ce site utilise des cookies pour analyser l'audience et améliorer l'expérience. En acceptant, vous autorisez également l'accès aux capteurs de mouvement de votre appareil pour les effets visuels.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <button id="cookieAccept" style="
+        flex:1;
+        min-width:140px;
+        background:#fff;
+        color:#000;
+        border:none;
+        border-radius:4px;
+        padding:14px 24px;
+        font-size:13px;
+        font-weight:700;
+        letter-spacing:0.05em;
+        text-transform:uppercase;
+        cursor:pointer;
+        font-family:inherit;
+      ">Accepter</button>
+      <button id="cookieDeny" style="
+        flex:1;
+        min-width:140px;
+        background:transparent;
+        border:1px solid rgba(255,255,255,0.2);
+        color:rgba(255,255,255,0.5);
+        border-radius:4px;
+        padding:14px 24px;
+        font-size:13px;
+        font-weight:500;
+        letter-spacing:0.05em;
+        text-transform:uppercase;
+        cursor:pointer;
+        font-family:inherit;
+      ">Refuser</button>
+    </div>
+  </div>
 
   <div class="hero-stage">
     <div class="hero-descriptor">Agence de Communication Digitale<br>&amp; de Développement Scientifique du Web</div>
@@ -371,31 +430,55 @@
         rafId = null;
       }
 
-      function requestPermissionAndListen() {
-        function onOrientation(e) {
-          const beta  = Math.max(-30, Math.min(30, e.beta  || 0));
-          const gamma = Math.max(-30, Math.min(30, e.gamma || 0));
-          curX = gamma / 30;
-          curY = beta  / 30;
-          if (!rafId) rafId = requestAnimationFrame(applyParallax);
-        }
+      function onOrientation(e) {
+        const beta  = Math.max(-30, Math.min(30, e.beta  || 0));
+        const gamma = Math.max(-30, Math.min(30, e.gamma || 0));
+        curX = gamma / 30;
+        curY = beta  / 30;
+        if (!rafId) rafId = requestAnimationFrame(applyParallax);
+      }
 
+      function startGyro() {
         if (typeof DeviceOrientationEvent !== 'undefined' &&
             typeof DeviceOrientationEvent.requestPermission === 'function') {
-          document.addEventListener('click', function askOnce() {
-            DeviceOrientationEvent.requestPermission()
-              .then(state => {
-                if (state === 'granted') window.addEventListener('deviceorientation', onOrientation);
-              })
-              .catch(() => {});
-            document.removeEventListener('click', askOnce);
-          }, { once: true });
+          DeviceOrientationEvent.requestPermission()
+            .then(state => { if (state === 'granted') window.addEventListener('deviceorientation', onOrientation); })
+            .catch(() => {});
         } else {
           window.addEventListener('deviceorientation', onOrientation);
         }
       }
 
-      requestPermissionAndListen();
+      window.addEventListener('karbonn:cookieAccepted', startGyro, { once: true });
+    })();
+  </script>
+  <script>
+    (function () {
+      const banner = document.getElementById('cookieBanner');
+      const acceptBtn = document.getElementById('cookieAccept');
+      const denyBtn = document.getElementById('cookieDeny');
+      if (!banner || !acceptBtn || !denyBtn) return;
+
+      const stored = localStorage.getItem('karbonn_cookies');
+
+      if (stored === 'accepted') {
+        window.dispatchEvent(new Event('karbonn:cookieAccepted'));
+        return;
+      }
+      if (stored === 'denied') return;
+
+      banner.style.display = 'block';
+
+      acceptBtn.addEventListener('click', () => {
+        localStorage.setItem('karbonn_cookies', 'accepted');
+        banner.style.display = 'none';
+        window.dispatchEvent(new Event('karbonn:cookieAccepted'));
+      });
+
+      denyBtn.addEventListener('click', () => {
+        localStorage.setItem('karbonn_cookies', 'denied');
+        banner.style.display = 'none';
+      });
     })();
   </script>
   <script src="script.js"></script>
