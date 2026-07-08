@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
+const FormData = require('form-data');
+const Mailgun = require('mailgun.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,6 +36,23 @@ function initFirebaseAdmin() {
 initFirebaseAdmin();
 
 const db = admin.firestore();
+
+// Mailgun client (EU endpoint)
+const mailgun = new Mailgun(FormData);
+const mg = mailgun.client({
+  username: 'api',
+  key: process.env.MAILGUN_API_KEY || '',
+  url: process.env.MAILGUN_URL || 'https://api.eu.mailgun.net'
+});
+
+async function sendEmail({ to, subject, text, html }) {
+  const from = process.env.MAILGUN_FROM || 'Karbonn Intranet <postmaster@mg.karbonn.fr>';
+  const domain = process.env.MAILGUN_DOMAIN || 'mg.karbonn.fr';
+  const data = { from, to, subject };
+  if (text) data.text = text;
+  if (html) data.html = html;
+  return await mg.messages.create(domain, data);
+}
 
 app.use(express.json());
 
@@ -87,6 +106,22 @@ app.options('/api/chat', chatCors, (req, res) => {
 });
 
 app.options('/api/*', allowedOriginsCors);
+
+// Notification endpoint: authenticated, any role
+app.post('/notify/email', verifyAuth, async (req, res) => {
+  try {
+    const { to, subject, text, html } = req.body;
+    if (!to || !Array.isArray(to) || to.length === 0) return res.status(400).json({ error: 'Missing recipients' });
+    if (!subject) return res.status(400).json({ error: 'Missing subject' });
+    if (!text && !html) return res.status(400).json({ error: 'Missing body' });
+    const result = await sendEmail({ to, subject, text, html });
+    res.json({ success: true, id: result.id });
+  } catch (err) {
+    console.error('Mailgun error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.use('/api', (req, res, next) => {
   if (req.path === '/chat') return next();
   if (req.method === 'OPTIONS') return next();

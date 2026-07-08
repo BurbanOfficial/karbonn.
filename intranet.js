@@ -36,6 +36,64 @@ async function apiRequest(path, options = {}) {
   return data;
 }
 
+async function sendNotificationEmail({ to, subject, text, html }) {
+  if (!to || to.length === 0) return;
+  try {
+    await apiRequest('/notify/email', {
+      method: 'POST',
+      body: JSON.stringify({ to, subject, text, html })
+    });
+  } catch (err) {
+    console.error('Erreur envoi e-mail:', err);
+  }
+}
+
+function getCurrentUserEmail() {
+  return auth.currentUser?.email || '';
+}
+
+function getManagerEmails() {
+  const currentEmail = getCurrentUserEmail();
+  return (allUsers || [])
+    .filter(u => u.role === 'Manager' && u.email && u.email !== currentEmail)
+    .map(u => u.email);
+}
+
+function getProjectTeamEmails(projet) {
+  const currentEmail = getCurrentUserEmail();
+  const teamUids = (projet.team || []).map(m => m.uid);
+  return (allUsers || [])
+    .filter(u => teamUids.includes(u.uid) && u.email && u.email !== currentEmail)
+    .map(u => u.email);
+}
+
+function notifyFileChange(folder, filename, isEdit) {
+  const managers = getManagerEmails();
+  if (managers.length === 0) return;
+  const projetName = currentPageProjet?.nom || 'Projet';
+  const action = isEdit ? 'modifié' : 'ajouté';
+  const userName = currentUserProfile?.displayName || auth.currentUser?.displayName || 'Un utilisateur';
+  sendNotificationEmail({
+    to: managers,
+    subject: `[Karbonn] Fichier ${action} – ${projetName}`,
+    text: `${userName} a ${action} un fichier dans le projet « ${projetName} ».\n\nDossier : ${folder}\nFichier : ${filename}\n`
+  });
+}
+
+function notifyProjectDateChange(dateLabel, dateValue, folderName = null) {
+  const recipients = getProjectTeamEmails(currentPageProjet);
+  if (recipients.length === 0) return;
+  const projetName = currentPageProjet?.nom || 'Projet';
+  const userName = currentUserProfile?.displayName || auth.currentUser?.displayName || 'Un manager';
+  const formattedDate = dateValue ? new Date(dateValue).toLocaleDateString('fr-FR') : 'non définie';
+  const target = folderName ? `Dossier : ${folderName}` : `Type : ${dateLabel}`;
+  sendNotificationEmail({
+    to: recipients,
+    subject: `[Karbonn] Nouvelle date d'échéance – ${projetName}`,
+    text: `${userName} a défini une nouvelle date d'échéance pour le projet « ${projetName} ».\n\n${target}\nDate : ${formattedDate}\n`
+  });
+}
+
 function showApp(user, profile) {
   loginScreen.classList.add('hidden');
   appContent.classList.remove('hidden');
@@ -52,6 +110,11 @@ function showApp(user, profile) {
   if (userAvatarEl) userAvatarEl.textContent = initials;
 
   // Restrict team and billing management to managers
+  const createProjetBtn = document.getElementById('create-projet-btn');
+  if (createProjetBtn) {
+    createProjetBtn.style.display = role === 'Manager' ? '' : 'none';
+  }
+
   const equipeNav = document.querySelector(`.nav-item[data-label="Équipe"]`);
   if (equipeNav) {
     if (role === 'Manager') {
@@ -143,6 +206,8 @@ if (document.readyState === 'loading') {
 
 auth.onAuthStateChanged(async user => {
   if (!user) {
+    if (unsubscribeClients) { unsubscribeClients(); unsubscribeClients = null; }
+    if (unsubscribeProjets) { unsubscribeProjets(); unsubscribeProjets = null; }
     showLogin();
     return;
   }
@@ -151,8 +216,10 @@ auth.onAuthStateChanged(async user => {
     const doc = await db.collection('users').doc(user.uid).get();
     const profile = doc.exists ? doc.data() : null;
     showApp(user, profile);
+    setupClientsListener();
+    setupProjetsListener();
     loadTeamMembers();
-    
+
     // Initialize planning after user is logged in
     setTimeout(() => {
       updatePlanningHeader();
@@ -233,17 +300,22 @@ navItems.forEach((item, index) => {
 
 // Clients — temps réel
 let allClients = [];
+let unsubscribeClients = null;
 
-db.collection('clients').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
-  allClients = [];
-  snapshot.forEach(doc => {
-    allClients.push({ id: doc.id, ...doc.data() });
+function setupClientsListener() {
+  if (unsubscribeClients) unsubscribeClients();
+  unsubscribeClients = db.collection('clients').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+    allClients = [];
+    snapshot.forEach(doc => {
+      allClients.push({ id: doc.id, ...doc.data() });
+    });
+    renderClients(allClients);
+  }, err => {
+    console.error(err);
+    const tbody = document.getElementById('clients-tbody');
+    if (tbody) tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Erreur lors du chargement.</td></tr>';
   });
-  renderClients(allClients);
-}, err => {
-  console.error(err);
-  document.getElementById('clients-tbody').innerHTML = '<tr class="empty-row"><td colspan="7">Erreur lors du chargement.</td></tr>';
-});
+}
 
 function renderClients(clients) {
   const tbody = document.getElementById('clients-tbody');
@@ -652,18 +724,23 @@ formProfessionnel.addEventListener('submit', async e => {
 
 // Projets & Services — temps réel
 let allProjets = [];
+let unsubscribeProjets = null;
 
-db.collection('projets').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
-  allProjets = [];
-  snapshot.forEach(doc => {
-    allProjets.push({ id: doc.id, ...doc.data() });
+function setupProjetsListener() {
+  if (unsubscribeProjets) unsubscribeProjets();
+  unsubscribeProjets = db.collection('projets').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+    allProjets = [];
+    snapshot.forEach(doc => {
+      allProjets.push({ id: doc.id, ...doc.data() });
+    });
+    renderAllProjets();
+    refreshPlanning(); // Update planning when projects change
+  }, err => {
+    console.error(err);
+    const tbody = document.getElementById('projets-tbody');
+    if (tbody) tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Erreur lors du chargement.</td></tr>';
   });
-  renderAllProjets();
-  refreshPlanning(); // Update planning when projects change
-}, err => {
-  console.error(err);
-  document.getElementById('projets-tbody').innerHTML = '<tr class="empty-row"><td colspan="6">Erreur lors du chargement.</td></tr>';
-});
+}
 
 function isProjetAcheve(p) {
   return p.statut === 'Projet livré';
@@ -969,6 +1046,10 @@ function ensureClientsLoaded() {
 }
 
 document.getElementById('create-projet-btn').addEventListener('click', async () => {
+  if (!canEditProjectDetails()) {
+    showToast('Action réservée aux managers.', 'error');
+    return;
+  }
   await ensureClientsLoaded();
   openProjetModal();
 });
@@ -1201,6 +1282,17 @@ function openProjetPage(projet) {
   projetPageTitle.textContent = projet.nom || 'Projet';
   projetPageId.textContent = projet.projetId || '—';
 
+  // Manager-only project-level controls
+  const isProjManager = canEditProjectDetails();
+  const addFileBtn = document.getElementById('btn-add-file');
+  const deleteProjetBtn = document.getElementById('btn-delete-projet');
+  if (addFileBtn) {
+    addFileBtn.style.display = (isProjManager || getAllowedFolders().length > 0) ? '' : 'none';
+  }
+  if (deleteProjetBtn) {
+    deleteProjetBtn.style.display = isProjManager ? '' : 'none';
+  }
+
   renderProjetPageInfo(projet);
   renderProjetPageResume(projet);
   renderProjetPageTeam(projet);
@@ -1338,12 +1430,14 @@ function renderProjetPageInfo(projet) {
             }
           } else {
             const newValue = input.value.trim();
+            const previousValue = currentPageProjet[key];
             await db.collection('projets').doc(currentPageProjet.id).update({ [key]: newValue });
             currentPageProjet[key] = newValue;
             
-            // If delivery date changed, refresh file tree to update Livraison folder
-            if (key === 'dateLivraison') {
+            // If delivery date changed, refresh file tree and notify team
+            if (key === 'dateLivraison' && newValue !== previousValue) {
               renderProjetPageFiles(currentPageProjet);
+              notifyProjectDateChange('Livraison projet', newValue);
             }
           }
           item.classList.remove('editing');
@@ -1363,6 +1457,11 @@ function renderProjetPageInfo(projet) {
       if (e.key === 'Escape') { item.classList.remove('editing'); }
     });
   });
+
+  // Hide edit controls for non-managers
+  if (!canEditProjectDetails()) {
+    projetPageInfo.querySelectorAll('.detail-field-edit').forEach(btn => btn.style.display = 'none');
+  }
 }
 
 // Editable résumé
@@ -1376,9 +1475,18 @@ function renderProjetPageResume(projet) {
     projetPageResumeText.className = 'detail-resume-empty';
   }
   projetPageResumeInput.value = projet.resume || '';
+
+  // Hide edit control for non-managers
+  if (projetPageResumeEdit) {
+    projetPageResumeEdit.style.display = canEditProjectDetails() ? '' : 'none';
+  }
 }
 
 projetPageResumeEdit.addEventListener('click', async () => {
+  if (!canEditProjectDetails()) {
+    showToast('Action réservée aux managers.', 'error');
+    return;
+  }
   if (projetPageResumeWrapper.classList.contains('editing')) {
     const newResume = projetPageResumeInput.value.trim();
     try {
@@ -1446,9 +1554,19 @@ function renderProjetPageTeam(projet) {
       </div>
     `).join('')}
   </div>`;
+
+  // Hide edit control for non-managers
+  if (projetPageTeamEditBtn) {
+    projetPageTeamEditBtn.style.display = canEditProjectDetails() ? '' : 'none';
+  }
 }
 
 projetPageTeamEditBtn.addEventListener('click', async () => {
+  if (!canEditProjectDetails()) {
+    showToast('Action réservée aux managers.', 'error');
+    return;
+  }
+
   if (projetPageTeamSection.classList.contains('editing')) {
     const checked = projetPageTeamEditList.querySelectorAll('input[type="checkbox"]:checked');
     const newTeam = Array.from(checked).map(cb => ({ uid: cb.value, name: cb.dataset.name, role: cb.dataset.role }));
@@ -1469,6 +1587,10 @@ projetPageTeamEditBtn.addEventListener('click', async () => {
 // Delete project
 document.getElementById('btn-delete-projet').addEventListener('click', async () => {
   if (!currentPageProjet) return;
+  if (!canEditProjectDetails()) {
+    showToast('Action réservée aux managers.', 'error');
+    return;
+  }
   const confirmed = confirm(`Supprimer le projet « ${currentPageProjet.nom} » ? Cette action est irréversible.`);
   if (!confirmed) return;
 
@@ -1621,10 +1743,10 @@ function updatePlanningHeader() {
 
 function collectPlanningProjects() {
   planningProjects = [];
-  
+
   allProjets.forEach(projet => {
-    // Check project delivery date
-    if (projet.dateLivraison) {
+    // Check project delivery date (managers only)
+    if (projet.dateLivraison && isManager()) {
       planningProjects.push({
         projet,
         date: projet.dateLivraison,
@@ -1632,11 +1754,12 @@ function collectPlanningProjects() {
         folder: null
       });
     }
-    
-    // Check folder delivery dates
+
+    // Check folder delivery dates (filtered by role)
     if (projet.folderDates) {
+      const allowedFolders = getAllowedFolders();
       Object.keys(projet.folderDates).forEach(folder => {
-        if (projet.folderDates[folder]) {
+        if (projet.folderDates[folder] && allowedFolders.includes(folder)) {
           planningProjects.push({
             projet,
             date: projet.folderDates[folder],
@@ -1647,7 +1770,7 @@ function collectPlanningProjects() {
       });
     }
   });
-  
+
   // Sort by date
   planningProjects.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
@@ -1787,17 +1910,12 @@ function openTaskModal(projetId, folderName = null) {
 function renderTaskList(projet, specificFolder = null) {
   const projectFiles = projet.files || {};
   let html = '';
-  
-  // If specific folder is provided, only show that folder
-  const foldersToShow = specificFolder ? [specificFolder] : [
-    '01 - Administration',
-    '02 - Analyse', 
-    '03 - Design',
-    '04 - Développement',
-    '05 - Tests',
-    '06 - Livraison',
-    '07 - Archives'
-  ];
+
+  // If specific folder is provided, only show that folder (but still respect role permissions)
+  const allowedFolders = getAllowedFolders();
+  const foldersToShow = specificFolder
+    ? (allowedFolders.includes(specificFolder) ? [specificFolder] : [])
+    : allowedFolders;
   
   foldersToShow.forEach(folder => {
     // Skip if folder doesn't exist in default structure
@@ -1846,15 +1964,16 @@ function renderTaskList(projet, specificFolder = null) {
         const taskStatusText = isUploaded ? 'Uploadé' : 'En attente';
         const completedClass = isCompleted ? 'completed' : '';
         
-        const uploadIcon = !isUploaded ? `
-              <button class="task-upload-icon" onclick="uploadTaskFile('${projet.id}', '${folder}', '${fileName}')" title="Importer ce fichier">
+        const folderEditable = canEditFolder(folder);
+        const uploadIcon = !isUploaded
+          ? (folderEditable
+            ? `<button class="task-upload-icon" onclick="uploadTaskFile('${projet.id}', '${folder}', '${fileName}')" title="Importer ce fichier">
                 <i class="fa-solid fa-cloud-upload-alt"></i>
-              </button>
-            ` : `
-              <div class="task-uploaded-icon" title="Fichier importé">
+              </button>`
+            : `<div class="task-upload-icon" style="opacity:0;cursor:default;" title="Lecture seule"></div>`)
+          : `<div class="task-uploaded-icon" title="Fichier importé">
                 <i class="fa-solid fa-check-circle"></i>
-              </div>
-            `;
+              </div>`;
         
         // Auto-strike text when file is uploaded
         const uploadedClass = isUploaded ? 'uploaded' : '';
@@ -1883,6 +2002,10 @@ function renderTaskList(projet, specificFolder = null) {
 
 // Task file upload function
 function uploadTaskFile(projetId, folder, fileName) {
+  if (!canEditFolder(folder)) {
+    showToast('Action réservée aux rôles autorisés.', 'error');
+    return;
+  }
   const projet = allProjets.find(p => p.id === projetId);
   if (!projet) return;
   
@@ -1984,33 +2107,34 @@ function renderFileTree(files) {
     });
     
     const hasFiles = Object.keys(folderFiles).length > 0;
-    
-    // Get folder delivery date (except for Archives)
+    const folderEditable = canEditFolder(folder);
+    const folderReadOnlyClass = folderEditable ? '' : 'folder-read-only';
+
+    // Get folder delivery date
     const folderDates = currentPageProjet.folderDates || {};
     let deliveryDate = folderDates[folder];
-    const isArchiveFolder = folder === '07 - Archives';
     const isLivraisonFolder = folder === '06 - Livraison';
-    
+
     // For Livraison folder, use project's delivery date if no specific date is set
     if (isLivraisonFolder && !deliveryDate && currentPageProjet.dateLivraison) {
       deliveryDate = currentPageProjet.dateLivraison;
     }
-    
+
     const deliveryDateDisplay = deliveryDate ? new Date(deliveryDate).toLocaleDateString('fr-FR') : '';
-    
-    const folderActions = isArchiveFolder ? '' : `
+
+    const folderActions = isManager() ? `
       <div class="tree-node-actions">
         <button onclick="openFolderDateModal('${folder}')" title="Définir la date de livraison">
           <i class="fa-solid fa-calendar"></i>
         </button>
       </div>
-    `;
-    
-    html += `<div class="tree-node ${hasFiles ? 'expanded' : 'empty'}" data-folder="${folder}">
+    ` : '';
+
+    html += `<div class="tree-node ${hasFiles ? 'expanded' : 'empty'} ${folderReadOnlyClass}" data-folder="${folder}">
       <div class="tree-node-content">
         <i class="fa-solid ${hasFiles ? 'fa-folder-open' : 'fa-folder'}"></i>
         <span>${folder}</span>
-        ${!isArchiveFolder && deliveryDateDisplay ? `<span class="folder-date">${deliveryDateDisplay}</span>` : ''}
+        ${deliveryDateDisplay ? `<span class="folder-date">${deliveryDateDisplay}</span>` : ''}
         ${folderActions}
       </div>
       <div class="tree-children">`;
@@ -2044,14 +2168,16 @@ function renderFileTree(files) {
       if (uploaded) {
         html += `<button onclick="downloadFile('${folder}', '${uploaded.filename}')" title="Télécharger">
           <i class="fa-solid fa-download"></i>
-        </button>
-        <button onclick="editFile('${folder}', '${uploaded.filename}')" title="Modifier">
-          <i class="fa-solid fa-pen"></i>
-        </button>
-        <button onclick="deleteFile('${folder}', '${uploaded.filename}')" title="Supprimer">
-          <i class="fa-solid fa-trash"></i>
         </button>`;
-      } else {
+        if (folderEditable) {
+          html += `<button onclick="editFile('${folder}', '${uploaded.filename}')" title="Modifier">
+            <i class="fa-solid fa-pen"></i>
+          </button>
+          <button onclick="deleteFile('${folder}', '${uploaded.filename}')" title="Supprimer">
+            <i class="fa-solid fa-trash"></i>
+          </button>`;
+        }
+      } else if (folderEditable) {
         html += `<button onclick="uploadRequiredFile('${folder}', '${file}')" title="Ajouter ce fichier obligatoire">
           <i class="fa-solid fa-plus"></i>
         </button>`;
@@ -2082,14 +2208,16 @@ function renderFileTree(files) {
             <div class="tree-node-actions">
               <button onclick="downloadFile('${folder}', '${fileData.filename}')" title="Télécharger">
                 <i class="fa-solid fa-download"></i>
-              </button>
-              <button onclick="editFile('${folder}', '${fileData.filename}')" title="Modifier">
+              </button>`;
+        if (folderEditable) {
+          html += `<button onclick="editFile('${folder}', '${fileData.filename}')" title="Modifier">
                 <i class="fa-solid fa-pen"></i>
               </button>
               <button onclick="deleteFile('${folder}', '${fileData.filename}')" title="Supprimer">
                 <i class="fa-solid fa-trash"></i>
-              </button>
-            </div>
+              </button>`;
+        }
+        html += `</div>
           </div>
         </div>`;
       }
@@ -2146,11 +2274,20 @@ function renderProjetPageFiles(projet) {
 
 // File upload modal
 function openFileUploadModal(folder = '01 - Administration', filename = '') {
-  fileUploadFolder.value = folder;
+  if (!canEditFolder(folder)) {
+    showToast('Action réservée aux rôles autorisés.', 'error');
+    return;
+  }
+
+  // Filter dropdown options to only allowed folders
+  const allowedFolders = getAllowedFolders();
+  fileUploadFolder.innerHTML = allowedFolders.map(f => `<option value="${f}">${f}</option>`).join('');
+  fileUploadFolder.value = allowedFolders.includes(folder) ? folder : allowedFolders[0];
+
   fileUploadInput.value = '';
   fileUploadName.value = filename;
   fileUploadError.textContent = '';
-  
+
   // Update modal title for editing
   const modalTitle = fileUploadModal.querySelector('h2');
   if (filename) {
@@ -2160,13 +2297,14 @@ function openFileUploadModal(folder = '01 - Administration', filename = '') {
     modalTitle.textContent = 'Ajouter un fichier';
     fileUploadName.disabled = false;
   }
-  
+
   fileUploadModal.classList.add('visible');
 }
 
 // General add file button
 document.getElementById('btn-add-file').addEventListener('click', () => {
-  openFileUploadModal();
+  const allowedFolders = getAllowedFolders();
+  openFileUploadModal(allowedFolders[0] || '');
 });
 
 fileUploadClose.addEventListener('click', () => fileUploadModal.classList.remove('visible'));
@@ -2176,6 +2314,10 @@ fileUploadModal.addEventListener('click', e => {
 
 // Folder date modal functions
 function openFolderDateModal(folder) {
+  if (!isManager()) {
+    showToast('Action réservée aux managers.', 'error');
+    return;
+  }
   folderDateName.value = folder;
   const folderDates = currentPageProjet.folderDates || {};
   let currentDeliveryDate = folderDates[folder] || '';
@@ -2196,6 +2338,10 @@ folderDateModal.addEventListener('click', e => {
 });
 
 folderDateSubmit.addEventListener('click', async () => {
+  if (!isManager()) {
+    showToast('Action réservée aux managers.', 'error');
+    return;
+  }
   const folder = folderDateName.value;
   const deliveryDate = folderDateInput.value;
   
@@ -2213,6 +2359,7 @@ folderDateSubmit.addEventListener('click', async () => {
     
     renderProjetPageFiles(currentPageProjet);
     refreshPlanning(); // Update planning when folder date is set
+    notifyProjectDateChange('Livraison dossier', deliveryDate, folder);
     folderDateModal.classList.remove('visible');
   } catch (err) {
     console.error(err);
@@ -2258,8 +2405,12 @@ fileUploadSubmit.addEventListener('click', async () => {
     fileUploadError.textContent = 'Veuillez sélectionner un fichier.';
     return;
   }
-  
+
   const folder = fileUploadFolder.value;
+  if (!canEditFolder(folder)) {
+    fileUploadError.textContent = 'Vous n\'avez pas la permission d\'ajouter un fichier dans ce dossier.';
+    return;
+  }
   let customName = fileUploadName.value.trim();
   
   // If customName is provided (for required files), add the file extension
@@ -2339,6 +2490,7 @@ fileUploadSubmit.addEventListener('click', async () => {
               // Real-time refresh
               renderProjetPageFiles(currentPageProjet);
               refreshPlanning();
+              notifyFileChange(folder, customName, isEditing);
               
               // Force UI update
               setTimeout(() => {
@@ -2376,6 +2528,7 @@ fileUploadSubmit.addEventListener('click', async () => {
       // Real-time refresh
       renderProjetPageFiles(currentPageProjet);
       refreshPlanning();
+      notifyFileChange(folder, customName, isEditing);
       
       // Force UI update
       setTimeout(() => {
@@ -2393,11 +2546,19 @@ fileUploadSubmit.addEventListener('click', async () => {
 
 // Edit file function
 function editFile(folder, filename) {
+  if (!canEditFolder(folder)) {
+    showToast('Action réservée aux rôles autorisés.', 'error');
+    return;
+  }
   openFileUploadModal(folder, filename);
 }
 
 // Upload required file function
 function uploadRequiredFile(folder, filename) {
+  if (!canEditFolder(folder)) {
+    showToast('Action réservée aux rôles autorisés.', 'error');
+    return;
+  }
   // Open modal with predefined filename and trigger file selection
   openFileUploadModal(folder, filename);
   // Trigger file input click
@@ -2462,6 +2623,10 @@ async function downloadFile(folder, filename) {
 
 // Delete file
 async function deleteFile(folder, filename) {
+  if (!canEditFolder(folder)) {
+    showToast('Action réservée aux rôles autorisés.', 'error');
+    return;
+  }
   const confirmed = await appConfirm(
     `Voulez-vous vraiment supprimer le fichier "${filename}" ?`,
     { title: 'Supprimer le fichier', confirmLabel: 'Supprimer', cancelLabel: 'Annuler', icon: 'fa-trash' }
@@ -2653,7 +2818,7 @@ const userIdInput = document.getElementById('user-id');
 const userPrenomInput = document.getElementById('user-prenom');
 const userNomInput = document.getElementById('user-nom');
 const userEmailInput = document.getElementById('user-email');
-const userRoleInput = document.getElementById('user-role');
+const userRoleInput = document.getElementById('user-role-select');
 const userStatutInput = document.getElementById('user-statut');
 const equipeSearch = document.getElementById('equipe-search');
 const equipeTableBody = document.getElementById('equipe-table-body');
@@ -2674,6 +2839,33 @@ const roleClasses = {
 };
 
 function isManager() {
+  return currentUserRole === 'Manager';
+}
+
+const FOLDER_ROLE_PERMISSIONS = {
+  '01 - Administration': ['Manager'],
+  '02 - Analyse': ['Manager'],
+  '03 - Design': ['Manager', 'Designer Graphique'],
+  '04 - Développement': ['Manager', 'Développeur'],
+  '05 - Tests': ['Manager', 'Développeur'],
+  '06 - Livraison': ['Manager', 'Développeur']
+};
+
+function canEditFolder(folderName, role = currentUserRole) {
+  if (role === 'Manager') return true;
+  const allowed = FOLDER_ROLE_PERMISSIONS[folderName] || [];
+  return allowed.includes(role);
+}
+
+function getAllowedFolders(role = currentUserRole) {
+  if (role === 'Manager') return Object.keys(FOLDER_ROLE_PERMISSIONS);
+  return Object.keys(FOLDER_ROLE_PERMISSIONS).filter(folder => {
+    const allowed = FOLDER_ROLE_PERMISSIONS[folder] || [];
+    return allowed.includes(role);
+  });
+}
+
+function canEditProjectDetails() {
   return currentUserRole === 'Manager';
 }
 
