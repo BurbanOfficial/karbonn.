@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+Disallow: /intranet.html
+Disallow: /espace-client.html
+Disallow: /espace-commercial.html
+Disallow: /admin-setup.html
+Disallow: /admin-employes.html
+Disallow: /firebase-config.js
+
+Sitemap: https://www.karbonn.fr/sitemap.xml
