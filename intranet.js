@@ -138,9 +138,21 @@ function getProjectTeamEmails(projet) {
   return recipients;
 }
 
+function getAllProjectMemberEmails(projet) {
+  const currentEmail = getCurrentUserEmail();
+  const teamUids = (projet?.team || []).map(m => m.uid);
+  const managerEmails = (allUsers || [])
+    .filter(u => u.role === 'Manager' && u.email && u.email !== currentEmail)
+    .map(u => u.email);
+  const teamEmails = (allUsers || [])
+    .filter(u => teamUids.includes(u.uid) && u.email && u.email !== currentEmail)
+    .map(u => u.email);
+  return [...new Set([...managerEmails, ...teamEmails])];
+}
+
 function notifyFileChange(folder, filename, isEdit) {
-  const managers = getManagerEmails();
-  if (managers.length === 0) return;
+  const recipients = getAllProjectMemberEmails(currentPageProjet);
+  if (recipients.length === 0) return;
   const projetName = currentPageProjet?.nom || 'Projet';
   const action = isEdit ? 'modifié' : 'ajouté';
   const userName = currentUserProfile?.displayName || auth.currentUser?.displayName || 'Un utilisateur';
@@ -153,11 +165,11 @@ function notifyFileChange(folder, filename, isEdit) {
     buttonText: 'Voir le projet',
     buttonHref: `${window.location.origin}/intranet.html`
   });
-  sendNotificationEmail({ to: managers, subject, text, html });
+  sendNotificationEmail({ to: recipients, subject, text, html });
 }
 
 function notifyProjectDateChange(dateLabel, dateValue, folderName = null) {
-  const recipients = getProjectTeamEmails(currentPageProjet);
+  const recipients = getAllProjectMemberEmails(currentPageProjet);
   console.log('[CLIENT EMAIL] notifyProjectDateChange recipients:', recipients, '| projet:', currentPageProjet?.nom);
   if (recipients.length === 0) return;
   const projetName = currentPageProjet?.nom || 'Projet';
