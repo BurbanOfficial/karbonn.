@@ -56,5 +56,12 @@ service cloud.firestore {
     match /billings/{billingId} {
       allow read, create, update, delete: if isManager();
     }
+
+    // Collection activity_log (historique des actions)
+    match /activity_log/{entryId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
   }
 }

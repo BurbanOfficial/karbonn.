@@ -108,6 +108,7 @@ app.options('/api/chat', chatCors, (req, res) => {
   res.sendStatus(204);
 });
 
+app.options('/api/users/:uid', cors({ origin: true, credentials: true }));
 app.options('/api/*', allowedOriginsCors);
 app.options('/notify/email', cors({ origin: '*', credentials: false }));
 
@@ -141,7 +142,7 @@ app.use('/api', (req, res, next) => {
 });
 
 // Delete a Firebase Auth user (manager only, handled by /api middleware)
-app.delete('/api/users/:uid', async (req, res) => {
+app.delete('/api/users/:uid', cors({ origin: true, credentials: true }), async (req, res) => {
   try {
     const { uid } = req.params;
     if (!uid) return res.status(400).json({ error: 'Missing uid' });

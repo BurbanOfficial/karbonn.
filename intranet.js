@@ -192,6 +192,13 @@ function showApp(user, profile) {
   loginScreen.classList.add('hidden');
   appContent.classList.remove('hidden');
 
+  // Always land on dashboard
+  navItems.forEach(n => n.classList.remove('active'));
+  sections.forEach(s => s.classList.remove('active'));
+  if (navItems[0]) navItems[0].classList.add('active');
+  const dash = document.getElementById('section-dashboard');
+  if (dash) dash.classList.add('active');
+
   const name = profile?.displayName || user.displayName || user.email.split('@')[0];
   const role = profile?.role?.label || profile?.role || 'Utilisateur';
   const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -229,6 +236,255 @@ function showApp(user, profile) {
   if (document.getElementById('clients-tbody')) {
     renderClients(allClients);
   }
+
+  renderDashboard();
+}
+
+const _dashCharts = {};
+
+function _toDate(ts) {
+  if (!ts) return null;
+  if (ts.seconds) return new Date(ts.seconds * 1000);
+  const d = new Date(ts);
+  return isNaN(d) ? null : d;
+}
+
+function _getLast7MonthsTimeSeries(items, getDate) {
+  const now = new Date();
+  const points = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const y = d.getFullYear(), m = d.getMonth();
+    const count = items.filter(item => {
+      const dt = getDate(item);
+      return dt && dt.getFullYear() === y && dt.getMonth() === m;
+    }).length;
+    points.push([d.getTime(), count]);
+  }
+  return points;
+}
+
+function _apexSparklineOptions(seriesData, color, name) {
+  return {
+    series: [{ name, data: seriesData }],
+    chart: {
+      type: 'area',
+      height: 60,
+      sparkline: { enabled: true },
+      toolbar: { show: false },
+      animations: { enabled: true, speed: 400 },
+    },
+    stroke: { curve: 'smooth', width: 2 },
+    fill: {
+      type: 'gradient',
+      gradient: {
+        shadeIntensity: 1,
+        inverseColors: false,
+        opacityFrom: 0.45,
+        opacityTo: 0.02,
+        stops: [20, 100],
+      },
+    },
+    colors: [color],
+    markers: { size: 0 },
+    dataLabels: { enabled: false },
+    xaxis: { type: 'datetime' },
+    yaxis: { min: 0 },
+    tooltip: { enabled: false },
+    grid: { show: false },
+  };
+}
+
+function renderDashboard() {
+  const greetingEl = document.getElementById('dashboard-greeting');
+  const projetsVal = document.getElementById('stat-projets-val');
+  const clientsVal = document.getElementById('stat-clients-val');
+  const caVal      = document.getElementById('stat-ca-val');
+  const tachesVal  = document.getElementById('stat-taches-val');
+
+  // Greeting
+  if (greetingEl && currentUserProfile) {
+    const firstName = (currentUserProfile.displayName || '').split(' ')[0] || 'vous';
+    const hour = new Date().getHours();
+    const salut = hour >= 18 ? 'Bonsoir' : 'Bonjour';
+    greetingEl.textContent = `${salut}, ${firstName} 👋`;
+  }
+
+  // Projets actifs
+  const activeProjects = allProjets.filter(p => p.statut !== 'Projet livré');
+  if (projetsVal) projetsVal.textContent = activeProjects.length;
+
+  // Clients
+  if (clientsVal) clientsVal.textContent = allClients.length;
+
+  // CA du mois — placeholder
+  if (caVal) caVal.textContent = '—';
+
+  // Tâches aujourd'hui
+  const today = new Date().toISOString().split('T')[0];
+  let tachesCount = 0;
+  allProjets.forEach(p => {
+    Object.values(p.folderDates || {}).forEach(d => { if (d && d.startsWith(today)) tachesCount++; });
+  });
+  if (tachesVal) tachesVal.textContent = tachesCount;
+
+  if (typeof ApexCharts === 'undefined') return;
+
+  const projetsData = _getLast7MonthsTimeSeries(allProjets, p => _toDate(p.createdAt));
+  const clientsData = _getLast7MonthsTimeSeries(allClients, c => _toDate(c.createdAt));
+  const caData      = _getLast7MonthsTimeSeries([], () => null);
+  const tachesData  = _getLast7MonthsTimeSeries(
+    allProjets.flatMap(p => Object.values(p.folderDates || {}).map(d => ({ d }))),
+    item => { const d = new Date(item.d); return isNaN(d) ? null : d; }
+  );
+
+  const defs = [
+    { id: 'chart-projets', data: projetsData, color: '#6366f1', name: 'Projets'  },
+    { id: 'chart-clients', data: clientsData, color: '#22c55e', name: 'Clients'  },
+    { id: 'chart-ca',      data: caData,      color: '#eab308', name: 'CA'       },
+    { id: 'chart-taches',  data: tachesData,  color: '#ef4444', name: 'Tâches'  },
+  ];
+
+  defs.forEach(({ id, data, color, name }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (_dashCharts[id]) { _dashCharts[id].destroy(); delete _dashCharts[id]; }
+    const chart = new ApexCharts(el, _apexSparklineOptions(data, color, name));
+    chart.render();
+    _dashCharts[id] = chart;
+  });
+
+  renderDashboardProjects();
+}
+
+// ── Activity log ──
+let unsubscribeActivity = null;
+let _activityLog = [];
+
+async function logActivity({ action, projetName = null, fileName = null, folderName = null }) {
+  try {
+    const user = auth.currentUser;
+    if (!user) return;
+    const userName = currentUserProfile?.displayName || user.displayName || user.email;
+    await db.collection('activity_log').add({
+      action,
+      userName,
+      projetName: projetName || null,
+      fileName: fileName || null,
+      folderName: folderName || null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (err) {
+    console.error('[ACTIVITY] Log error:', err);
+  }
+}
+
+function setupActivityListener() {
+  if (unsubscribeActivity) unsubscribeActivity();
+  unsubscribeActivity = db.collection('activity_log')
+    .orderBy('createdAt', 'desc')
+    .limit(50)
+    .onSnapshot(snapshot => {
+      _activityLog = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderDashboardHistory();
+    }, err => console.error('[ACTIVITY] Listener error:', err));
+}
+
+function renderDashboardHistory() {
+  const list = document.getElementById('dashboard-history-list');
+  if (!list) return;
+
+  if (_activityLog.length === 0) {
+    list.innerHTML = '<div class="dashboard-empty">Aucune action enregistrée</div>';
+    return;
+  }
+
+  const actionMeta = {
+    'file_upload':  { icon: 'fa-upload',         label: (e) => `<strong>${escapeHtml(e.userName)}</strong> a déposé <strong>${escapeHtml(e.fileName)}</strong>${e.projetName ? ` dans <strong>${escapeHtml(e.projetName)}</strong>` : ''}` },
+    'file_edit':    { icon: 'fa-pencil',          label: (e) => `<strong>${escapeHtml(e.userName)}</strong> a modifié <strong>${escapeHtml(e.fileName)}</strong>${e.projetName ? ` dans <strong>${escapeHtml(e.projetName)}</strong>` : ''}` },
+    'file_delete':  { icon: 'fa-trash',           label: (e) => `<strong>${escapeHtml(e.userName)}</strong> a supprimé <strong>${escapeHtml(e.fileName)}</strong>${e.projetName ? ` dans <strong>${escapeHtml(e.projetName)}</strong>` : ''}` },
+    'date_change':  { icon: 'fa-calendar',        label: (e) => `<strong>${escapeHtml(e.userName)}</strong> a modifié une date${e.projetName ? ` sur <strong>${escapeHtml(e.projetName)}</strong>` : ''}` },
+    'projet_create':{ icon: 'fa-folder-plus',     label: (e) => `<strong>${escapeHtml(e.userName)}</strong> a créé le projet <strong>${escapeHtml(e.projetName)}</strong>` },
+    'projet_delete':{ icon: 'fa-folder-minus',    label: (e) => `<strong>${escapeHtml(e.userName)}</strong> a supprimé le projet <strong>${escapeHtml(e.projetName)}</strong>` },
+    'client_create':{ icon: 'fa-user-plus',       label: (e) => `<strong>${escapeHtml(e.userName)}</strong> a ajouté le client <strong>${escapeHtml(e.projetName)}</strong>` },
+    'member_create':{ icon: 'fa-user-plus',       label: (e) => `<strong>${escapeHtml(e.userName)}</strong> a créé le membre <strong>${escapeHtml(e.projetName)}</strong>` },
+    'member_delete':{ icon: 'fa-user-minus',      label: (e) => `<strong>${escapeHtml(e.userName)}</strong> a supprimé le membre <strong>${escapeHtml(e.projetName)}</strong>` },
+  };
+
+  const now = new Date();
+  list.innerHTML = _activityLog.map(entry => {
+    const meta = actionMeta[entry.action] || { icon: 'fa-circle-info', label: (e) => `<strong>${escapeHtml(e.userName)}</strong> — ${escapeHtml(e.action)}` };
+    const ts = entry.createdAt?.seconds ? new Date(entry.createdAt.seconds * 1000) : null;
+    let timeLabel = '';
+    if (ts) {
+      const diff = Math.floor((now - ts) / 1000);
+      if (diff < 60)           timeLabel = "À l'instant";
+      else if (diff < 3600)    timeLabel = `Il y a ${Math.floor(diff/60)} min`;
+      else if (diff < 86400)   timeLabel = `Il y a ${Math.floor(diff/3600)} h`;
+      else                     timeLabel = ts.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    }
+    return `
+      <div class="dashboard-history-row">
+        <div class="dashboard-history-icon"><i class="fa-solid ${meta.icon}"></i></div>
+        <div class="dashboard-history-body">
+          <div class="dashboard-history-text">${meta.label(entry)}</div>
+          ${timeLabel ? `<div class="dashboard-history-time">${timeLabel}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openProjetPageById(projetId) {
+  const projet = allProjets.find(p => p.id === projetId);
+  if (!projet) return;
+  // Switch to projets section
+  navItems.forEach(n => n.classList.remove('active'));
+  sections.forEach(s => s.classList.remove('active'));
+  const projetsIndex = sectionMap.indexOf('section-projets');
+  if (projetsIndex !== -1) navItems[projetsIndex]?.classList.add('active');
+  const projetsSection = document.getElementById('section-projets');
+  if (projetsSection) projetsSection.classList.add('active');
+  openProjetPage(projet);
+}
+
+function renderDashboardProjects() {
+  const list = document.getElementById('dashboard-projects-list');
+  if (!list) return;
+
+  const active = allProjets
+    .filter(p => p.statut !== 'Projet livré')
+    .map(p => ({ ...p, _ts: p.dateLivraison ? new Date(p.dateLivraison).getTime() : Infinity }))
+    .sort((a, b) => a._ts - b._ts);
+
+  if (active.length === 0) {
+    list.innerHTML = '<div class="dashboard-empty">Aucun projet actif</div>';
+    return;
+  }
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const msDay = 86400000;
+
+  list.innerHTML = active.map(p => {
+    let dateLabel = '—', dateCls = '', badgeCls = 'nodate', badgeLabel = 'Sans échéance';
+    if (p.dateLivraison) {
+      const dt = new Date(p.dateLivraison);
+      const diff = Math.round((dt.getTime() - today.getTime()) / msDay);
+      dateLabel = dt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+      if (diff < 0)        { dateCls = 'urgent'; badgeCls = 'urgent'; badgeLabel = 'En retard'; }
+      else if (diff <= 7)  { dateCls = 'urgent'; badgeCls = 'urgent'; badgeLabel = `${diff}j restants`; }
+      else if (diff <= 21) { dateCls = 'soon';   badgeCls = 'soon';   badgeLabel = `${diff}j restants`; }
+      else                 { dateCls = '';        badgeCls = 'ok';     badgeLabel = `${diff}j restants`; }
+    }
+    return `
+      <div class="dashboard-project-row" onclick="openProjetPageById('${p.id}')">
+        <div>
+          <div class="dashboard-project-name">${escapeHtml(p.nom || 'Sans nom')}</div>
+          <div class="dashboard-project-client">${escapeHtml(p.clientName || '—')}</div>
+        </div>
+        <div class="dashboard-project-date ${dateCls}">${dateLabel}</div>
+        <span class="dashboard-project-badge ${badgeCls}">${badgeLabel}</span>
+      </div>`;
+  }).join('');
 }
 
 function showLogin() {
@@ -299,10 +555,12 @@ if (document.readyState === 'loading') {
 }
 
 auth.onAuthStateChanged(async user => {
+  if (_suppressAuthChange) return;
   if (!user) {
     if (unsubscribeClients) { unsubscribeClients(); unsubscribeClients = null; }
     if (unsubscribeProjets) { unsubscribeProjets(); unsubscribeProjets = null; }
     if (unsubscribeUsers) { unsubscribeUsers(); unsubscribeUsers = null; }
+    if (unsubscribeActivity) { unsubscribeActivity(); unsubscribeActivity = null; }
     showLogin();
     return;
   }
@@ -314,6 +572,7 @@ auth.onAuthStateChanged(async user => {
     setupClientsListener();
     setupProjetsListener();
     setupUsersListener();
+    setupActivityListener();
 
     // Initialize planning after user is logged in
     setTimeout(() => {
@@ -327,32 +586,136 @@ auth.onAuthStateChanged(async user => {
   }
 });
 
+// ── Multi-step login ──
+const TEMP_PASSWORD = 'Karbonn2024!';
+let _loginStep = 'email'; // 'email' | 'password' | 'firstlogin'
+let _suppressAuthChange = false; // true while detecting first login
+
+const loginStepEmail     = document.getElementById('login-step-email');
+const loginStepPassword  = document.getElementById('login-step-password');
+const loginStepFirst     = document.getElementById('login-step-firstlogin');
+const loginSubmitBtn     = document.getElementById('login-submit-btn');
+const loginNewPassword   = document.getElementById('login-newpassword');
+const loginConfirmPassword = document.getElementById('login-confirmpassword');
+
+function _setLoginStep(step) {
+  _loginStep = step;
+  loginStepEmail.style.display    = step === 'email'      ? '' : 'none';
+  loginStepPassword.style.display = step === 'password'   ? '' : 'none';
+  loginStepFirst.style.display    = step === 'firstlogin' ? '' : 'none';
+  loginError.textContent = '';
+  if (step === 'email') {
+    loginSubmitBtn.textContent = 'Continuer';
+    loginEmail.focus();
+  } else if (step === 'password') {
+    loginSubmitBtn.textContent = 'Se connecter';
+    loginPassword.value = '';
+    loginPassword.focus();
+  } else {
+    loginSubmitBtn.textContent = 'Définir mon mot de passe';
+    loginNewPassword.value = '';
+    loginConfirmPassword.value = '';
+    loginNewPassword.focus();
+  }
+}
+
+document.getElementById('login-back-btn').addEventListener('click', () => _setLoginStep('email'));
+document.getElementById('login-back-btn2').addEventListener('click', () => _setLoginStep('email'));
+
 loginForm.addEventListener('submit', async e => {
   e.preventDefault();
   loginError.textContent = '';
-
   const email = loginEmail.value.trim();
-  const password = loginPassword.value;
 
-  if (!email || !password) {
-    loginError.textContent = 'Veuillez saisir votre email et votre mot de passe.';
+  // ── Étape 1 : vérification email ──
+  if (_loginStep === 'email') {
+    if (!email) { loginError.textContent = 'Veuillez saisir votre adresse email.'; return; }
+    loginSubmitBtn.disabled = true;
+    loginSubmitBtn.textContent = 'Vérification…';
+    try {
+      // Suppress auth state changes during detection
+      _suppressAuthChange = true;
+      // Try signing in with temp password to detect first login
+      await auth.signInWithEmailAndPassword(email, TEMP_PASSWORD);
+      // Success → first login, sign out immediately and ask for new password
+      await auth.signOut();
+      _suppressAuthChange = false;
+      _setLoginStep('firstlogin');
+    } catch (err) {
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        // Account exists with a real password → normal login
+        _setLoginStep('password');
+      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email') {
+        loginError.textContent = 'Aucun compte ne correspond à cet email.';
+      } else {
+        // Possibly first login but different error — still show password step
+        _setLoginStep('password');
+      }
+    } finally {
+      _suppressAuthChange = false;
+      loginSubmitBtn.disabled = false;
+    }
     return;
   }
 
-  try {
-    await auth.signInWithEmailAndPassword(email, password);
-  } catch (err) {
-    console.error(err);
-    let message = 'Échec de la connexion.';
-    if (err.code === 'auth/user-not-found') message = 'Aucun compte ne correspond à cet email.';
-    if (err.code === 'auth/wrong-password') message = 'Mot de passe incorrect.';
-    if (err.code === 'auth/invalid-email') message = 'Adresse email invalide.';
-    loginError.textContent = message;
+  // ── Étape 2a : connexion normale ──
+  if (_loginStep === 'password') {
+    const password = loginPassword.value;
+    if (!password) { loginError.textContent = 'Veuillez saisir votre mot de passe.'; return; }
+    loginSubmitBtn.disabled = true;
+    loginSubmitBtn.textContent = 'Connexion…';
+    try {
+      await auth.signInWithEmailAndPassword(email, password);
+    } catch (err) {
+      console.error(err);
+      let message = 'Échec de la connexion.';
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') message = 'Mot de passe incorrect.';
+      if (err.code === 'auth/user-not-found') message = 'Aucun compte ne correspond à cet email.';
+      if (err.code === 'auth/too-many-requests') message = 'Trop de tentatives. Réessayez plus tard.';
+      loginError.textContent = message;
+    } finally {
+      loginSubmitBtn.disabled = false;
+      loginSubmitBtn.textContent = 'Se connecter';
+    }
+    return;
+  }
+
+  // ── Étape 2b : définir un nouveau mot de passe (première connexion) ──
+  if (_loginStep === 'firstlogin') {
+    const newPwd = loginNewPassword.value;
+    const confirmPwd = loginConfirmPassword.value;
+    if (!newPwd || newPwd.length < 8) { loginError.textContent = 'Le mot de passe doit contenir au moins 8 caractères.'; return; }
+    if (newPwd !== confirmPwd) { loginError.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+    loginSubmitBtn.disabled = true;
+    loginSubmitBtn.textContent = 'Enregistrement…';
+    try {
+      // Sign in with temp password to get a credential
+      const cred = await auth.signInWithEmailAndPassword(email, TEMP_PASSWORD);
+      // Update to new password
+      await cred.user.updatePassword(newPwd);
+      // Mark firstLogin as done in Firestore
+      await db.collection('users').doc(cred.user.uid).update({ firstLogin: false });
+      // Sign out and ask user to log in with new password
+      _suppressAuthChange = true;
+      await auth.signOut();
+      _suppressAuthChange = false;
+      _setLoginStep('password');
+      loginPassword.value = '';
+      showToast('Mot de passe défini. Connectez-vous maintenant.', 'success', 'Bienvenue !', 5000);
+    } catch (err) {
+      console.error(err);
+      loginError.textContent = 'Erreur lors de la mise à jour du mot de passe. Réessayez.';
+    } finally {
+      loginSubmitBtn.disabled = false;
+      loginSubmitBtn.textContent = 'Définir mon mot de passe';
+    }
+    return;
   }
 });
 
 document.getElementById('logout-btn').addEventListener('click', async () => {
   await auth.signOut();
+  _setLoginStep('email');
 });
 
 // Navigation
@@ -405,6 +768,7 @@ function setupClientsListener() {
       allClients.push({ id: doc.id, ...doc.data() });
     });
     renderClients(allClients);
+    renderDashboard();
   }, err => {
     console.error(err);
     const tbody = document.getElementById('clients-tbody');
@@ -830,6 +1194,7 @@ function setupProjetsListener() {
     });
     renderAllProjets();
     refreshPlanning(); // Update planning when projects change
+    renderDashboard();
     // Refresh open projet page
     if (currentPageProjet) {
       const updated = allProjets.find(p => p.id === currentPageProjet.id);
@@ -1234,6 +1599,7 @@ formProjet.addEventListener('submit', async e => {
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       createdBy: user.uid
     });
+    logActivity({ action: 'projet_create', projetName: nom });
     closeProjetModal();
   } catch (err) {
     console.error(err);
@@ -1564,6 +1930,7 @@ function renderProjetPageInfo(projet) {
             if (key === 'dateLivraison' && newValue !== previousValue) {
               renderProjetPageFiles(currentPageProjet);
               notifyProjectDateChange('Livraison projet', newValue);
+              logActivity({ action: 'date_change', projetName: currentPageProjet?.nom });
             }
           }
           item.classList.remove('editing');
@@ -1721,7 +2088,9 @@ document.getElementById('btn-delete-projet').addEventListener('click', async () 
   if (!confirmed) return;
 
   try {
+    const deletedNom = currentPageProjet.nom;
     await db.collection('projets').doc(currentPageProjet.id).delete();
+    logActivity({ action: 'projet_delete', projetName: deletedNom });
     closeProjetPage();
   } catch (err) {
     console.error(err);
@@ -2218,6 +2587,7 @@ function uploadTaskFile(projetId, folder, fileName) {
       } else {
         console.warn('[TASK UPLOAD] No recipients found — check team members and allUsers.');
       }
+      logActivity({ action: 'file_upload', projetName: projet.nom, fileName: fullFileName, folderName: folder });
 
     } catch (err) {
       console.error('Upload error:', err);
@@ -2508,6 +2878,7 @@ folderDateSubmit.addEventListener('click', async () => {
     renderProjetPageFiles(currentPageProjet);
     refreshPlanning(); // Update planning when folder date is set
     notifyProjectDateChange('Livraison dossier', deliveryDate, folder);
+    logActivity({ action: 'date_change', projetName: currentPageProjet?.nom, folderName: folder });
     folderDateModal.classList.remove('visible');
   } catch (err) {
     console.error(err);
@@ -2639,6 +3010,7 @@ fileUploadSubmit.addEventListener('click', async () => {
               renderProjetPageFiles(currentPageProjet);
               refreshPlanning();
               notifyFileChange(folder, customName, isEditing);
+              logActivity({ action: isEditing ? 'file_edit' : 'file_upload', projetName: currentPageProjet?.nom, fileName: customName, folderName: folder });
               
               // Force UI update
               setTimeout(() => {
@@ -2677,6 +3049,7 @@ fileUploadSubmit.addEventListener('click', async () => {
       renderProjetPageFiles(currentPageProjet);
       refreshPlanning();
       notifyFileChange(folder, customName, isEditing);
+      logActivity({ action: isEditing ? 'file_edit' : 'file_upload', projetName: currentPageProjet?.nom, fileName: customName, folderName: folder });
       
       // Force UI update
       setTimeout(() => {
@@ -2807,6 +3180,7 @@ async function deleteFile(folder, filename) {
     
     renderProjetPageFiles(currentPageProjet);
     refreshPlanning(); // Update planning if needed
+    logActivity({ action: 'file_delete', projetName: currentPageProjet?.nom, fileName: filename, folderName: folder });
   } catch (err) {
     console.error('Delete error:', err);
     showToast('Erreur lors de la suppression du fichier : ' + err.message, 'error');
@@ -3160,6 +3534,7 @@ userForm.addEventListener('submit', async e => {
       const password = 'Karbonn2024!';
       const newUid = await createUser(email, password, displayName, prenom, nom, role, status);
       showToast('Membre créé avec succès. Mot de passe temporaire : Karbonn2024!', 'success', 'Membre créé', 7000);
+      logActivity({ action: 'member_create', projetName: displayName || email });
     }
     closeUserModal();
     await loadTeamMembers();
@@ -3200,7 +3575,9 @@ async function deleteUser(uid) {
 
   try {
     await apiRequest(`/api/users/${uid}`, { method: 'DELETE' });
+    const deletedMember = allUsers.find(u => u.uid === uid);
     await db.collection('users').doc(uid).delete();
+    logActivity({ action: 'member_delete', projetName: deletedMember?.displayName || uid });
     showToast('Membre supprimé avec succès.', 'success');
     await loadTeamMembers();
   } catch (err) {

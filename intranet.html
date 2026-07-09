@@ -152,6 +152,18 @@
       justify-content: center;
     }
 
+    .top-bar-tagline {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-weight: 400;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
     .user-profile {
       display: flex;
       align-items: center;
@@ -244,6 +256,14 @@
 
     .login-left .brand img {
       height: 3.5rem;
+    }
+
+    .login-brand-text {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.04em;
+      text-decoration: none;
     }
 
     .login-left .welcome {
@@ -339,6 +359,31 @@
       margin-top: 20px;
     }
 
+    .login-step-back {
+      font-size: 0.78rem;
+      color: var(--muted);
+      cursor: pointer;
+      margin-bottom: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: color 0.15s;
+    }
+
+    .login-step-back:hover { color: var(--text); }
+
+    .login-first-notice {
+      background: rgba(99,102,241,0.07);
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.8rem;
+      color: #6366f1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     @media (max-width: 768px) {
       .login-left {
         display: none;
@@ -377,6 +422,252 @@
 
     .placeholder p {
       margin: 0;
+    }
+
+    /* ── Dashboard ── */
+    .dashboard-greeting {
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 36px;
+      letter-spacing: -0.02em;
+    }
+
+    .dashboard-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+
+    .stat-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px 14px 0 0;
+      padding: 24px 24px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+
+    .stat-card-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 18px;
+    }
+
+    .stat-card-chart {
+      height: 60px;
+      position: relative;
+      margin: 0 -24px -16px;
+    }
+
+    .stat-card:hover {
+      border-color: #d0d0d0;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+
+    .stat-card-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.95rem;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .stat-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-card-value {
+      font-size: 1.7rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+
+    .stat-card-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    .dashboard-bottom {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 24px;
+      min-height: 0;
+    }
+
+    .dashboard-projects-panel,
+    .dashboard-history-panel {
+      border: 1px solid var(--border);
+      border-radius: 0 0 14px 14px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .dashboard-panel-header {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .dashboard-panel-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .dashboard-panel-sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .dashboard-projects-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .dashboard-project-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+      cursor: pointer;
+    }
+
+    .dashboard-project-row:last-child { border-bottom: none; }
+
+    .dashboard-project-row:hover { background: var(--panel); }
+
+    .dashboard-project-name {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dashboard-project-client {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .dashboard-project-date {
+      font-size: 0.78rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .dashboard-project-date.urgent { color: #ef4444; font-weight: 600; }
+    .dashboard-project-date.soon   { color: #eab308; font-weight: 600; }
+
+    .dashboard-project-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    .dashboard-project-badge.urgent { background: rgba(239,68,68,0.1);  color: #ef4444; }
+    .dashboard-project-badge.soon   { background: rgba(234,179,8,0.1);  color: #ca8a04; }
+    .dashboard-project-badge.ok     { background: rgba(34,197,94,0.1);  color: #16a34a; }
+    .dashboard-project-badge.nodate { background: var(--panel); color: var(--muted); border: 1px solid var(--border); }
+
+    /* History panel */
+    .dashboard-history-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .dashboard-history-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .dashboard-history-row:last-child { border-bottom: none; }
+
+    .dashboard-history-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .dashboard-history-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .dashboard-history-text {
+      font-size: 0.82rem;
+      color: var(--text);
+      line-height: 1.4;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dashboard-history-text strong { font-weight: 600; }
+
+    .dashboard-history-time {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .dashboard-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 80px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    @media (max-width: 900px) {
+      .dashboard-stats { grid-template-columns: repeat(2, 1fr); }
+      .dashboard-bottom { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .dashboard-stats { grid-template-columns: 1fr; }
+      .dashboard-greeting { font-size: 1.25rem; }
     }
 
     .section-page {
@@ -2334,22 +2625,42 @@
 <body>
   <div class="login-overlay" id="login-screen">
     <div class="login-left">
-      <a href="index.html" class="brand"><img src="https://i.imgur.com/61Dv12I.png" alt="Karbonn."></a>
+      <a href="index.html" class="brand login-brand-text">Karbonn.</a>
       <p class="welcome">Bienvenue sur votre espace.</p>
     </div>
     <div class="login-right">
       <div class="login-card">
         <h1>Connexion à l'intranet</h1>
-        <form id="login-form">
-          <div class="form-group">
+
+        <!-- Étape 1 : email -->
+        <form id="login-form" autocomplete="off">
+          <div class="form-group" id="login-step-email">
             <label for="login-email">Adresse email</label>
-            <input type="email" id="login-email" name="email" placeholder="vous@karbonn.com" required />
+            <input type="email" id="login-email" name="email" placeholder="vous@karbonn.com" autocomplete="email" />
           </div>
-          <div class="form-group">
+
+          <!-- Étape 2a : connexion normale -->
+          <div class="form-group" id="login-step-password" style="display:none;">
+            <div class="login-step-back" id="login-back-btn">← Modifier l'email</div>
             <label for="login-password">Mot de passe</label>
-            <input type="password" id="login-password" name="password" placeholder="Votre mot de passe" required />
+            <input type="password" id="login-password" name="password" placeholder="Votre mot de passe" autocomplete="current-password" />
           </div>
-          <button type="submit">Se connecter</button>
+
+          <!-- Étape 2b : première connexion -->
+          <div id="login-step-firstlogin" style="display:none;">
+            <div class="login-step-back" id="login-back-btn2">← Modifier l'email</div>
+            <div class="login-first-notice"><i class="fa-solid fa-circle-info"></i> Première connexion — choisissez votre mot de passe.</div>
+            <div class="form-group" style="margin-top:14px;">
+              <label for="login-newpassword">Nouveau mot de passe</label>
+              <input type="password" id="login-newpassword" placeholder="Au moins 8 caractères" autocomplete="new-password" />
+            </div>
+            <div class="form-group">
+              <label for="login-confirmpassword">Confirmer le mot de passe</label>
+              <input type="password" id="login-confirmpassword" placeholder="Répétez le mot de passe" autocomplete="new-password" />
+            </div>
+          </div>
+
+          <button type="submit" id="login-submit-btn">Continuer</button>
           <p class="error" id="login-error"></p>
         </form>
         <p class="hint">Uniquement connexion. Contactez un manager pour obtenir un accès.</p>
@@ -2390,6 +2701,7 @@
     <main class="main">
       <div class="top-bar">
         <a href="index.html" class="brand"><img src="https://i.imgur.com/61Dv12I.png" alt="Karbonn."></a>
+        <div class="top-bar-tagline">Agence de Communication Digitale &amp; de Développement Scientifique de l&rsquo;Internet</div>
         <div class="user-profile">
           <div class="user-avatar" id="user-avatar"></div>
           <div class="user-info">
@@ -2402,9 +2714,65 @@
       <div class="content">
         <!-- Dashboard -->
         <section class="section-page active" id="section-dashboard">
-          <div class="placeholder">
-            <i class="fa-solid fa-layer-group fa-2x"></i>
-            <p>Dashboard — à venir.</p>
+          <div class="dashboard-greeting" id="dashboard-greeting"></div>
+          <div class="dashboard-stats" id="dashboard-stats">
+            <div class="stat-card">
+              <div class="stat-card-top">
+                <div class="stat-card-icon"><i class="fa-solid fa-folder-open"></i></div>
+                <div class="stat-card-body">
+                  <div class="stat-card-value" id="stat-projets-val">—</div>
+                  <div class="stat-card-label">Projets actifs</div>
+                </div>
+              </div>
+              <div class="stat-card-chart" id="chart-projets"></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-top">
+                <div class="stat-card-icon"><i class="fa-solid fa-user-tie"></i></div>
+                <div class="stat-card-body">
+                  <div class="stat-card-value" id="stat-clients-val">—</div>
+                  <div class="stat-card-label">Clients</div>
+                </div>
+              </div>
+              <div class="stat-card-chart" id="chart-clients"></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-top">
+                <div class="stat-card-icon"><i class="fa-solid fa-chart-line"></i></div>
+                <div class="stat-card-body">
+                  <div class="stat-card-value" id="stat-ca-val">—</div>
+                  <div class="stat-card-label">CA du mois</div>
+                </div>
+              </div>
+              <div class="stat-card-chart" id="chart-ca"></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-top">
+                <div class="stat-card-icon"><i class="fa-solid fa-circle-check"></i></div>
+                <div class="stat-card-body">
+                  <div class="stat-card-value" id="stat-taches-val">—</div>
+                  <div class="stat-card-label">Tâches aujourd'hui</div>
+                </div>
+              </div>
+              <div class="stat-card-chart" id="chart-taches"></div>
+            </div>
+          </div>
+
+          <div class="dashboard-bottom">
+            <div class="dashboard-projects-panel">
+              <div class="dashboard-panel-header">
+                <span class="dashboard-panel-title">Projets en cours</span>
+                <span class="dashboard-panel-sub">Classés par date d'échéance</span>
+              </div>
+              <div class="dashboard-projects-list" id="dashboard-projects-list"></div>
+            </div>
+            <div class="dashboard-history-panel">
+              <div class="dashboard-panel-header">
+                <span class="dashboard-panel-title">Historique des actions</span>
+                <span class="dashboard-panel-sub">Modifications & ajouts récents</span>
+              </div>
+              <div class="dashboard-history-list" id="dashboard-history-list"></div>
+            </div>
           </div>
         </section>
 
@@ -3056,6 +3424,7 @@
   </div>
 
   <!-- Modal Créer une facture -->
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="intranet.js"></script>
