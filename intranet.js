@@ -302,6 +302,7 @@ auth.onAuthStateChanged(async user => {
   if (!user) {
     if (unsubscribeClients) { unsubscribeClients(); unsubscribeClients = null; }
     if (unsubscribeProjets) { unsubscribeProjets(); unsubscribeProjets = null; }
+    if (unsubscribeUsers) { unsubscribeUsers(); unsubscribeUsers = null; }
     showLogin();
     return;
   }
@@ -312,7 +313,7 @@ auth.onAuthStateChanged(async user => {
     showApp(user, profile);
     setupClientsListener();
     setupProjetsListener();
-    loadTeamMembers();
+    setupUsersListener();
 
     // Initialize planning after user is logged in
     setTimeout(() => {
@@ -1069,15 +1070,31 @@ function groupByRole(members) {
   return ordered;
 }
 
-async function loadTeamMembers() {
-  try {
-    const snapshot = await db.collection('users').orderBy('createdAt', 'desc').get();
+let unsubscribeUsers = null;
+
+function setupUsersListener() {
+  if (unsubscribeUsers) unsubscribeUsers();
+  unsubscribeUsers = db.collection('users').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
     allUsers = snapshot.docs.map(d => ({ uid: d.id, ...d.data() }));
-    allTeamMembers = allUsers.map(u => ({ uid: u.uid, name: u.displayName || u.email || u.uid, role: getRoleLabel(u.role) }));
-    allTeamMembers = sortByRole(allTeamMembers);
+    allTeamMembers = sortByRole(allUsers.map(u => ({ uid: u.uid, name: u.displayName || u.email || u.uid, role: getRoleLabel(u.role) })));
     renderEquipeTable();
-  } catch (err) {
+  }, err => {
     console.error('Error loading team members:', err);
+  });
+}
+
+async function loadTeamMembers() {
+  // Kept for backward compatibility — the real-time listener handles updates
+  // but we ensure data is loaded if listener hasn't fired yet
+  if (allUsers.length === 0) {
+    try {
+      const snapshot = await db.collection('users').orderBy('createdAt', 'desc').get();
+      allUsers = snapshot.docs.map(d => ({ uid: d.id, ...d.data() }));
+      allTeamMembers = sortByRole(allUsers.map(u => ({ uid: u.uid, name: u.displayName || u.email || u.uid, role: getRoleLabel(u.role) })));
+      renderEquipeTable();
+    } catch (err) {
+      console.error('Error loading team members:', err);
+    }
   }
 }
 
