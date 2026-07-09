@@ -54,6 +54,12 @@ function getCurrentUserEmail() {
   return auth.currentUser?.email || '';
 }
 
+function sanitizeStoragePath(str) {
+  return (str || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._\-/]/g, '_');
+}
+
 function escapeHtml(str) {
   if (str == null) return '';
   return String(str)
@@ -2112,7 +2118,7 @@ function uploadTaskFile(projetId, folder, fileName) {
       const fileKey = `${folder}|${fullFileName}`;
       
       // Upload file to Supabase
-      const filePath = `${projetId}/${folder}/${fullFileName}`;
+      const filePath = sanitizeStoragePath(`${projetId}/${folder}/${fullFileName}`);
       const { data: uploadData, error: uploadError } = await supabaseClient.storage
         .from('project-files')
         .upload(filePath, file, {
@@ -2509,7 +2515,7 @@ fileUploadSubmit.addEventListener('click', async () => {
       const fileKey = `${folder}|${customName}`;
       
       // Upload file to Supabase - use public bucket approach
-      const filePath = `${currentPageProjet.id}/${folder}/${customName}`;
+      const filePath = sanitizeStoragePath(`${currentPageProjet.id}/${folder}/${customName}`);
       const { data: uploadData, error: uploadError } = await supabaseClient.storage
         .from('project-files')
         .upload(filePath, file, {
