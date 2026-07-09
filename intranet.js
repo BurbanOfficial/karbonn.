@@ -2167,6 +2167,7 @@ function uploadTaskFile(projetId, folder, fileName) {
 
       // Notify all project members
       const recipients = getAllProjectMemberEmails(projet);
+      console.log('[TASK UPLOAD] projet.team:', projet.team, '| allUsers.length:', allUsers.length, '| recipients:', recipients);
       if (recipients.length > 0) {
         const userName = currentUserProfile?.displayName || auth.currentUser?.displayName || 'Un utilisateur';
         const projetName = projet.nom || 'Projet';
@@ -2182,6 +2183,8 @@ function uploadTaskFile(projetId, folder, fileName) {
             buttonHref: `${window.location.origin}/intranet.html`
           })
         });
+      } else {
+        console.warn('[TASK UPLOAD] No recipients found — check team members and allUsers.');
       }
 
     } catch (err) {
