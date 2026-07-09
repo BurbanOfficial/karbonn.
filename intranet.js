@@ -447,6 +447,178 @@ function openProjetPageById(projetId) {
   openProjetPage(projet);
 }
 
+// ── Projets livrés ──
+let _currentLivreId = null;
+
+function _fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return isNaN(dt) ? '—' : dt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function _dateCls(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  if (isNaN(dt)) return '';
+  const diff = Math.ceil((dt - new Date()) / 86400000);
+  if (diff < 0) return 'livres-date-warning';
+  if (diff <= 30) return 'livres-date-soon';
+  return '';
+}
+
+function _badgeCls(statut) {
+  if (!statut) return 'default';
+  if (statut === 'Soldé') return 'solde';
+  if (statut === 'En attente') return 'attente';
+  if (statut === 'Acompte reçu') return 'acompte';
+  if (statut === 'Mensualités') return 'mensual';
+  return 'default';
+}
+
+function renderLivres(filter = '') {
+  const tbody = document.getElementById('livres-tbody');
+  if (!tbody) return;
+  const q = filter.toLowerCase();
+  const livres = allProjets.filter(p =>
+    p.statut === 'Projet livré' &&
+    (!q || (p.nom || '').toLowerCase().includes(q) || (p.clientName || '').toLowerCase().includes(q))
+  );
+
+  if (livres.length === 0) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="4">Aucun projet livré${q ? ' pour cette recherche' : ''}.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = livres.map(p => {
+    const createdAt = p.createdAt?.seconds ? new Date(p.createdAt.seconds * 1000) : null;
+    const createdLabel = createdAt ? createdAt.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+    return `<tr class="livres-row" onclick="openLivreDetail('${p.id}')" style="cursor:pointer;">
+      <td><strong>${escapeHtml(p.nom || '—')}</strong></td>
+      <td>${escapeHtml(p.clientName || '—')}</td>
+      <td>${createdLabel}</td>
+      <td>${_fmtDate(p.dateLivraison)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function _summaryItem(label, value, cls = '') {
+  return `<div class="livre-summary-item">
+    <span class="livre-summary-label">${label}</span>
+    <span class="livre-summary-value${cls ? ' ' + cls : ''}">${value || '—'}</span>
+  </div>`;
+}
+
+function openLivreDetail(projetId) {
+  const p = allProjets.find(x => x.id === projetId);
+  if (!p) return;
+  _currentLivreId = projetId;
+  const a = p.archiveData || {};
+  const modal = document.getElementById('livre-detail-modal');
+
+  // Summary bar
+  const servicesList = (a.services || []).join(', ') || '—';
+  const summaryEl = document.getElementById('livre-detail-summary');
+  if (summaryEl) {
+    summaryEl.innerHTML = [
+      _summaryItem('Projet', escapeHtml(p.nom || '—')),
+      _summaryItem('Client', escapeHtml(p.clientName || '—')),
+      _summaryItem('Services', escapeHtml(servicesList)),
+      _summaryItem('Livraison', _fmtDate(p.dateLivraison)),
+      _summaryItem('Nom de domaine', a.domaine ? `<a href="https://${escapeHtml(a.domaine)}" target="_blank" style="color:var(--accent)">${escapeHtml(a.domaine)}</a>` : '—'),
+      _summaryItem('Exp. domaine', _fmtDate(a.domaineExpiration), _dateCls(a.domaineExpiration).replace('livres-date-', '')),
+      _summaryItem('Hébergement', escapeHtml(a.hebergeur || '—')),
+      _summaryItem('Exp. hébergement', _fmtDate(a.hebergementExpiration), _dateCls(a.hebergementExpiration).replace('livres-date-', '')),
+      _summaryItem('Maintenance', a.maintenance ? `${Number(a.maintenance).toLocaleString('fr-FR')} €/mois` : '—'),
+      _summaryItem('Prochaine facture', _fmtDate(a.prochaineFacture), _dateCls(a.prochaineFacture).replace('livres-date-', '')),
+      _summaryItem('Statut facturation', escapeHtml(a.statutFacturation || '—')),
+      _summaryItem('Notes', escapeHtml((a.notes || '').substring(0, 60) + ((a.notes || '').length > 60 ? '…' : ''))),
+    ].join('');
+  }
+
+  document.getElementById('livre-detail-title').textContent = p.nom || 'Fiche projet';
+  document.getElementById('ld-nom').value = p.nom || '';
+  document.getElementById('ld-client').value = p.clientName || '';
+  document.getElementById('ld-resume').value = p.resume || '';
+  document.getElementById('ld-livraison').value = p.dateLivraison || '';
+  document.getElementById('ld-commande').value = a.dateCommande || '';
+  document.getElementById('ld-domaine').value = a.domaine || '';
+  document.getElementById('ld-domaine-commande').value = a.domaineCommande || '';
+  document.getElementById('ld-domaine-expiration').value = a.domaineExpiration || '';
+  document.getElementById('ld-registrar').value = a.registrar || '';
+  document.getElementById('ld-hebergeur').value = a.hebergeur || '';
+  document.getElementById('ld-hebergement-expiration').value = a.hebergementExpiration || '';
+  document.getElementById('ld-hebergement-prix').value = a.hebergementPrix || '';
+  document.getElementById('ld-ftp').value = a.ftp || '';
+  document.getElementById('ld-montant').value = a.montant || '';
+  document.getElementById('ld-maintenance').value = a.maintenance || '';
+  document.getElementById('ld-prochaine-facture').value = a.prochaineFacture || '';
+  document.getElementById('ld-statut-facturation').value = a.statutFacturation || '';
+  document.getElementById('ld-url').value = a.url || '';
+  document.getElementById('ld-cms-admin').value = a.cmsAdmin || '';
+  document.getElementById('ld-cms-login').value = a.cmsLogin || '';
+  document.getElementById('ld-ga').value = a.ga || '';
+  document.getElementById('ld-services-gratuits').value = a.servicesGratuits || '';
+  document.getElementById('ld-notes').value = a.notes || '';
+
+  const checkboxes = document.querySelectorAll('#ld-services-grid input[type="checkbox"]');
+  checkboxes.forEach(cb => { cb.checked = (a.services || []).includes(cb.value); });
+
+  modal.classList.add('visible');
+}
+
+async function saveLivreDetail() {
+  const p = allProjets.find(x => x.id === _currentLivreId);
+  if (!p) return;
+
+  const checkboxes = document.querySelectorAll('#ld-services-grid input[type="checkbox"]');
+  const services = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+  const archiveData = {
+    dateCommande: document.getElementById('ld-commande').value,
+    domaine: document.getElementById('ld-domaine').value,
+    domaineCommande: document.getElementById('ld-domaine-commande').value,
+    domaineExpiration: document.getElementById('ld-domaine-expiration').value,
+    registrar: document.getElementById('ld-registrar').value,
+    hebergeur: document.getElementById('ld-hebergeur').value,
+    hebergementExpiration: document.getElementById('ld-hebergement-expiration').value,
+    hebergementPrix: document.getElementById('ld-hebergement-prix').value,
+    ftp: document.getElementById('ld-ftp').value,
+    montant: document.getElementById('ld-montant').value,
+    maintenance: document.getElementById('ld-maintenance').value,
+    prochaineFacture: document.getElementById('ld-prochaine-facture').value,
+    statutFacturation: document.getElementById('ld-statut-facturation').value,
+    url: document.getElementById('ld-url').value,
+    cmsAdmin: document.getElementById('ld-cms-admin').value,
+    cmsLogin: document.getElementById('ld-cms-login').value,
+    ga: document.getElementById('ld-ga').value,
+    servicesGratuits: document.getElementById('ld-services-gratuits').value,
+    notes: document.getElementById('ld-notes').value,
+    services,
+  };
+
+  const nom = document.getElementById('ld-nom').value.trim();
+  const dateLivraison = document.getElementById('ld-livraison').value;
+
+  try {
+    await db.collection('projets').doc(_currentLivreId).update({ nom, dateLivraison, archiveData });
+    const idx = allProjets.findIndex(x => x.id === _currentLivreId);
+    if (idx !== -1) { allProjets[idx].nom = nom; allProjets[idx].dateLivraison = dateLivraison; allProjets[idx].archiveData = archiveData; }
+    document.getElementById('livre-detail-modal').classList.remove('visible');
+    renderLivres(document.getElementById('livres-search')?.value || '');
+    showToast('Fiche mise à jour.', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('Erreur lors de la sauvegarde.', 'error');
+  }
+}
+
+// Livres section events (wired after DOM is ready)
+document.getElementById('livre-detail-close').addEventListener('click', () => document.getElementById('livre-detail-modal').classList.remove('visible'));
+document.getElementById('livre-detail-cancel').addEventListener('click', () => document.getElementById('livre-detail-modal').classList.remove('visible'));
+document.getElementById('livre-detail-save').addEventListener('click', saveLivreDetail);
+document.getElementById('livre-detail-modal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible'); });
+document.getElementById('livres-search').addEventListener('input', e => renderLivres(e.target.value));
+
 function renderDashboardProjects() {
   const list = document.getElementById('dashboard-projects-list');
   if (!list) return;
@@ -724,7 +896,7 @@ const sections = document.querySelectorAll('.section-page');
 const sectionMap = [
   'section-dashboard',
   'section-clients',
-  'section-pipeline',
+  'section-livres',
   'section-taches',
   'section-analytics',
   'section-projets',
@@ -751,6 +923,11 @@ navItems.forEach((item, index) => {
     // Load team data when opening the team section
     if (sectionId === 'section-equipe' && currentUserRole === 'Manager') {
       loadTeamMembers();
+    }
+
+    // Refresh livres table on section open
+    if (sectionId === 'section-livres') {
+      renderLivres(document.getElementById('livres-search')?.value || '');
     }
 
   });
@@ -1195,6 +1372,7 @@ function setupProjetsListener() {
     renderAllProjets();
     refreshPlanning(); // Update planning when projects change
     renderDashboard();
+    renderLivres();
     // Refresh open projet page
     if (currentPageProjet) {
       const updated = allProjets.find(p => p.id === currentPageProjet.id);
