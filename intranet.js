@@ -830,6 +830,14 @@ function setupProjetsListener() {
     });
     renderAllProjets();
     refreshPlanning(); // Update planning when projects change
+    // Refresh open projet page
+    if (currentPageProjet) {
+      const updated = allProjets.find(p => p.id === currentPageProjet.id);
+      if (updated) {
+        currentPageProjet = updated;
+        openProjetPage(updated);
+      }
+    }
   }, err => {
     console.error(err);
     const tbody = document.getElementById('projets-tbody');
@@ -1450,6 +1458,8 @@ function renderProjetPageInfo(projet) {
 
   let html = '';
 
+  const canEdit = isManager();
+
   editableFields.forEach(f => {
     const displayVal = f.display || f.value || '—';
     html += `<div class="detail-info-item-editable" data-field="${f.key}">
@@ -1458,7 +1468,7 @@ function renderProjetPageInfo(projet) {
         <span class="detail-info-value">${displayVal}</span>
         <input class="detail-field-input" type="${f.type}" value="${f.value}" />
       </div>
-      <button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
+      ${canEdit ? `<button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>` : ''}
     </div>`;
   });
 
@@ -1472,7 +1482,7 @@ function renderProjetPageInfo(projet) {
         ${clientOptions}
       </select>
     </div>
-    <button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
+    ${canEdit ? `<button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>` : ''}
   </div>`;
 
   // Date de création (static)
@@ -1491,7 +1501,7 @@ function renderProjetPageInfo(projet) {
         <option value="Projet livré" ${currentStatut === 'Projet livré' ? 'selected' : ''}>Projet livré</option>
       </select>
     </div>
-    <button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
+    ${canEdit ? `<button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>` : ''}
   </div>`;
 
   projetPageInfo.innerHTML = html;
@@ -1501,7 +1511,12 @@ function renderProjetPageInfo(projet) {
     const editBtn = item.querySelector('.detail-field-edit');
     const input = item.querySelector('.detail-field-input');
 
+    if (!editBtn) return;
     editBtn.addEventListener('click', async () => {
+      if (!isManager()) {
+        showToast('Action réservée aux managers.', 'error');
+        return;
+      }
       if (item.classList.contains('editing')) {
         const key = item.dataset.field;
         try {
