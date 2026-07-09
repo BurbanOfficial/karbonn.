@@ -2164,7 +2164,26 @@ function uploadTaskFile(projetId, folder, fileName) {
       
       // Refresh planning if needed
       refreshPlanning();
-      
+
+      // Notify all project members
+      const recipients = getAllProjectMemberEmails(projet);
+      if (recipients.length > 0) {
+        const userName = currentUserProfile?.displayName || auth.currentUser?.displayName || 'Un utilisateur';
+        const projetName = projet.nom || 'Projet';
+        sendNotificationEmail({
+          to: recipients,
+          subject: `[Karbonn] Fichier déposé – ${projetName}`,
+          text: `${userName} a déposé un fichier dans le projet « ${projetName} ».\n\nDossier : ${folder}\nFichier : ${fullFileName}\n`,
+          html: buildEmailHtml({
+            title: 'Fichier déposé',
+            intro: `${userName} a déposé un fichier dans le projet ${projetName}.`,
+            lines: [`Dossier : ${folder}`, `Fichier : ${fullFileName}`],
+            buttonText: 'Voir le projet',
+            buttonHref: `${window.location.origin}/intranet.html`
+          })
+        });
+      }
+
     } catch (err) {
       console.error('Upload error:', err);
       showToast('Erreur lors de l\'upload du fichier : ' + err.message, 'error');
