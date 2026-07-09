@@ -109,10 +109,10 @@ app.options('/api/chat', chatCors, (req, res) => {
 });
 
 app.options('/api/*', allowedOriginsCors);
-app.options('/notify/email', allowedOriginsCors);
+app.options('/notify/email', cors({ origin: '*', credentials: false }));
 
 // Notification endpoint: authenticated, any role
-app.post('/notify/email', verifyAuth, async (req, res) => {
+app.post('/notify/email', cors({ origin: true, credentials: true }), verifyAuth, async (req, res) => {
   try {
     const { to, subject, text, html } = req.body;
     console.log(`[EMAIL REQUEST] from ${req.user?.email || req.user?.uid} | to: ${(to || []).join(', ')} | subject: ${subject}`);
