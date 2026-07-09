@@ -140,6 +140,20 @@ app.use('/api', (req, res, next) => {
   requireManager(req, res, next);
 });
 
+// Delete a Firebase Auth user (manager only, handled by /api middleware)
+app.delete('/api/users/:uid', async (req, res) => {
+  try {
+    const { uid } = req.params;
+    if (!uid) return res.status(400).json({ error: 'Missing uid' });
+    await admin.auth().deleteUser(uid);
+    console.log(`[AUTH] Deleted Firebase Auth user: ${uid}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[AUTH] Error deleting user:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 async function qontoRequest(path, options = {}) {
   const response = await fetch(`${QONTO_BASE_URL}${path}`, {
     ...options,

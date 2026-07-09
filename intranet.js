@@ -3127,6 +3127,7 @@ async function deleteUser(uid) {
   if (!confirmed) return;
 
   try {
+    await apiRequest(`/api/users/${uid}`, { method: 'DELETE' });
     await db.collection('users').doc(uid).delete();
     showToast('Membre supprimé avec succès.', 'success');
     await loadTeamMembers();
