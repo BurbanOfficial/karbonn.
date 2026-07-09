@@ -8,6 +8,7 @@ const Mailgun = require('mailgun.js');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const QONTO_BASE_URL = 'https://thirdparty.qonto.com/v2';
+const QONTO_AUTH = (process.env.QONTO_API_TOKEN || '').replace(/^Bearer\s+/i, '').trim();
 
 let qontoBankIban = process.env.QONTO_IBAN ? process.env.QONTO_IBAN.replace(/\s/g, '') : null;
 async function loadQontoBankAccount() {
@@ -158,7 +159,7 @@ async function qontoRequest(path, options = {}) {
   const response = await fetch(`${QONTO_BASE_URL}${path}`, {
     ...options,
     headers: {
-      'Authorization': process.env.QONTO_API_TOKEN,
+      'Authorization': QONTO_AUTH,
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       ...(options.headers || {}),
@@ -236,16 +237,15 @@ app.post('/api/clients', async (req, res) => {
   try {
     const payload = buildQontoPayload(client);
     const qontoData = await qontoRequest('/clients', { method: 'POST', body: JSON.stringify(payload) });
-    const qontoClientId = qontoData?.client?.id;
+    const qontoClientId = qontoData?.client?.id || null;
 
     const docRef = await db.collection('clients').add({
       ...client,
-      qontoClientId: qontoClientId || null,
+      qontoClientId,
       qontoSyncStatus: qontoClientId ? 'synced' : 'pending',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: req.user.uid,
     });
-
     res.json({ success: true, id: docRef.id, qontoClientId });
   } catch (err) {
     console.error('Create client error:', err.message, err.data);
@@ -600,6 +600,8 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Karbonn API running on port ${PORT}`);
+  const [qLogin] = QONTO_AUTH.split(':');
+  console.log(`[Qonto] Auth token login part: "${qLogin || 'MISSING'}" | key length: ${(QONTO_AUTH.split(':')[1] || '').length}`);
   loadQontoBankAccount();
   const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
   setInterval(() => fetch(`${SELF_URL}/health`).catch(() => {}), 30 * 1000);

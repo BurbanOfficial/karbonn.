@@ -14,10 +14,10 @@ let currentUserRole = null;
 // Backend API configuration (Render)
 const API_BASE_URL = 'https://karbonn-x-abby.onrender.com';
 
-async function apiRequest(path, options = {}) {
+async function apiRequest(path, options = {}, _retry = false) {
   const user = auth.currentUser;
   if (!user) throw new Error('Non authentifié');
-  const token = await user.getIdToken();
+  const token = await user.getIdToken(_retry);
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
@@ -26,6 +26,9 @@ async function apiRequest(path, options = {}) {
       ...(options.headers || {}),
     },
   });
+  if (response.status === 401 && !_retry) {
+    return apiRequest(path, options, true);
+  }
   const data = await response.json();
   if (!response.ok) {
     const error = new Error(data.error || 'Erreur API');
