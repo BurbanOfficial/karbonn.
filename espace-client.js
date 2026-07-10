@@ -1,3 +1,5 @@
+const API_BASE_URL = 'https://karbonn-x-abby.onrender.com';
+
 const loginScreen = document.getElementById('login-screen');
 const appContent = document.getElementById('app-content');
 const loginForm = document.getElementById('login-form');
@@ -82,7 +84,7 @@ async function showApp(client) {
   if (clientBadgeEl) clientBadgeEl.textContent = client.clientId;
 
   try {
-    const res = await fetch(`/api/public/client/${client.clientId}/sites`);
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${client.clientId}/sites`);
     if (res.ok) {
       const data = await res.json();
       renderDomaines(data.sites || []);
