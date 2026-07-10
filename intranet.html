@@ -1994,6 +1994,25 @@
       box-shadow: 0 2px 8px rgba(67, 97, 238, 0.15);
     }
 
+    .planning-site-expiration {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+      border-color: #f59e0b;
+    }
+
+    .planning-site-expiration:hover {
+      border-color: #d97706;
+      box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+    }
+
+    .planning-site-expiration .planning-project-title {
+      color: #d97706;
+    }
+
+    .planning-site-expiration .planning-project-id {
+      background: rgba(245, 158, 11, 0.2);
+      color: #d97706;
+    }
+
     .planning-project.completed {
       background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
       border-color: #22c55e;
@@ -2312,11 +2331,32 @@
     .site-history-item .history-meta {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 8px;
       color: var(--muted);
       font-size: 0.75rem;
       margin-bottom: 6px;
     }
+
+    .history-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .history-actions button {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .history-actions button:hover { color: var(--text); background: var(--border); }
+    .history-actions button.history-delete-btn:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
 
     .site-history-item .history-content {
       color: var(--text);
@@ -2756,9 +2796,6 @@
         <a href="#" class="nav-item" data-label="Tâches & Planning">
           <i class="fa-solid fa-list-check"></i>
         </a>
-        <a href="#" class="nav-item" data-label="Analytics">
-          <i class="fa-solid fa-chart-line"></i>
-        </a>
         <a href="#" class="nav-item" data-label="Projets & Services">
           <i class="fa-solid fa-diagram-project"></i>
         </a>
@@ -2968,14 +3005,6 @@
                 </div>
               </div>
             </div>
-          </div>
-        </section>
-
-        <!-- Analytics -->
-        <section class="section-page" id="section-analytics">
-          <div class="placeholder">
-            <i class="fa-solid fa-chart-line fa-2x"></i>
-            <p>Analytics — à venir.</p>
           </div>
         </section>
 
@@ -3521,6 +3550,10 @@
       <div class="detail-section">
         <div class="detail-section-title">Projets associés</div>
         <div id="detail-projets"></div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Sites Web associés</div>
+        <div id="detail-sites"></div>
       </div>
     </div>
   </div>

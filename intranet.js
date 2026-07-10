@@ -756,8 +756,8 @@ function getSiteStatusClass(status) {
 
 function getEffectiveSiteStatus(site) {
   if (!site) return 'En attente';
-  if (site.status === 'Expiré' || site.status === 'Suspendu' || site.status === 'En maintenance') return site.status;
-  if (site.expirationDate) {
+  // Auto-expiration: only 'Actif' automatically switches to 'Expiré'
+  if (site.status === 'Actif' && site.expirationDate) {
     const exp = new Date(site.expirationDate);
     const now = new Date();
     now.setHours(0,0,0,0);
@@ -769,7 +769,7 @@ function getEffectiveSiteStatus(site) {
 
 function autoUpdateExpiredSites() {
   allSites.forEach(site => {
-    if ((site.status === 'Actif' || site.status === 'En attente') && site.expirationDate) {
+    if (site.status === 'Actif' && site.expirationDate) {
       const exp = new Date(site.expirationDate);
       const now = new Date();
       now.setHours(0, 0, 0, 0);
@@ -788,6 +788,7 @@ function setupSitesListener() {
     snapshot.forEach(doc => allSites.push({ id: doc.id, ...doc.data() }));
     renderAllSites();
     autoUpdateExpiredSites();
+    refreshPlanning();
     if (currentPageSite) {
       const updated = allSites.find(s => s.id === currentPageSite.id);
       if (updated) {
@@ -927,6 +928,18 @@ function openSitePage(site, loadHistory = true) {
               const newClientName = selectedClient ? (selectedClient.entreprise ? `${[selectedClient.prenom, selectedClient.nom].filter(Boolean).join(' ')} — ${selectedClient.entreprise}` : [selectedClient.prenom, selectedClient.nom].filter(Boolean).join(' ')) : '';
               update = { clientId: newClientId, clientName: newClientName, clientIdDisplay: selectedClient?.clientId || newClientId };
               historyNote = `Changement de client : ${newClientName || newClientId}`;
+              try {
+                if (site.clientId && site.domain) {
+                  await db.collection('clients').doc(site.clientId).update({
+                    sites: firebase.firestore.FieldValue.arrayRemove(site.domain)
+                  });
+                }
+                await db.collection('clients').doc(newClientId).update({
+                  sites: firebase.firestore.FieldValue.arrayUnion(site.domain)
+                });
+              } catch (err) {
+                console.warn('[Sites] Failed to update client sites:', err);
+              }
             } else if (key === 'status') {
               const select = item.querySelector('select');
               const newStatus = select.value;
@@ -1045,7 +1058,13 @@ formSite.addEventListener('submit', async e => {
       createdBy: user?.uid || ''
     });
     await addSiteHistory(docRef.id, 'note', `Site Web créé pour ${domain}`);
-    logActivity({ action: 'site_create', projetName: domain });
+    try {
+      await db.collection('clients').doc(clientId).update({
+        sites: firebase.firestore.FieldValue.arrayUnion(domain)
+      });
+    } catch (err) {
+      console.warn('[Sites] Failed to update client sites:', err);
+    }
     closeSiteModal();
   } catch (err) {
     console.error(err);
@@ -1062,7 +1081,15 @@ document.getElementById('btn-delete-site').addEventListener('click', async () =>
   if (!confirmed) return;
   try {
     await db.collection('sitesWeb').doc(currentPageSite.id).delete();
-    logActivity({ action: 'site_delete', projetName: currentPageSite.domain });
+    if (currentPageSite.clientId && currentPageSite.domain) {
+      try {
+        await db.collection('clients').doc(currentPageSite.clientId).update({
+          sites: firebase.firestore.FieldValue.arrayRemove(currentPageSite.domain)
+        });
+      } catch (err) {
+        console.warn('[Sites] Failed to update client sites:', err);
+      }
+    }
     closeSitePage();
     showToast('Site Web supprimé.', 'success');
   } catch (err) {
@@ -1112,14 +1139,56 @@ function renderSiteHistory(items) {
     siteHistoryList.innerHTML = '<p class="empty-history">Aucune modification enregistrée.</p>';
     return;
   }
+  const canEdit = isManager();
   siteHistoryList.innerHTML = items.map(item => {
     const date = item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleString('fr-FR') : '—';
     const icon = item.type === 'note' ? 'fa-note-sticky' : 'fa-pen-to-square';
-    return `<div class="site-history-item">
-      <div class="history-meta"><i class="fa-solid ${icon}"></i> ${escapeHtml(item.createdByName || '—')} · ${date}</div>
+    return `<div class="site-history-item" data-history-id="${item.id}">
+      <div class="history-meta">
+        <span><i class="fa-solid ${icon}"></i> ${escapeHtml(item.createdByName || '—')} · ${date}</span>
+        ${canEdit ? `<span class="history-actions">
+          <button class="history-edit-btn" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
+          <button class="history-delete-btn" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+        </span>` : ''}
+      </div>
       <div class="history-content">${escapeHtml(item.content || '')}</div>
     </div>`;
   }).join('');
+
+  if (canEdit && currentPageSite) {
+    siteHistoryList.querySelectorAll('.history-edit-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const itemEl = btn.closest('.site-history-item');
+        const id = itemEl.dataset.historyId;
+        const item = items.find(i => i.id === id);
+        const newContent = window.prompt('Modifier la note :', item?.content || '');
+        if (newContent === null) return;
+        try {
+          await db.collection('sitesWeb').doc(currentPageSite.id).collection('history').doc(id).update({ content: newContent });
+          showToast('Note mise à jour.', 'success');
+        } catch (err) {
+          console.error(err);
+          showToast('Erreur lors de la mise à jour.', 'error');
+        }
+      });
+    });
+
+    siteHistoryList.querySelectorAll('.history-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const itemEl = btn.closest('.site-history-item');
+        const id = itemEl.dataset.historyId;
+        const confirmed = await appConfirm('Supprimer cette note ?', { title: 'Supprimer une note', confirmLabel: 'Supprimer', cancelLabel: 'Annuler', icon: 'fa-trash' });
+        if (!confirmed) return;
+        try {
+          await db.collection('sitesWeb').doc(currentPageSite.id).collection('history').doc(id).delete();
+          showToast('Note supprimée.', 'success');
+        } catch (err) {
+          console.error(err);
+          showToast('Erreur lors de la suppression.', 'error');
+        }
+      });
+    });
+  }
 }
 
 sitesSearch.addEventListener('input', renderAllSites);
@@ -1131,7 +1200,6 @@ const sectionMap = [
   'section-dashboard',
   'section-clients',
   'section-taches',
-  'section-analytics',
   'section-projets',
   'section-sitesweb',
   'section-equipe',
@@ -2019,6 +2087,7 @@ const detailModalClose = document.getElementById('detail-modal-close');
 const detailModalTitle = document.getElementById('detail-modal-title');
 const detailFieldsContainer = document.getElementById('detail-fields');
 const detailProjetsContainer = document.getElementById('detail-projets');
+const detailSitesContainer = document.getElementById('detail-sites');
 const detailClientIdEl = document.getElementById('detail-client-id');
 
 let currentDetailClient = null;
@@ -2031,6 +2100,7 @@ function openClientDetail(client) {
 
   renderDetailFields(client);
   loadClientProjets(client.id);
+  loadClientSites(client.id);
   clientDetailModal.classList.add('visible');
 }
 
@@ -2145,6 +2215,32 @@ async function loadClientProjets(clientDocId) {
   } catch (err) {
     console.error(err);
     detailProjetsContainer.innerHTML = '<p class="detail-projets-empty">Erreur lors du chargement.</p>';
+  }
+}
+
+async function loadClientSites(clientDocId) {
+  detailSitesContainer.innerHTML = '<p class="detail-projets-empty">Chargement...</p>';
+
+  try {
+    const snapshot = await db.collection('sitesWeb').where('clientId', '==', clientDocId).get();
+    if (snapshot.empty) {
+      detailSitesContainer.innerHTML = '<p class="detail-projets-empty">Aucun site Web associé.</p>';
+      return;
+    }
+
+    const sites = [];
+    snapshot.forEach(doc => sites.push({ id: doc.id, ...doc.data() }));
+
+    detailSitesContainer.innerHTML = `<ul class="detail-projets-list">
+      ${sites.map(s => {
+        const status = getEffectiveSiteStatus(s);
+        const statusClass = getSiteStatusClass(status);
+        return `<li><i class="fa-solid fa-globe"></i> <span>${escapeHtml(s.domain || '—')}</span> <span class="site-status-badge ${statusClass}" style="margin-left:auto;">${status}</span></li>`;
+      }).join('')}
+    </ul>`;
+  } catch (err) {
+    console.error(err);
+    detailSitesContainer.innerHTML = '<p class="detail-projets-empty">Erreur lors du chargement.</p>';
   }
 }
 
@@ -2672,6 +2768,32 @@ function collectPlanningProjects() {
     }
   });
 
+  // Site expiration events (managers only)
+  if (isManager()) {
+    allSites.forEach(site => {
+      if (site.expirationDate) {
+        const exp = new Date(site.expirationDate);
+        const offsets = [
+          { days: -90, label: '90 jours' },
+          { days: -30, label: '30 jours' },
+          { days: -7, label: '7 jours' },
+          { days: 0, label: 'Jour J' }
+        ];
+        offsets.forEach(o => {
+          const date = new Date(exp);
+          date.setDate(date.getDate() + o.days);
+          planningProjects.push({
+            site,
+            date: date.toISOString().split('T')[0],
+            type: 'site_expiration',
+            label: `Expiration ${o.label}`,
+            folder: null
+          });
+        });
+      }
+    });
+  }
+
   // Sort by date
   planningProjects.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
@@ -2759,6 +2881,17 @@ function areAllTasksCompleted(projet, folderName = null) {
 }
 
 function createPlanningProjectHtml(item) {
+  if (item.type === 'site_expiration') {
+    const site = item.site;
+    return `
+      <div class="planning-project planning-site-expiration" onclick="openSiteFromPlanning('${site.id}')">
+        <div class="planning-project-title">${escapeHtml(site.domain || '—')}</div>
+        <div class="planning-project-id">${item.label}</div>
+        <div class="planning-project-company">${escapeHtml(site.clientName || '—')}</div>
+      </div>
+    `;
+  }
+
   const projet = item.projet;
   const clientName = projet.clientName || '—';
   const projectId = projet.projetId || '—';
@@ -2789,6 +2922,21 @@ function filterPlanningProjects() {
 function refreshPlanning() {
   collectPlanningProjects();
   renderPlanning();
+}
+
+function openSiteFromPlanning(siteId) {
+  const site = allSites.find(s => s.id === siteId);
+  if (!site) return;
+
+  // Navigate to Sites Web section
+  navItems.forEach(i => i.classList.remove('active'));
+  sections.forEach(s => s.classList.remove('active'));
+  const navItem = Array.from(navItems).find(i => i.dataset.label === 'Sites Web');
+  const section = document.getElementById('section-sitesweb');
+  if (navItem) navItem.classList.add('active');
+  if (section) section.classList.add('active');
+
+  openSitePage(site);
 }
 
 // Task Modal Functions

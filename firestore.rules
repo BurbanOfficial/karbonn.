@@ -71,7 +71,7 @@ service cloud.firestore {
 
       match /history/{historyId} {
         allow read, create: if request.auth != null;
-        allow update, delete: if false;
+        allow update, delete: if request.auth != null;
       }
     }
   }
