@@ -83,12 +83,18 @@ async function showApp(client) {
   if (clientNameEl) clientNameEl.textContent = name;
   if (clientBadgeEl) clientBadgeEl.textContent = client.clientId;
 
+  const sitesUrl = `${API_BASE_URL}/api/public/client/${client.clientId}/sites`;
+  console.log('[Client] Fetching sites from:', sitesUrl);
   try {
-    const res = await fetch(`${API_BASE_URL}/api/public/client/${client.clientId}/sites`);
+    const res = await fetch(sitesUrl);
+    console.log('[Client] Sites response status:', res.status, res.statusText);
     if (res.ok) {
       const data = await res.json();
+      console.log('[Client] Sites loaded:', data.sites?.length || 0);
       renderDomaines(data.sites || []);
     } else {
+      const text = await res.text();
+      console.warn('[Client] Sites request failed:', res.status, text);
       renderDomaines(client.sites || []);
     }
   } catch (err) {

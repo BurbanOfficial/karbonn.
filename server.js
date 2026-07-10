@@ -595,10 +595,16 @@ app.post('/api/chat', chatCors, async (req, res) => {
 
 // Public endpoint for client space: list sites linked to a client by its clientId
 app.get('/api/public/client/:clientId/sites', async (req, res) => {
+  console.log('[Public API] Incoming request:', req.method, req.path, '| params:', req.params, '| origin:', req.headers.origin);
   try {
     const { clientId } = req.params;
+    console.log('[Public API] Looking up client with clientId:', clientId);
     const clientSnap = await db.collection('clients').where('clientId', '==', clientId).limit(1).get();
-    if (clientSnap.empty) return res.status(404).json({ error: 'Client not found' });
+    if (clientSnap.empty) {
+      console.log('[Public API] Client not found for clientId:', clientId);
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    console.log('[Public API] Client found, doc id:', clientSnap.docs[0].id);
 
     const clientDoc = clientSnap.docs[0];
     const sitesSnap = await db.collection('sitesWeb').where('clientId', '==', clientDoc.id).get();
@@ -617,6 +623,7 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
         createdAt: data.createdAt
       });
     });
+    console.log('[Public API] Returning', sites.length, 'sites for clientId:', clientId);
     res.json({ sites });
   } catch (err) {
     console.error('[Public API] Error fetching client sites:', err);
