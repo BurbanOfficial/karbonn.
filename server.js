@@ -178,6 +178,7 @@ app.post('/api/public/sites/:siteId/notes', async (req, res) => {
       type: 'note',
       content: content.trim(),
       createdByName: 'Espace Client',
+      status: 'pending',
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     };
     await noteRef.set(note);
@@ -189,11 +190,65 @@ app.post('/api/public/sites/:siteId/notes', async (req, res) => {
         type: note.type,
         content: note.content,
         createdByName: note.createdByName,
+        status: note.status,
         createdAt: new Date().toISOString()
       }
     });
   } catch (err) {
     console.error('[Public API] Error adding site note:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public endpoint for client space: edit own pending note
+app.patch('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {
+  console.log('[Public API] Edit note request:', req.method, req.path);
+  try {
+    const { siteId, noteId } = req.params;
+    const { content } = req.body || {};
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'Missing note content' });
+    }
+
+    const noteRef = db.collection('sitesWeb').doc(siteId).collection('history').doc(noteId);
+    const noteDoc = await noteRef.get();
+    if (!noteDoc.exists) return res.status(404).json({ error: 'Note not found' });
+    const noteData = noteDoc.data();
+    if (noteData.createdByName !== 'Espace Client') {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+    if (noteData.status && noteData.status !== 'pending') {
+      return res.status(403).json({ error: 'Note is not editable' });
+    }
+
+    await noteRef.update({ content: content.trim(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    res.json({ success: true, note: { id: noteId, content: content.trim() } });
+  } catch (err) {
+    console.error('[Public API] Error editing site note:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public endpoint for client space: delete own pending note
+app.delete('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {
+  console.log('[Public API] Delete note request:', req.method, req.path);
+  try {
+    const { siteId, noteId } = req.params;
+    const noteRef = db.collection('sitesWeb').doc(siteId).collection('history').doc(noteId);
+    const noteDoc = await noteRef.get();
+    if (!noteDoc.exists) return res.status(404).json({ error: 'Note not found' });
+    const noteData = noteDoc.data();
+    if (noteData.createdByName !== 'Espace Client') {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+    if (noteData.status && noteData.status !== 'pending') {
+      return res.status(403).json({ error: 'Note is not deletable' });
+    }
+
+    await noteRef.delete();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Public API] Error deleting site note:', err);
     res.status(500).json({ error: err.message });
   }
 });

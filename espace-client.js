@@ -18,6 +18,16 @@ function getSiteStatusClass(status) {
   return `site-status-${key}`;
 }
 
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function getEffectiveSiteStatus(site) {
   if (!site) return 'En attente';
   if (site.status === 'Actif' && site.expirationDate) {
@@ -209,6 +219,15 @@ async function submitSiteNote(site) {
   }
 }
 
+function getNoteStatusBadge(status) {
+  const map = {
+    pending: { label: 'En attente d\'approbation', class: 'note-status-pending' },
+    accepted: { label: 'Acceptée', class: 'note-status-accepted' },
+    rejected: { label: 'Refusée', class: 'note-status-rejected' }
+  };
+  return map[status] || map.pending;
+}
+
 function renderClientNotes(notes) {
   const container = document.getElementById('site-detail-client-notes');
   if (!container) return;
@@ -225,17 +244,118 @@ function renderClientNotes(notes) {
     ${notes.map(item => {
       const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('fr-FR') : '—';
       const time = item.createdAt ? new Date(item.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+      const status = getNoteStatusBadge(item.status);
+      const isPending = !item.status || item.status === 'pending';
       return `
-        <div class="note-card client-note">
+        <div class="note-card client-note" data-note-id="${item.id}">
           <div class="note-card-header">
             <div class="note-card-author"><i class="fa-solid fa-user"></i> Vous</div>
-            <div class="note-card-date"><i class="fa-regular fa-clock"></i> ${date}${time ? ' · ' + time : ''}</div>
+            <div class="note-card-meta">
+              <span class="note-status-badge ${status.class}">${status.label}</span>
+              <span class="note-card-date"><i class="fa-regular fa-clock"></i> ${date}${time ? ' · ' + time : ''}</span>
+            </div>
           </div>
-          <div class="note-card-content">${item.content || '—'}</div>
+          <div class="note-card-content">${escapeHtml(item.content || '—')}</div>
+          <div class="note-edit-area" style="display:none;">
+            <textarea class="note-edit-textarea" rows="3"></textarea>
+            <div class="note-edit-actions">
+              <button class="note-save-btn"><i class="fa-solid fa-check"></i> Enregistrer</button>
+              <button class="note-cancel-btn"><i class="fa-solid fa-xmark"></i> Annuler</button>
+            </div>
+          </div>
+          ${isPending ? `
+          <div class="note-card-actions">
+            <button class="note-action-edit"><i class="fa-solid fa-pencil"></i> Modifier</button>
+            <button class="note-action-delete"><i class="fa-solid fa-trash"></i> Supprimer</button>
+          </div>` : ''}
         </div>
       `;
     }).join('')}
   </div>`;
+
+  container.querySelectorAll('.note-card').forEach(card => {
+    const noteId = card.dataset.noteId;
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    const editBtn = card.querySelector('.note-action-edit');
+    const deleteBtn = card.querySelector('.note-action-delete');
+    const saveBtn = card.querySelector('.note-save-btn');
+    const cancelBtn = card.querySelector('.note-cancel-btn');
+    const contentEl = card.querySelector('.note-card-content');
+    const editArea = card.querySelector('.note-edit-area');
+    const textarea = card.querySelector('.note-edit-textarea');
+
+    if (editBtn) {
+      editBtn.addEventListener('click', () => {
+        textarea.value = note.content || '';
+        contentEl.style.display = 'none';
+        editArea.style.display = '';
+        editBtn.style.display = 'none';
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        contentEl.style.display = '';
+        editArea.style.display = 'none';
+        if (editBtn) editBtn.style.display = '';
+      });
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        await saveSiteNoteEdit(site, note, textarea.value.trim(), card);
+      });
+    }
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async () => {
+        if (window.confirm('Supprimer cette remarque ?')) {
+          await deleteSiteNote(site, note, card);
+        }
+      });
+    }
+  });
+}
+
+async function saveSiteNoteEdit(site, note, newContent, cardEl) {
+  if (!newContent) return;
+  const message = document.getElementById('site-note-message');
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/notes/${note.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: newContent })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    note.content = newContent;
+    cardEl.querySelector('.note-card-content').textContent = newContent;
+    cardEl.querySelector('.note-card-content').style.display = '';
+    cardEl.querySelector('.note-edit-area').style.display = 'none';
+    const editBtn = cardEl.querySelector('.note-action-edit');
+    if (editBtn) editBtn.style.display = '';
+    if (message) { message.textContent = 'Remarque mise à jour.'; message.style.color = '#059669'; }
+  } catch (err) {
+    console.warn('[Client] Failed to edit note:', err);
+    if (message) { message.textContent = 'Erreur lors de la modification.'; message.style.color = '#dc2626'; }
+  }
+}
+
+async function deleteSiteNote(site, note, cardEl) {
+  const message = document.getElementById('site-note-message');
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/notes/${note.id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new Error(await res.text());
+    site.history = (site.history || []).filter(n => n.id !== note.id);
+    renderClientNotes(site.history.filter(i => i.type === 'note' && i.createdByName === 'Espace Client'));
+    if (message) { message.textContent = 'Remarque supprimée.'; message.style.color = '#059669'; }
+  } catch (err) {
+    console.warn('[Client] Failed to delete note:', err);
+    if (message) { message.textContent = 'Erreur lors de la suppression.'; message.style.color = '#dc2626'; }
+  }
 }
 
 function renderTeamNotes(notes) {

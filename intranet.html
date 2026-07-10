@@ -2405,6 +2405,69 @@
       flex-wrap: wrap;
     }
 
+    .client-note-meta-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .client-note-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    .client-note-status-pending { background: rgba(245, 158, 11, 0.12); color: #d97706; }
+    .client-note-status-accepted { background: rgba(16, 185, 129, 0.12); color: #059669; }
+    .client-note-status-rejected { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+
+    .client-note-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(67, 97, 238, 0.15);
+    }
+
+    .client-note-accept,
+    .client-note-reject {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      font-family: inherit;
+      transition: all 0.15s ease;
+    }
+
+    .client-note-accept {
+      background: rgba(16, 185, 129, 0.12);
+      color: #059669;
+    }
+
+    .client-note-accept:hover {
+      background: rgba(16, 185, 129, 0.2);
+    }
+
+    .client-note-reject {
+      background: rgba(239, 68, 68, 0.12);
+      color: #dc2626;
+    }
+
+    .client-note-reject:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
     .client-note-badge {
       display: inline-flex;
       align-items: center;

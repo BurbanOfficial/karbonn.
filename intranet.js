@@ -1198,22 +1198,67 @@ function renderSiteHistory(items) {
   }
 }
 
+function getClientNoteStatusBadge(status) {
+  const map = {
+    pending: { label: 'En attente', class: 'client-note-status-pending' },
+    accepted: { label: 'Acceptée', class: 'client-note-status-accepted' },
+    rejected: { label: 'Refusée', class: 'client-note-status-rejected' }
+  };
+  return map[status] || map.pending;
+}
+
 function renderClientNotes(notes) {
   if (!siteClientNotes) return;
   if (!notes.length) {
     siteClientNotes.innerHTML = '<p class="empty-history">Aucune remarque client.</p>';
     return;
   }
+  const canModerate = isManager();
   siteClientNotes.innerHTML = notes.map(item => {
     const date = item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleString('fr-FR') : '—';
-    return `<div class="site-client-note-item">
+    const status = getClientNoteStatusBadge(item.status);
+    const isPending = !item.status || item.status === 'pending';
+    return `<div class="site-client-note-item" data-client-note-id="${item.id}">
       <div class="client-note-meta">
-        <span class="client-note-badge"><i class="fa-solid fa-user"></i> Espace Client</span>
+        <div class="client-note-meta-left">
+          <span class="client-note-badge"><i class="fa-solid fa-user"></i> Espace Client</span>
+          <span class="client-note-status-badge ${status.class}">${status.label}</span>
+        </div>
         <span class="client-note-date">${date}</span>
       </div>
       <div class="client-note-content">${escapeHtml(item.content || '')}</div>
+      ${canModerate && isPending ? `
+      <div class="client-note-actions">
+        <button class="client-note-accept" title="Accepter"><i class="fa-solid fa-check"></i> Accepter</button>
+        <button class="client-note-reject" title="Refuser"><i class="fa-solid fa-xmark"></i> Refuser</button>
+      </div>` : ''}
     </div>`;
   }).join('');
+
+  if (!canModerate || !currentPageSite) return;
+  siteClientNotes.querySelectorAll('.client-note-accept').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.closest('.site-client-note-item').dataset.clientNoteId;
+      await updateClientNoteStatus(id, 'accepted');
+    });
+  });
+  siteClientNotes.querySelectorAll('.client-note-reject').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.closest('.site-client-note-item').dataset.clientNoteId;
+      await updateClientNoteStatus(id, 'rejected');
+    });
+  });
+}
+
+async function updateClientNoteStatus(noteId, status) {
+  if (!currentPageSite) return;
+  try {
+    await db.collection('sitesWeb').doc(currentPageSite.id).collection('history').doc(noteId).update({ status });
+    showToast(`Remarque ${status === 'accepted' ? 'acceptée' : 'refusée'}.`, 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('Erreur lors de la mise à jour du statut.', 'error');
+  }
 }
 
 sitesSearch.addEventListener('input', renderAllSites);
