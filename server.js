@@ -112,6 +112,44 @@ app.options('/api/chat', chatCors, (req, res) => {
 app.options('/api/*', allowedOriginsCors);
 app.options('/notify/email', cors({ origin: '*', credentials: false }));
 
+// Public endpoint for client space: list sites linked to a client by its clientId
+app.get('/api/public/client/:clientId/sites', async (req, res) => {
+  console.log('[Public API] Incoming request:', req.method, req.path, '| params:', req.params, '| origin:', req.headers.origin);
+  try {
+    const { clientId } = req.params;
+    console.log('[Public API] Looking up client with clientId:', clientId);
+    const clientSnap = await db.collection('clients').where('clientId', '==', clientId).limit(1).get();
+    if (clientSnap.empty) {
+      console.log('[Public API] Client not found for clientId:', clientId);
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    console.log('[Public API] Client found, doc id:', clientSnap.docs[0].id);
+
+    const clientDoc = clientSnap.docs[0];
+    const sitesSnap = await db.collection('sitesWeb').where('clientId', '==', clientDoc.id).get();
+    const sites = [];
+    sitesSnap.forEach(doc => {
+      const data = doc.data();
+      sites.push({
+        id: doc.id,
+        domain: data.domain,
+        status: data.status,
+        expirationDate: data.expirationDate,
+        host: data.host,
+        server: data.server,
+        creationDate: data.creationDate,
+        clientName: data.clientName,
+        createdAt: data.createdAt
+      });
+    });
+    console.log('[Public API] Returning', sites.length, 'sites for clientId:', clientId);
+    res.json({ sites });
+  } catch (err) {
+    console.error('[Public API] Error fetching client sites:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Notification endpoint: authenticated, any role
 app.post('/notify/email', cors({ origin: true, credentials: true }), verifyAuth, async (req, res) => {
   try {
@@ -590,44 +628,6 @@ app.post('/api/chat', chatCors, async (req, res) => {
   } catch (err) {
     console.error('[CHAT] Fetch to HF failed:', err.message, err.stack);
     res.status(500).json({ error: 'Chatbot unavailable' });
-  }
-});
-
-// Public endpoint for client space: list sites linked to a client by its clientId
-app.get('/api/public/client/:clientId/sites', async (req, res) => {
-  console.log('[Public API] Incoming request:', req.method, req.path, '| params:', req.params, '| origin:', req.headers.origin);
-  try {
-    const { clientId } = req.params;
-    console.log('[Public API] Looking up client with clientId:', clientId);
-    const clientSnap = await db.collection('clients').where('clientId', '==', clientId).limit(1).get();
-    if (clientSnap.empty) {
-      console.log('[Public API] Client not found for clientId:', clientId);
-      return res.status(404).json({ error: 'Client not found' });
-    }
-    console.log('[Public API] Client found, doc id:', clientSnap.docs[0].id);
-
-    const clientDoc = clientSnap.docs[0];
-    const sitesSnap = await db.collection('sitesWeb').where('clientId', '==', clientDoc.id).get();
-    const sites = [];
-    sitesSnap.forEach(doc => {
-      const data = doc.data();
-      sites.push({
-        id: doc.id,
-        domain: data.domain,
-        status: data.status,
-        expirationDate: data.expirationDate,
-        host: data.host,
-        server: data.server,
-        creationDate: data.creationDate,
-        clientName: data.clientName,
-        createdAt: data.createdAt
-      });
-    });
-    console.log('[Public API] Returning', sites.length, 'sites for clientId:', clientId);
-    res.json({ sites });
-  } catch (err) {
-    console.error('[Public API] Error fetching client sites:', err);
-    res.status(500).json({ error: err.message });
   }
 });
 
