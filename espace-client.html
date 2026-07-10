@@ -463,35 +463,569 @@
 
     .domaines-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 24px;
     }
 
     .domaine-card {
-      background: var(--panel);
+      position: relative;
+      background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
+      border-radius: 16px;
+      padding: 0;
+      overflow: hidden;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
       display: flex;
-      align-items: center;
-      gap: 16px;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      flex-direction: column;
+    }
+
+    .domaine-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--status-color, var(--primary));
+      opacity: 0.8;
     }
 
     .domaine-card:hover {
-      border-color: var(--primary);
-      box-shadow: 0 2px 8px rgba(67, 97, 238, 0.08);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
     }
 
-    .domaine-card i {
-      font-size: 1.4rem;
+    .domaine-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 20px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+    }
+
+    .domaine-card-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .domaine-card-title i {
+      font-size: 1.6rem;
+      color: var(--text);
+      flex-shrink: 0;
+    }
+
+    .domaine-card-title .domaine-name {
+      font-weight: 600;
+      font-size: 1.05rem;
+      word-break: break-all;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .domaine-card-body {
+      padding: 16px 20px;
+      flex: 1;
+    }
+
+    .domaine-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .domaine-meta-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--panel);
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .domaine-card-footer {
+      display: flex;
+      gap: 10px;
+      padding: 14px 20px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    .domaine-card-footer .btn,
+    .domaine-card-footer button.btn {
+      flex: 1;
+      justify-content: center;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      transition: all 0.2s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+      font-family: inherit;
+      box-shadow: none;
+    }
+
+    .domaine-card-footer .btn:hover,
+    .domaine-card-footer button.btn:hover {
+      border-color: var(--text);
+      background: var(--text);
+      color: var(--bg);
+      transform: translateY(-1px);
+    }
+
+    .domaine-card-footer .btn-primary,
+    .domaine-card-footer button.btn-primary {
+      border-color: var(--primary);
+      background: linear-gradient(135deg, var(--primary), #5b6bf5);
+      color: white;
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.25);
+    }
+
+    .domaine-card-footer .btn-primary:hover,
+    .domaine-card-footer button.btn-primary:hover {
+      background: linear-gradient(135deg, #3651d7, #4f5ee6);
+      box-shadow: 0 6px 16px rgba(67, 97, 238, 0.35);
+      transform: translateY(-2px);
+    }
+
+    .site-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+
+    .site-status-actif { background: rgba(16,185,129,0.12); color: #059669; }
+    .site-status-suspendu { background: rgba(245,158,11,0.12); color: #d97706; }
+    .site-status-en-maintenance { background: rgba(99,102,241,0.12); color: #4f46e5; }
+    .site-status-expiré { background: rgba(239,68,68,0.12); color: #dc2626; }
+    .site-status-bientôt-expiré { background: rgba(249,115,22,0.12); color: #ea580c; }
+    .site-status-en-attente { background: rgba(148,163,184,0.12); color: #475569; }
+
+    /* Notes card */
+    .note-form {
+      margin-bottom: 20px;
+    }
+
+    .note-label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+
+    .note-input-wrapper {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .note-textarea {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      resize: vertical;
+      outline: none;
+      min-height: 90px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .note-textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+    }
+
+    .note-textarea::placeholder {
+      color: var(--muted);
+      opacity: 0.7;
+    }
+
+    .note-submit {
+      align-self: flex-end;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      background: linear-gradient(135deg, var(--primary), #5b6bf5);
+      color: white;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+      font-family: inherit;
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.25);
+    }
+
+    .note-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(67, 97, 238, 0.35);
+    }
+
+    .note-message {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      min-height: 1.2em;
+      font-weight: 500;
+    }
+
+    .note-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 20px 0;
+    }
+
+    .note-list-container {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .note-empty {
+      text-align: center;
+      padding: 32px 20px;
+      color: var(--muted);
+    }
+
+    .note-empty i {
+      font-size: 2rem;
+      color: var(--border);
+      margin-bottom: 12px;
+    }
+
+    .note-empty p {
+      margin: 0 0 6px 0;
+      font-weight: 500;
       color: var(--text);
     }
 
-    .domaine-card .domaine-name {
+    .note-empty span {
+      font-size: 0.8rem;
+    }
+
+    .note-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .note-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .note-card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      transform: translateY(-1px);
+    }
+
+    .client-note {
+      border-left: 3px solid var(--primary);
+    }
+
+    .note-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .note-card-author {
+      font-size: 0.8rem;
       font-weight: 600;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .note-card-date {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .note-card-content {
+      font-size: 0.9rem;
+      color: var(--text);
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .site-info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .site-info-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .site-info-card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      transform: translateY(-1px);
+    }
+
+    .site-info-card-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: rgba(67, 97, 238, 0.1);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 0.95rem;
+    }
+
+    .site-info-card-content {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .site-info-card-label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 500;
+    }
+
+    .site-info-card-value {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-word;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 768px) {
+      .site-info-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .btn-back {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-back:hover {
+      background: var(--panel);
+      border-color: var(--text);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 16px;
+    }
+
+    .section-header h1 {
+      flex: 1;
+    }
+
+    .site-detail-grid,
+    .renewal-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 12px;
+    }
+
+    .detail-panel,
+    .renewal-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .detail-panel.full-width {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+
+    .detail-panel h2,
+    .renewal-panel h2 {
       font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 16px 0;
+    }
+
+    .detail-info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+
+    .detail-info-row:last-child {
+      border-bottom: none;
+    }
+
+    .detail-info-label {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .renewal-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .renewal-header i {
+      font-size: 2rem;
+      color: var(--primary);
+    }
+
+    .renewal-header .renewal-domain {
+      font-size: 1.4rem;
+      font-weight: 600;
       word-break: break-all;
+    }
+
+    .renewal-warning {
+      background: rgba(245,158,11,0.1);
+      border: 1px solid #f59e0b;
+      border-radius: 12px;
+      padding: 16px 20px;
+      color: #b45309;
+      font-weight: 500;
+      margin-bottom: 24px;
+    }
+
+    .renewal-info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .renewal-info-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .renewal-info-item .label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .renewal-info-item .value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .renewal-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .renewal-card h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0 0 16px 0;
+    }
+
+    .renewal-reason {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .renewal-reason:last-child {
+      border-bottom: none;
+    }
+
+    .renewal-reason i {
+      font-size: 1.1rem;
+      color: var(--primary);
+      margin-top: 2px;
+    }
+
+    .renewal-reason p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text);
+      line-height: 1.5;
     }
 
     @media (max-width: 768px) {
@@ -617,6 +1151,28 @@
               <p>Des frais peuvent s'appliquer selon votre opérateur (tarif d'un appel standard + coût éventuel lié à votre forfait).</p>
               <a href="tel:+33776691606">+33 7 76 69 16 06</a>
             </div>
+          </div>
+        </section>
+
+        <!-- Détail d'un domaine -->
+        <section class="section-page" id="section-site-detail">
+          <div class="section-header">
+            <button class="btn-back" id="site-detail-back"><i class="fa-solid fa-arrow-left"></i> Retour</button>
+            <h1 id="site-detail-title">Détail du domaine</h1>
+          </div>
+          <div id="site-detail-content">
+            <!-- Filled by JS -->
+          </div>
+        </section>
+
+        <!-- Renouvellement d'un domaine -->
+        <section class="section-page" id="section-renouveler">
+          <div class="section-header">
+            <button class="btn-back" id="renewal-back"><i class="fa-solid fa-arrow-left"></i> Retour</button>
+            <h1 id="renewal-title">Renouveler mon domaine</h1>
+          </div>
+          <div id="renewal-content">
+            <!-- Filled by JS -->
           </div>
         </section>
       </div>

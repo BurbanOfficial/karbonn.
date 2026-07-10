@@ -128,8 +128,20 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
     const clientDoc = clientSnap.docs[0];
     const sitesSnap = await db.collection('sitesWeb').where('clientId', '==', clientDoc.id).get();
     const sites = [];
-    sitesSnap.forEach(doc => {
+    for (const doc of sitesSnap.docs) {
       const data = doc.data();
+      const historySnap = await db.collection('sitesWeb').doc(doc.id).collection('history').orderBy('createdAt', 'desc').get();
+      const history = [];
+      historySnap.forEach(h => {
+        const item = h.data();
+        history.push({
+          id: h.id,
+          type: item.type,
+          content: item.content,
+          createdByName: item.createdByName,
+          createdAt: item.createdAt ? item.createdAt.toDate().toISOString() : null
+        });
+      });
       sites.push({
         id: doc.id,
         domain: data.domain,
@@ -139,13 +151,49 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
         server: data.server,
         creationDate: data.creationDate,
         clientName: data.clientName,
-        createdAt: data.createdAt
+        createdAt: data.createdAt,
+        history
       });
-    });
+    }
     console.log('[Public API] Returning', sites.length, 'sites for clientId:', clientId);
     res.json({ sites });
   } catch (err) {
     console.error('[Public API] Error fetching client sites:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public endpoint for client space: add a note to a site's history
+app.post('/api/public/sites/:siteId/notes', async (req, res) => {
+  console.log('[Public API] Add note request:', req.method, req.path, '| siteId:', req.params.siteId);
+  try {
+    const { siteId } = req.params;
+    const { content } = req.body || {};
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'Missing note content' });
+    }
+
+    const noteRef = db.collection('sitesWeb').doc(siteId).collection('history').doc();
+    const note = {
+      type: 'note',
+      content: content.trim(),
+      createdByName: 'Espace Client',
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    await noteRef.set(note);
+
+    res.json({
+      success: true,
+      note: {
+        id: noteRef.id,
+        type: note.type,
+        content: note.content,
+        createdByName: note.createdByName,
+        createdAt: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    console.error('[Public API] Error adding site note:', err);
     res.status(500).json({ error: err.message });
   }
 });

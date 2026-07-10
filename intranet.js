@@ -740,6 +740,7 @@ const sitePageTitle = document.getElementById('site-page-title');
 const sitePageDomain = document.getElementById('site-page-domain');
 const sitePageInfo = document.getElementById('site-page-info');
 const siteHistoryList = document.getElementById('site-history-list');
+const siteClientNotes = document.getElementById('site-client-notes');
 
 const siteModal = document.getElementById('site-modal');
 const siteModalClose = document.getElementById('site-modal-close');
@@ -865,17 +866,18 @@ function openSitePage(site, loadHistory = true) {
   }).join('');
 
   const fields = [
-    { key: 'domain', label: 'Nom de domaine', value: site.domain || '', type: 'text' },
-    { key: 'expirationDate', label: "Date d'expiration", value: site.expirationDate || '', type: 'date', display: site.expirationDate ? new Date(site.expirationDate).toLocaleDateString('fr-FR') : '—' },
-    { key: 'creationDate', label: 'Date de création', value: site.creationDate || '', type: 'date', display: site.creationDate ? new Date(site.creationDate).toLocaleDateString('fr-FR') : '—' },
-    { key: 'host', label: 'Hébergeur', value: site.host || '', type: 'text' },
-    { key: 'server', label: 'Serveur', value: site.server || '', type: 'text' },
+    { key: 'domain', label: 'Nom de domaine', icon: 'fa-globe', value: site.domain || '', type: 'text' },
+    { key: 'expirationDate', label: "Date d'expiration", icon: 'fa-calendar-xmark', value: site.expirationDate || '', type: 'date', display: site.expirationDate ? new Date(site.expirationDate).toLocaleDateString('fr-FR') : '—' },
+    { key: 'creationDate', label: 'Date de création', icon: 'fa-calendar-plus', value: site.creationDate || '', type: 'date', display: site.creationDate ? new Date(site.creationDate).toLocaleDateString('fr-FR') : '—' },
+    { key: 'host', label: 'Hébergeur', icon: 'fa-server', value: site.host || '', type: 'text' },
+    { key: 'server', label: 'Serveur', icon: 'fa-network-wired', value: site.server || '', type: 'text' },
   ];
 
   let html = '';
   fields.forEach(f => {
     const displayVal = f.display || f.value || '—';
-    html += `<div class="detail-info-item-editable" data-field="${f.key}">
+    html += `<div class="detail-info-item-editable site-info-item" data-field="${f.key}">
+      <div class="site-info-icon"><i class="fa-solid ${f.icon}"></i></div>
       <div class="detail-info-content">
         <span class="detail-info-label">${f.label}</span>
         <span class="detail-info-value">${escapeHtml(displayVal)}</span>
@@ -885,7 +887,8 @@ function openSitePage(site, loadHistory = true) {
     </div>`;
   });
 
-  html += `<div class="detail-info-item-editable" data-field="clientId">
+  html += `<div class="detail-info-item-editable site-info-item" data-field="clientId">
+    <div class="site-info-icon"><i class="fa-solid fa-user"></i></div>
     <div class="detail-info-content">
       <span class="detail-info-label">Client</span>
       <span class="detail-info-value">${escapeHtml(site.clientName || '—')}</span>
@@ -897,7 +900,8 @@ function openSitePage(site, loadHistory = true) {
     ${canEdit ? `<button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>` : ''}
   </div>`;
 
-  html += `<div class="detail-info-item-editable" data-field="status">
+  html += `<div class="detail-info-item-editable site-info-item" data-field="status">
+    <div class="site-info-icon"><i class="fa-solid fa-signal"></i></div>
     <div class="detail-info-content">
       <span class="detail-info-label">Statut</span>
       <span class="detail-info-value"><span class="site-status-badge ${getSiteStatusClass(getEffectiveSiteStatus(site))}">${getEffectiveSiteStatus(site)}</span></span>
@@ -1130,7 +1134,10 @@ function loadSiteHistory(siteId) {
   unsubscribeSiteHistory = db.collection('sitesWeb').doc(siteId).collection('history').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
     const items = [];
     snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
-    renderSiteHistory(items);
+    const clientNotes = items.filter(i => i.type === 'note' && i.createdByName === 'Espace Client');
+    const historyItems = items.filter(i => !(i.type === 'note' && i.createdByName === 'Espace Client'));
+    renderSiteHistory(historyItems);
+    renderClientNotes(clientNotes);
   });
 }
 
@@ -1189,6 +1196,24 @@ function renderSiteHistory(items) {
       });
     });
   }
+}
+
+function renderClientNotes(notes) {
+  if (!siteClientNotes) return;
+  if (!notes.length) {
+    siteClientNotes.innerHTML = '<p class="empty-history">Aucune remarque client.</p>';
+    return;
+  }
+  siteClientNotes.innerHTML = notes.map(item => {
+    const date = item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleString('fr-FR') : '—';
+    return `<div class="site-client-note-item">
+      <div class="client-note-meta">
+        <span class="client-note-badge"><i class="fa-solid fa-user"></i> Espace Client</span>
+        <span class="client-note-date">${date}</span>
+      </div>
+      <div class="client-note-content">${escapeHtml(item.content || '')}</div>
+    </div>`;
+  }).join('');
 }
 
 sitesSearch.addEventListener('input', renderAllSites);

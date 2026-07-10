@@ -2371,6 +2371,64 @@
       padding: 20px;
     }
 
+    .site-client-notes-section {
+      grid-column: 1 / -1;
+    }
+
+    .site-client-notes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 360px;
+      overflow-y: auto;
+    }
+
+    .site-client-note-item {
+      background: linear-gradient(135deg, rgba(67, 97, 238, 0.06), rgba(67, 97, 238, 0.02));
+      border: 1px solid rgba(67, 97, 238, 0.18);
+      border-radius: 12px;
+      padding: 16px;
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .site-client-note-item:hover {
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.1);
+      transform: translateY(-1px);
+    }
+
+    .client-note-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .client-note-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(67, 97, 238, 0.1);
+      color: var(--primary);
+    }
+
+    .client-note-date {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .client-note-content {
+      font-size: 0.88rem;
+      color: var(--text);
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
     .site-status-badge {
       display: inline-flex;
       align-items: center;
@@ -2386,6 +2444,72 @@
     .site-status-en-maintenance { background: rgba(99,102,241,0.1); color: #6366f1; }
     .site-status-expiré { background: rgba(239,68,68,0.1); color: #ef4444; }
     .site-status-en-attente { background: rgba(148,163,184,0.1); color: #64748b; }
+
+    #site-page-info {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    #site-page-info .site-info-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    #site-page-info .site-info-item:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      transform: translateY(-1px);
+    }
+
+    .site-info-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: rgba(67, 97, 238, 0.1);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 0.95rem;
+    }
+
+    #site-page-info .site-info-item .detail-info-content {
+      flex: 1;
+      min-width: 0;
+      gap: 6px;
+    }
+
+    #site-page-info .detail-info-label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    #site-page-info .detail-info-value {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-word;
+      line-height: 1.4;
+    }
+
+    #site-page-info .detail-field-input {
+      margin-top: 4px;
+    }
+
+    @media (max-width: 768px) {
+      #site-page-info {
+        grid-template-columns: 1fr;
+      }
+    }
 
     .detail-info-item-editable {
       display: flex;
@@ -3195,6 +3319,13 @@
                 </button>
                 <div class="site-history-list" id="site-history-list">
                   <p class="empty-history">Aucune modification enregistrée.</p>
+                </div>
+              </div>
+
+              <div class="detail-section site-client-notes-section">
+                <div class="detail-section-title"><i class="fa-regular fa-comment-dots"></i> Remarques client</div>
+                <div class="site-client-notes-list" id="site-client-notes">
+                  <p class="empty-history">Aucune remarque client.</p>
                 </div>
               </div>
             </div>
