@@ -593,6 +593,37 @@ app.post('/api/chat', chatCors, async (req, res) => {
   }
 });
 
+// Public endpoint for client space: list sites linked to a client by its clientId
+app.get('/api/public/client/:clientId/sites', async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const clientSnap = await db.collection('clients').where('clientId', '==', clientId).limit(1).get();
+    if (clientSnap.empty) return res.status(404).json({ error: 'Client not found' });
+
+    const clientDoc = clientSnap.docs[0];
+    const sitesSnap = await db.collection('sitesWeb').where('clientId', '==', clientDoc.id).get();
+    const sites = [];
+    sitesSnap.forEach(doc => {
+      const data = doc.data();
+      sites.push({
+        id: doc.id,
+        domain: data.domain,
+        status: data.status,
+        expirationDate: data.expirationDate,
+        host: data.host,
+        server: data.server,
+        creationDate: data.creationDate,
+        clientName: data.clientName,
+        createdAt: data.createdAt
+      });
+    });
+    res.json({ sites });
+  } catch (err) {
+    console.error('[Public API] Error fetching client sites:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: err.message || 'Internal server error' });

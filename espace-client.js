@@ -42,13 +42,57 @@ loginForm.addEventListener('submit', async e => {
   }
 });
 
-function showApp(client) {
+const domainesListEl = document.getElementById('domaines-list');
+
+function renderDomaines(sites) {
+  if (!domainesListEl) return;
+  if (!sites.length) {
+    domainesListEl.innerHTML = `
+      <div class="placeholder">
+        <i class="fa-solid fa-globe fa-2x"></i>
+        <p>Aucun nom de domaine associé à votre compte.</p>
+      </div>`;
+    return;
+  }
+  domainesListEl.innerHTML = `<div class="domaines-grid">
+    ${sites.map(site => {
+      const domain = typeof site === 'string' ? site : (site.domain || '—');
+      const status = site.status || '—';
+      const expiration = site.expirationDate ? new Date(site.expirationDate).toLocaleDateString('fr-FR') : '—';
+      return `
+        <div class="domaine-card">
+          <i class="fa-solid fa-globe"></i>
+          <div>
+            <div class="domaine-name">${domain}</div>
+            <div style="font-size:0.8rem;color:var(--muted);margin-top:4px;">Statut : ${status}</div>
+            <div style="font-size:0.8rem;color:var(--muted);">Expiration : ${expiration}</div>
+          </div>
+        </div>
+      `;
+    }).join('')}
+  </div>`;
+}
+
+async function showApp(client) {
   loginScreen.classList.add('hidden');
   appContent.classList.remove('hidden');
 
   const name = [client.prenom, client.nom].filter(Boolean).join(' ') || 'Client';
   if (clientNameEl) clientNameEl.textContent = name;
   if (clientBadgeEl) clientBadgeEl.textContent = client.clientId;
+
+  try {
+    const res = await fetch(`/api/public/client/${client.clientId}/sites`);
+    if (res.ok) {
+      const data = await res.json();
+      renderDomaines(data.sites || []);
+    } else {
+      renderDomaines(client.sites || []);
+    }
+  } catch (err) {
+    console.warn('[Client] Failed to load sites from API:', err);
+    renderDomaines(client.sites || []);
+  }
 }
 
 function logout() {
@@ -62,6 +106,35 @@ function logout() {
 }
 
 document.getElementById('logout-btn').addEventListener('click', logout);
+
+const navLogout = document.getElementById('nav-logout');
+if (navLogout) navLogout.addEventListener('click', e => { e.preventDefault(); logout(); });
+
+// Navigation
+const navItems = document.querySelectorAll('.nav-item');
+const sections = document.querySelectorAll('.section-page');
+const sectionMap = [
+  'section-domaines',
+  'section-factures',
+  'section-support'
+];
+
+navItems.forEach((item, index) => {
+  item.addEventListener('click', e => {
+    e.preventDefault();
+    if (item.id === 'nav-logout') return;
+
+    const sectionId = sectionMap[index];
+    if (!sectionId) return;
+
+    navItems.forEach(i => i.classList.remove('active'));
+    sections.forEach(s => s.classList.remove('active'));
+
+    item.classList.add('active');
+    const target = document.getElementById(sectionId);
+    if (target) target.classList.add('active');
+  });
+});
 
 // Auto-format input as user types (KRB-XXX-XXX)
 loginIdInput.addEventListener('input', () => {
