@@ -2255,21 +2255,97 @@
       font-weight: 700;
     }
 
-    .projet-page-grid {
+    .projet-page-grid,
+    .site-page-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 32px;
     }
 
-    .projet-page-grid .detail-section:last-child {
+    .projet-page-grid .detail-section:last-child,
+    .site-page-grid .detail-section:last-child {
       grid-column: 1 / -1;
     }
 
     @media (max-width: 768px) {
-      .projet-page-grid {
+      .projet-page-grid,
+      .site-page-grid {
         grid-template-columns: 1fr;
       }
     }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .form-row .form-group { margin-bottom: 0; }
+
+    .form-step-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .site-history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 420px;
+      overflow-y: auto;
+    }
+
+    .site-history-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.85rem;
+    }
+
+    .site-history-item .history-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.75rem;
+      margin-bottom: 6px;
+    }
+
+    .site-history-item .history-content {
+      color: var(--text);
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+
+    .empty-history {
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-align: center;
+      padding: 20px;
+    }
+
+    .site-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+
+    .site-status-actif { background: rgba(16,185,129,0.1); color: #10b981; }
+    .site-status-suspendu { background: rgba(245,158,11,0.1); color: #f59e0b; }
+    .site-status-en-maintenance { background: rgba(99,102,241,0.1); color: #6366f1; }
+    .site-status-expiré { background: rgba(239,68,68,0.1); color: #ef4444; }
+    .site-status-en-attente { background: rgba(148,163,184,0.1); color: #64748b; }
 
     .detail-info-item-editable {
       display: flex;
@@ -2677,9 +2753,6 @@
         <a href="#" class="nav-item" data-label="Clients">
           <i class="fa-solid fa-users"></i>
         </a>
-        <a href="#" class="nav-item" data-label="Pipeline Commercial">
-          <i class="fa-solid fa-filter-circle-dollar"></i>
-        </a>
         <a href="#" class="nav-item" data-label="Tâches & Planning">
           <i class="fa-solid fa-list-check"></i>
         </a>
@@ -2688,6 +2761,9 @@
         </a>
         <a href="#" class="nav-item" data-label="Projets & Services">
           <i class="fa-solid fa-diagram-project"></i>
+        </a>
+        <a href="#" class="nav-item" data-label="Sites Web">
+          <i class="fa-solid fa-globe"></i>
         </a>
         <a href="#" class="nav-item" data-label="Équipe">
           <i class="fa-solid fa-people-group"></i>
@@ -2809,14 +2885,6 @@
                 </tr>
               </tbody>
             </table>
-          </div>
-        </section>
-
-        <!-- Pipeline Commercial -->
-        <section class="section-page" id="section-pipeline">
-          <div class="placeholder">
-            <i class="fa-solid fa-filter-circle-dollar fa-2x"></i>
-            <p>Pipeline Commercial — à venir.</p>
           </div>
         </section>
 
@@ -3033,6 +3101,76 @@
           </div>
         </section>
 
+
+        <!-- Sites Web -->
+        <section class="section-page" id="section-sitesweb">
+          <!-- Liste des sites -->
+          <div id="sites-list-view">
+            <div class="section-header">
+              <div class="section-header-left">
+                <h1>Sites Web</h1>
+                <div class="search-bar">
+                  <i class="fa-solid fa-magnifying-glass"></i>
+                  <input type="text" id="sites-search" placeholder="Rechercher un site web..." />
+                </div>
+              </div>
+              <button class="btn-create" id="create-site-btn">
+                <i class="fa-solid fa-plus"></i> Ajouter un site Web
+              </button>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="data-table" id="sites-table">
+                <thead>
+                  <tr>
+                    <th>Nom de domaine</th>
+                    <th>Client</th>
+                    <th>Identifiant client</th>
+                    <th>Statut</th>
+                    <th>Expiration</th>
+                  </tr>
+                </thead>
+                <tbody id="sites-tbody">
+                  <tr class="empty-row">
+                    <td colspan="5">Chargement des sites Web...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Page détail d'un site -->
+          <div id="site-page-view" style="display:none;">
+            <div class="section-header">
+              <div class="section-header-left">
+                <button class="btn-back-projet" id="site-back-btn"><i class="fa-solid fa-arrow-left"></i> Retour aux sites</button>
+              </div>
+              <button class="btn-delete-projet" id="btn-delete-site" style="width:auto;padding:10px 20px;margin-top:0;"><i class="fa-solid fa-trash"></i> Supprimer</button>
+            </div>
+
+            <div class="projet-page-header">
+              <h1 id="site-page-title">—</h1>
+              <span class="detail-client-id" id="site-page-domain">—</span>
+            </div>
+
+            <div class="site-page-grid">
+              <div class="detail-section">
+                <div class="detail-section-title">Informations générales</div>
+                <div class="detail-info-grid" id="site-page-info"></div>
+              </div>
+
+              <div class="detail-section">
+                <div class="detail-section-title">Historique des modifications</div>
+                <button class="btn-create" id="btn-add-site-note" style="margin-bottom:14px;">
+                  <i class="fa-solid fa-plus"></i> Ajouter une note
+                </button>
+                <div class="site-history-list" id="site-history-list">
+                  <p class="empty-history">Aucune modification enregistrée.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <!-- Équipe -->
         <!-- Équipe -->
@@ -3295,6 +3433,72 @@
         <div class="modal-actions">
           <span></span>
           <button type="submit" class="btn-submit">Créer le projet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal - Créer un site Web -->
+  <div class="modal-overlay" id="site-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Ajouter un site Web</h2>
+        <button class="modal-close" id="site-modal-close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form class="modal-form" id="form-site">
+        <div class="form-steps">
+          <div class="form-step active" data-step="1">
+            <div class="form-step-title">Informations générales</div>
+            <div class="form-group">
+              <label for="site-client">Client *</label>
+              <select id="site-client" name="clientId" required>
+                <option value="">Sélectionner un client...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="site-client-id-display">Identifiant client</label>
+              <input type="text" id="site-client-id-display" readonly />
+            </div>
+            <div class="form-group">
+              <label for="site-domain">Nom de domaine *</label>
+              <input type="text" id="site-domain" name="domain" placeholder="example.com" required />
+            </div>
+            <div class="form-group">
+              <label for="site-status">Statut *</label>
+              <select id="site-status" name="status" required>
+                <option value="Actif">Actif</option>
+                <option value="Suspendu">Suspendu</option>
+                <option value="En maintenance">En maintenance</option>
+                <option value="Expiré">Expiré</option>
+                <option value="En attente">En attente</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="site-creation-date">Date de création</label>
+                <input type="date" id="site-creation-date" name="creationDate" />
+              </div>
+              <div class="form-group">
+                <label for="site-expiration-date">Date d'expiration *</label>
+                <input type="date" id="site-expiration-date" name="expirationDate" required />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="site-host">Hébergeur</label>
+                <input type="text" id="site-host" name="host" placeholder="OVH, Infomaniak..." />
+              </div>
+              <div class="form-group">
+                <label for="site-server">Serveur</label>
+                <input type="text" id="site-server" name="server" placeholder="Nom du serveur / IP" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="modal-error" id="modal-error-site"></p>
+        <div class="modal-actions">
+          <span></span>
+          <button type="submit" class="btn-submit">Créer le site Web</button>
         </div>
       </form>
     </div>

@@ -562,6 +562,8 @@ auth.onAuthStateChanged(async user => {
   if (!user) {
     if (unsubscribeClients) { unsubscribeClients(); unsubscribeClients = null; }
     if (unsubscribeProjets) { unsubscribeProjets(); unsubscribeProjets = null; }
+    if (unsubscribeSites) { unsubscribeSites(); unsubscribeSites = null; }
+    if (unsubscribeSiteHistory) { unsubscribeSiteHistory(); unsubscribeSiteHistory = null; }
     if (unsubscribeUsers) { unsubscribeUsers(); unsubscribeUsers = null; }
     if (unsubscribeActivity) { unsubscribeActivity(); unsubscribeActivity = null; }
     showLogin();
@@ -574,6 +576,7 @@ auth.onAuthStateChanged(async user => {
     showApp(user, profile);
     setupClientsListener();
     setupProjetsListener();
+    setupSitesListener();
     setupUsersListener();
     setupActivityListener();
 
@@ -721,16 +724,416 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
   _setLoginStep('email');
 });
 
+// ═══════════════════════════════════════════════════════════════
+// Sites Web
+// ═══════════════════════════════════════════════════════════════
+let allSites = [];
+let unsubscribeSites = null;
+let currentPageSite = null;
+let unsubscribeSiteHistory = null;
+
+const sitesListView = document.getElementById('sites-list-view');
+const sitePageView = document.getElementById('site-page-view');
+const sitesTbody = document.getElementById('sites-tbody');
+const sitesSearch = document.getElementById('sites-search');
+const sitePageTitle = document.getElementById('site-page-title');
+const sitePageDomain = document.getElementById('site-page-domain');
+const sitePageInfo = document.getElementById('site-page-info');
+const siteHistoryList = document.getElementById('site-history-list');
+
+const siteModal = document.getElementById('site-modal');
+const siteModalClose = document.getElementById('site-modal-close');
+const formSite = document.getElementById('form-site');
+const siteClientSelect = document.getElementById('site-client');
+const siteClientIdDisplay = document.getElementById('site-client-id-display');
+
+const SITE_STATUSES = ['Actif','Suspendu','En maintenance','Expiré','En attente'];
+
+function getSiteStatusClass(status) {
+  const key = (status || 'En attente').toLowerCase().replace(/\s+/g, '-');
+  return `site-status-${key}`;
+}
+
+function getEffectiveSiteStatus(site) {
+  if (!site) return 'En attente';
+  if (site.status === 'Expiré' || site.status === 'Suspendu' || site.status === 'En maintenance') return site.status;
+  if (site.expirationDate) {
+    const exp = new Date(site.expirationDate);
+    const now = new Date();
+    now.setHours(0,0,0,0);
+    exp.setHours(23,59,59,999);
+    if (exp < now) return 'Expiré';
+  }
+  return site.status || 'En attente';
+}
+
+function autoUpdateExpiredSites() {
+  allSites.forEach(site => {
+    if ((site.status === 'Actif' || site.status === 'En attente') && site.expirationDate) {
+      const exp = new Date(site.expirationDate);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      exp.setHours(23, 59, 59, 999);
+      if (exp < now) {
+        db.collection('sitesWeb').doc(site.id).update({ status: 'Expiré' }).catch(err => console.warn('[Sites] Auto-update failed:', err));
+      }
+    }
+  });
+}
+
+function setupSitesListener() {
+  if (unsubscribeSites) unsubscribeSites();
+  unsubscribeSites = db.collection('sitesWeb').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+    allSites = [];
+    snapshot.forEach(doc => allSites.push({ id: doc.id, ...doc.data() }));
+    renderAllSites();
+    autoUpdateExpiredSites();
+    if (currentPageSite) {
+      const updated = allSites.find(s => s.id === currentPageSite.id);
+      if (updated) {
+        currentPageSite = updated;
+        openSitePage(updated, false);
+      }
+    }
+  }, err => {
+    console.error(err);
+    sitesTbody.innerHTML = '<tr class="empty-row"><td colspan="5">Erreur lors du chargement.</td></tr>';
+  });
+}
+
+function renderAllSites() {
+  const query = (sitesSearch.value || '').toLowerCase().trim();
+  let filtered = allSites;
+  if (query) {
+    filtered = allSites.filter(s => {
+      const domain = (s.domain || '').toLowerCase();
+      const clientName = (s.clientName || '').toLowerCase();
+      return domain.includes(query) || clientName.includes(query);
+    });
+  }
+  renderSites(filtered);
+}
+
+function renderSites(sites) {
+  if (sites.length === 0) {
+    sitesTbody.innerHTML = '<tr class="empty-row"><td colspan="5">Aucun site Web trouvé.</td></tr>';
+    return;
+  }
+  sitesTbody.innerHTML = sites.map(s => {
+    const domain = s.domain || '—';
+    const clientName = s.clientName || '—';
+    const clientId = s.clientIdDisplay || s.clientId || '—';
+    const status = getEffectiveSiteStatus(s);
+    const statusClass = getSiteStatusClass(status);
+    const expiration = s.expirationDate ? new Date(s.expirationDate).toLocaleDateString('fr-FR') : '—';
+    return `<tr data-site-id="${s.id}">
+      <td>${escapeHtml(domain)}</td>
+      <td>${escapeHtml(clientName)}</td>
+      <td>${escapeHtml(clientId)}</td>
+      <td><span class="site-status-badge ${statusClass}">${status}</span></td>
+      <td>${expiration}</td>
+    </tr>`;
+  }).join('');
+
+  sitesTbody.querySelectorAll('tr[data-site-id]').forEach(row => {
+    row.addEventListener('click', () => {
+      const site = allSites.find(s => s.id === row.dataset.siteId);
+      if (site) openSitePage(site);
+    });
+  });
+}
+
+function openSitePage(site, loadHistory = true) {
+  currentPageSite = site;
+  sitesListView.style.display = 'none';
+  sitePageView.style.display = '';
+  sitePageTitle.textContent = site.domain || 'Site Web';
+  sitePageDomain.textContent = site.domain || '—';
+
+  const canEdit = isManager();
+
+  const clientOptions = allClients.map(c => {
+    const cName = c.entreprise ? `${[c.prenom, c.nom].filter(Boolean).join(' ')} — ${c.entreprise}` : [c.prenom, c.nom].filter(Boolean).join(' ');
+    const selected = c.id === site.clientId ? 'selected' : '';
+    return `<option value="${c.id}" ${selected}>${escapeHtml(cName)}</option>`;
+  }).join('');
+
+  const statusOptions = SITE_STATUSES.map(st => {
+    const selected = st === site.status ? 'selected' : '';
+    return `<option value="${st}" ${selected}>${st}</option>`;
+  }).join('');
+
+  const fields = [
+    { key: 'domain', label: 'Nom de domaine', value: site.domain || '', type: 'text' },
+    { key: 'expirationDate', label: "Date d'expiration", value: site.expirationDate || '', type: 'date', display: site.expirationDate ? new Date(site.expirationDate).toLocaleDateString('fr-FR') : '—' },
+    { key: 'creationDate', label: 'Date de création', value: site.creationDate || '', type: 'date', display: site.creationDate ? new Date(site.creationDate).toLocaleDateString('fr-FR') : '—' },
+    { key: 'host', label: 'Hébergeur', value: site.host || '', type: 'text' },
+    { key: 'server', label: 'Serveur', value: site.server || '', type: 'text' },
+  ];
+
+  let html = '';
+  fields.forEach(f => {
+    const displayVal = f.display || f.value || '—';
+    html += `<div class="detail-info-item-editable" data-field="${f.key}">
+      <div class="detail-info-content">
+        <span class="detail-info-label">${f.label}</span>
+        <span class="detail-info-value">${escapeHtml(displayVal)}</span>
+        <input class="detail-field-input" type="${f.type}" value="${f.value}" />
+      </div>
+      ${canEdit ? `<button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>` : ''}
+    </div>`;
+  });
+
+  html += `<div class="detail-info-item-editable" data-field="clientId">
+    <div class="detail-info-content">
+      <span class="detail-info-label">Client</span>
+      <span class="detail-info-value">${escapeHtml(site.clientName || '—')}</span>
+      <select class="detail-field-input" id="site-page-client-select">
+        <option value="">— Sélectionner —</option>
+        ${clientOptions}
+      </select>
+    </div>
+    ${canEdit ? `<button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>` : ''}
+  </div>`;
+
+  html += `<div class="detail-info-item-editable" data-field="status">
+    <div class="detail-info-content">
+      <span class="detail-info-label">Statut</span>
+      <span class="detail-info-value"><span class="site-status-badge ${getSiteStatusClass(getEffectiveSiteStatus(site))}">${getEffectiveSiteStatus(site)}</span></span>
+      <select class="detail-field-input" id="site-page-status-select">
+        ${statusOptions}
+      </select>
+    </div>
+    ${canEdit ? `<button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>` : ''}
+  </div>`;
+
+  sitePageInfo.innerHTML = html;
+
+  if (canEdit) {
+    sitePageInfo.querySelectorAll('.detail-info-item-editable').forEach(item => {
+      const editBtn = item.querySelector('.detail-field-edit');
+      const input = item.querySelector('.detail-field-input');
+      if (!editBtn) return;
+      editBtn.addEventListener('click', async () => {
+        if (item.classList.contains('editing')) {
+          const key = item.dataset.field;
+          try {
+            let update = {};
+            let historyNote = null;
+            if (key === 'clientId') {
+              const select = item.querySelector('select');
+              const newClientId = select.value;
+              const selectedClient = allClients.find(c => c.id === newClientId);
+              const newClientName = selectedClient ? (selectedClient.entreprise ? `${[selectedClient.prenom, selectedClient.nom].filter(Boolean).join(' ')} — ${selectedClient.entreprise}` : [selectedClient.prenom, selectedClient.nom].filter(Boolean).join(' ')) : '';
+              update = { clientId: newClientId, clientName: newClientName, clientIdDisplay: selectedClient?.clientId || newClientId };
+              historyNote = `Changement de client : ${newClientName || newClientId}`;
+            } else if (key === 'status') {
+              const select = item.querySelector('select');
+              const newStatus = select.value;
+              update = { status: newStatus };
+              historyNote = `Changement de statut : ${site.status || '—'} → ${newStatus}`;
+            } else {
+              const newValue = input.value.trim();
+              update = { [key]: newValue };
+              historyNote = `${item.querySelector('.detail-info-label').textContent} modifié : ${newValue || '—'}`;
+            }
+            await db.collection('sitesWeb').doc(site.id).update(update);
+            await addSiteHistory(site.id, 'field_edit', historyNote);
+            item.classList.remove('editing');
+            Object.assign(site, update);
+            openSitePage(site);
+          } catch (err) {
+            console.error(err);
+            showToast('Erreur lors de la mise à jour.', 'error');
+          }
+        } else {
+          item.classList.add('editing');
+          input.focus();
+        }
+      });
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); editBtn.click(); }
+        if (e.key === 'Escape') { item.classList.remove('editing'); }
+      });
+    });
+  }
+
+  if (loadHistory) loadSiteHistory(site.id);
+}
+
+function closeSitePage() {
+  sitesListView.style.display = '';
+  sitePageView.style.display = 'none';
+  currentPageSite = null;
+  if (unsubscribeSiteHistory) { unsubscribeSiteHistory(); unsubscribeSiteHistory = null; }
+}
+
+function populateSiteClientSelect() {
+  siteClientSelect.innerHTML = '<option value="">Sélectionner un client...</option>';
+  allClients.forEach(c => {
+    const name = [c.prenom, c.nom].filter(Boolean).join(' ') || c.email || c.id;
+    const option = document.createElement('option');
+    option.value = c.id;
+    option.textContent = c.entreprise ? `${name} — ${c.entreprise}` : name;
+    option.dataset.clientId = c.clientId || '';
+    siteClientSelect.appendChild(option);
+  });
+}
+
+siteClientSelect.addEventListener('change', () => {
+  const selected = siteClientSelect.options[siteClientSelect.selectedIndex];
+  siteClientIdDisplay.value = selected?.dataset.clientId || '';
+});
+
+function openSiteModal() {
+  populateSiteClientSelect();
+  siteModal.classList.add('visible');
+}
+
+function closeSiteModal() {
+  siteModal.classList.remove('visible');
+  formSite.reset();
+  siteClientIdDisplay.value = '';
+  document.getElementById('modal-error-site').textContent = '';
+}
+
+document.getElementById('create-site-btn').addEventListener('click', () => {
+  if (!isManager()) {
+    showToast('Action réservée aux managers.', 'error');
+    return;
+  }
+  openSiteModal();
+});
+siteModalClose.addEventListener('click', closeSiteModal);
+siteModal.addEventListener('click', e => { if (e.target === siteModal) closeSiteModal(); });
+
+formSite.addEventListener('submit', async e => {
+  e.preventDefault();
+  const errorEl = document.getElementById('modal-error-site');
+  errorEl.textContent = '';
+
+  const clientId = siteClientSelect.value;
+  const domain = document.getElementById('site-domain').value.trim();
+  const status = document.getElementById('site-status').value;
+  const creationDate = document.getElementById('site-creation-date').value || '';
+  const expirationDate = document.getElementById('site-expiration-date').value || '';
+  const host = document.getElementById('site-host').value.trim();
+  const server = document.getElementById('site-server').value.trim();
+
+  if (!clientId || !domain || !expirationDate) {
+    errorEl.textContent = 'Veuillez remplir les champs obligatoires.';
+    return;
+  }
+
+  const selectedClient = allClients.find(c => c.id === clientId);
+  const clientName = selectedClient ? (selectedClient.entreprise ? `${[selectedClient.prenom, selectedClient.nom].filter(Boolean).join(' ')} — ${selectedClient.entreprise}` : [selectedClient.prenom, selectedClient.nom].filter(Boolean).join(' ')) : '';
+  const clientIdDisplay = selectedClient?.clientId || clientId;
+
+  try {
+    const user = auth.currentUser;
+    const docRef = await db.collection('sitesWeb').add({
+      clientId,
+      clientName,
+      clientIdDisplay,
+      domain,
+      status,
+      creationDate,
+      expirationDate,
+      host,
+      server,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      createdBy: user?.uid || ''
+    });
+    await addSiteHistory(docRef.id, 'note', `Site Web créé pour ${domain}`);
+    logActivity({ action: 'site_create', projetName: domain });
+    closeSiteModal();
+  } catch (err) {
+    console.error(err);
+    errorEl.textContent = 'Erreur lors de la création du site Web.';
+  }
+});
+
+document.getElementById('site-back-btn').addEventListener('click', closeSitePage);
+
+document.getElementById('btn-delete-site').addEventListener('click', async () => {
+  if (!currentPageSite) return;
+  if (!isManager()) { showToast('Action réservée aux managers.', 'error'); return; }
+  const confirmed = await appConfirm(`Supprimer définitivement le site ${currentPageSite.domain} ?`, { title: 'Supprimer un site Web', confirmLabel: 'Supprimer', cancelLabel: 'Annuler', icon: 'fa-trash' });
+  if (!confirmed) return;
+  try {
+    await db.collection('sitesWeb').doc(currentPageSite.id).delete();
+    logActivity({ action: 'site_delete', projetName: currentPageSite.domain });
+    closeSitePage();
+    showToast('Site Web supprimé.', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('Erreur lors de la suppression.', 'error');
+  }
+});
+
+document.getElementById('btn-add-site-note').addEventListener('click', async () => {
+  if (!currentPageSite) return;
+  if (!isManager()) { showToast('Action réservée aux managers.', 'error'); return; }
+  const content = window.prompt('Contenu de la note :');
+  if (!content) return;
+  try {
+    await addSiteHistory(currentPageSite.id, 'note', content);
+    loadSiteHistory(currentPageSite.id);
+    showToast('Note ajoutée.', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast("Erreur lors de l'ajout de la note.", 'error');
+  }
+});
+
+async function addSiteHistory(siteId, type, content) {
+  const user = auth.currentUser;
+  const userName = currentUserProfile?.displayName || user?.displayName || user?.email || 'Utilisateur';
+  await db.collection('sitesWeb').doc(siteId).collection('history').add({
+    type,
+    content,
+    createdBy: user?.uid || '',
+    createdByName: userName,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+function loadSiteHistory(siteId) {
+  if (unsubscribeSiteHistory) unsubscribeSiteHistory();
+  unsubscribeSiteHistory = db.collection('sitesWeb').doc(siteId).collection('history').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+    const items = [];
+    snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+    renderSiteHistory(items);
+  });
+}
+
+function renderSiteHistory(items) {
+  if (!items.length) {
+    siteHistoryList.innerHTML = '<p class="empty-history">Aucune modification enregistrée.</p>';
+    return;
+  }
+  siteHistoryList.innerHTML = items.map(item => {
+    const date = item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleString('fr-FR') : '—';
+    const icon = item.type === 'note' ? 'fa-note-sticky' : 'fa-pen-to-square';
+    return `<div class="site-history-item">
+      <div class="history-meta"><i class="fa-solid ${icon}"></i> ${escapeHtml(item.createdByName || '—')} · ${date}</div>
+      <div class="history-content">${escapeHtml(item.content || '')}</div>
+    </div>`;
+  }).join('');
+}
+
+sitesSearch.addEventListener('input', renderAllSites);
+
 // Navigation
 const navItems = document.querySelectorAll('.nav-item');
 const sections = document.querySelectorAll('.section-page');
 const sectionMap = [
   'section-dashboard',
   'section-clients',
-  'section-pipeline',
   'section-taches',
   'section-analytics',
   'section-projets',
+  'section-sitesweb',
   'section-equipe',
   'section-parametres'
 ];

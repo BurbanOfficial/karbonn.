@@ -8,7 +8,7 @@ const Mailgun = require('mailgun.js');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const QONTO_BASE_URL = 'https://thirdparty.qonto.com/v2';
-const QONTO_AUTH = (process.env.QONTO_API_TOKEN || '').replace(/^Bearer\s+/i, '').trim();
+const QONTO_AUTH = (process.env.QONTO_API_TOKEN || '').replace(/^Bearer\s+/i, '').replace(/['"]/g, '').replace(/\s/g, '').trim();
 
 let qontoBankIban = process.env.QONTO_IBAN ? process.env.QONTO_IBAN.replace(/\s/g, '') : null;
 async function loadQontoBankAccount() {
