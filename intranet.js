@@ -1252,11 +1252,13 @@ function renderClientNotes(notes) {
 
 async function updateClientNoteStatus(noteId, status) {
   if (!currentPageSite) return;
+  console.log('[Intranet] Updating client note status:', { siteId: currentPageSite.id, noteId, status });
   try {
     await db.collection('sitesWeb').doc(currentPageSite.id).collection('history').doc(noteId).update({ status });
+    console.log('[Intranet] Client note status updated successfully:', { noteId, status });
     showToast(`Remarque ${status === 'accepted' ? 'acceptée' : 'refusée'}.`, 'success');
   } catch (err) {
-    console.error(err);
+    console.error('[Intranet] Failed to update client note status:', err);
     showToast('Erreur lors de la mise à jour du statut.', 'error');
   }
 }

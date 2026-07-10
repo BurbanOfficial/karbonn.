@@ -109,7 +109,29 @@ function goBackToDomains() {
 if (siteDetailBack) siteDetailBack.addEventListener('click', goBackToDomains);
 if (renewalBack) renewalBack.addEventListener('click', goBackToDomains);
 
-function openSiteDetail(site) {
+async function refreshSiteHistory(site) {
+  if (!currentClient || !currentClient.id) return;
+  console.log('[Client] Refreshing site history for site:', site.id);
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${currentClient.id}/sites`);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    console.log('[Client] Public API returned', (data.sites || []).length, 'sites');
+    const refreshed = (data.sites || []).find(s => s.id === site.id);
+    if (refreshed && refreshed.history) {
+      console.log('[Client] Refreshed history:', refreshed.history.map(h => ({ id: h.id, status: h.status, content: h.content?.slice(0, 30) })));
+      site.history = refreshed.history;
+    } else {
+      console.warn('[Client] Site not found or no history in API response:', site.id);
+    }
+  } catch (err) {
+    console.warn('[Client] Failed to refresh site history:', err);
+  }
+}
+
+async function openSiteDetail(site) {
+  await refreshSiteHistory(site);
+
   const domain = site.domain || '—';
   const status = getEffectiveSiteStatus(site);
   const statusClass = getSiteStatusClass(status);
@@ -167,7 +189,7 @@ function openSiteDetail(site) {
     </div>
   `;
 
-  renderClientNotes(clientNotes);
+  renderClientNotes(site, clientNotes);
   renderTeamNotes(teamNotes);
 
   const noteForm = document.getElementById('site-note-form');
@@ -210,7 +232,7 @@ async function submitSiteNote(site) {
     if (data.note) {
       site.history = [data.note, ...(site.history || [])];
       const clientNotes = site.history.filter(item => item.type === 'note' && item.createdByName === 'Espace Client');
-      renderClientNotes(clientNotes);
+      renderClientNotes(site, clientNotes);
     }
   } catch (err) {
     console.warn('[Client] Failed to submit note:', err);
@@ -228,7 +250,8 @@ function getNoteStatusBadge(status) {
   return map[status] || map.pending;
 }
 
-function renderClientNotes(notes) {
+function renderClientNotes(site, notes) {
+  console.log('[Client] renderClientNotes called with', notes.length, 'notes. Statuses:', notes.map(n => n.status));
   const container = document.getElementById('site-detail-client-notes');
   if (!container) return;
   if (!notes.length) {

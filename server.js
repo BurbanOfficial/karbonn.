@@ -139,7 +139,9 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
           type: item.type,
           content: item.content,
           createdByName: item.createdByName,
-          createdAt: item.createdAt ? item.createdAt.toDate().toISOString() : null
+          status: item.status || 'pending',
+          createdAt: item.createdAt ? item.createdAt.toDate().toISOString() : null,
+          updatedAt: item.updatedAt ? item.updatedAt.toDate().toISOString() : null
         });
       });
       sites.push({
