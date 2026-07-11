@@ -402,11 +402,29 @@ function renderTeamNotes(notes) {
   </div>`;
 }
 
-const RENEWAL_PLANS = [
-  { years: 1, label: '1 an', price: 15, cents: 1500 },
-  { years: 2, label: '2 ans', price: 28, cents: 2800 },
-  { years: 5, label: '5 ans', price: 60, cents: 6000 }
-];
+const EXTENSION_PRICES_HT = {
+  '.com': 13.49,
+  '.fr':   7.79
+};
+const DEFAULT_PRICE_HT = 10.00;
+const TVA_RATE = 0.20;
+const STRIPE_RATE = 0.015;
+const STRIPE_FIXED = 0.25;
+
+function addStripeFeesToPrice(amountTTC) {
+  return Math.ceil((amountTTC + STRIPE_FIXED) / (1 - STRIPE_RATE));
+}
+
+function getRenewalPlans(domain) {
+  const ext = getDomainExtension(domain).toLowerCase();
+  const htPerYear = EXTENSION_PRICES_HT[ext] !== undefined ? EXTENSION_PRICES_HT[ext] : DEFAULT_PRICE_HT;
+  return [1, 2, 5].map(years => {
+    const ttc = Math.round(htPerYear * years * (1 + TVA_RATE) * 100) / 100;
+    const total = addStripeFeesToPrice(ttc);
+    const cents = total * 100;
+    return { years, label: years === 1 ? '1 an' : `${years} ans`, price: total, cents, ttcDomain: ttc };
+  });
+}
 
 function getStripePublicKey() {
   const el = document.getElementById('stripe-pub-key');
@@ -422,7 +440,7 @@ function shouldShowRenewalForm(site) {
   return daysUntilExp <= 90;
 }
 
-async function openRenewal(site) {
+function openRenewal(site) {
   const domain = site.domain || '—';
   const status = getEffectiveSiteStatus(site);
   const statusClass = getSiteStatusClass(status);
@@ -486,31 +504,8 @@ async function openRenewal(site) {
     </div>`;
 
   const showForm = shouldShowRenewalForm(site);
-
-  renewalContent.innerHTML = `
-    <div class="renewal-layout">
-      <div class="renewal-left">${leftHtml}</div>
-      <div class="renewal-right"><div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement des tarifs...</div></div>
-    </div>`;
-  showSection('section-renouveler');
-
-  let ovhPrices = null;
-  if (showForm) {
-    try {
-      const priceRes = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/renewal-prices`);
-      if (priceRes.ok) {
-        const priceData = await priceRes.json();
-        if (priceData.prices && priceData.prices.length) ovhPrices = priceData.prices;
-      }
-    } catch (e) {
-      console.warn('[OVH] Could not fetch renewal prices, using fallback:', e);
-    }
-  }
-
-  const plans = ovhPrices
-    ? ovhPrices.map(p => ({ years: p.years, label: p.years === 1 ? '1 an' : `${p.years} ans`, price: p.price, cents: p.cents }))
-    : RENEWAL_PLANS;
-
+  const plans = getRenewalPlans(domain);
+  const firstPlan = plans[0];
   let rightHtml;
   if (!showForm && site.lastRenewalAt) {
     const renewDate = new Date(site.lastRenewalAt);
@@ -524,31 +519,37 @@ async function openRenewal(site) {
         <p style="margin-top:12px;font-size:0.8rem;">Le formulaire de renouvellement sera réactivé 90 jours avant l'expiration.</p>
       </div>`;
   } else {
-    const priceSource = ovhPrices ? '<span style="font-size:0.7rem;color:var(--muted);font-weight:400;"> · Tarifs OVHcloud</span>' : '<span style="font-size:0.7rem;color:var(--muted);font-weight:400;"> · Tarifs indicatifs</span>';
     rightHtml = `
-      <h2><i class="fa-solid fa-rotate"></i> Renouveler ce domaine${priceSource}</h2>
+      <h2><i class="fa-solid fa-rotate"></i> Renouveler ce domaine</h2>
       <div class="renewal-plans">
         ${plans.map((p, i) => `
-          <button class="renewal-plan-btn${i === 0 ? ' selected' : ''}" data-years="${p.years}" data-cents="${p.cents}">
+          <button class="renewal-plan-btn${i === 0 ? ' selected' : ''}" data-years="${p.years}" data-cents="${p.cents}" data-price="${p.price}">
             <span class="plan-years">${p.label}</span>
-            <span class="plan-price">${p.price} €</span>
+            <span class="plan-price">${p.price.toFixed(2)} €</span>
+            <span class="plan-breakdown">dont ${p.ttcDomain.toFixed(2)} € TTC</span>
           </button>`).join('')}
       </div>
+      <div class="renewal-price-note"><i class="fa-solid fa-circle-info"></i> Prix TTC + frais de traitement Stripe inclus</div>
       <div id="renewal-stripe-element" class="renewal-stripe-element">
         <div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement du formulaire...</div>
       </div>
       <button id="renewal-pay-btn" class="renewal-pay-btn" disabled>
-        <i class="fa-solid fa-lock"></i> Payer ${plans[0].price} €
+        <i class="fa-solid fa-lock"></i> Payer ${firstPlan.price.toFixed(2)} €
       </button>
       <div id="renewal-pay-error" class="renewal-pay-error"></div>`;
   }
 
-  const rightEl = renewalContent.querySelector('.renewal-right');
-  if (rightEl) rightEl.innerHTML = rightHtml;
+  renewalContent.innerHTML = `
+    <div class="renewal-layout">
+      <div class="renewal-left">${leftHtml}</div>
+      <div class="renewal-right">${rightHtml}</div>
+    </div>`;
 
   if (showForm) {
-    initStripePaymentElement(site, plans);
+    initStripePaymentElement(site);
   }
+
+  showSection('section-renouveler');
 }
 
 let stripeInstance = null;
@@ -557,7 +558,7 @@ let currentPaymentElement = null;
 let currentRenewalYears = 1;
 let currentPaymentIntentId = null;
 
-async function initStripePaymentElement(site, plans) {
+async function initStripePaymentElement(site) {
   const pubKey = getStripePublicKey();
   if (!pubKey || pubKey === 'pk_test_VOTRE_CLE_PUBLIQUE') {
     document.getElementById('renewal-stripe-element').innerHTML =
@@ -566,19 +567,19 @@ async function initStripePaymentElement(site, plans) {
   }
   if (!stripeInstance) stripeInstance = Stripe(pubKey);
 
-  currentRenewalYears = plans[0].years;
-  await loadPaymentElement(site, plans[0].years, plans[0].cents);
+  const plans = getRenewalPlans(site.domain || '');
+  currentRenewalYears = 1;
+  await loadPaymentElement(site, 1);
 
   document.querySelectorAll('.renewal-plan-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       document.querySelectorAll('.renewal-plan-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       currentRenewalYears = parseInt(btn.dataset.years, 10);
-      const cents = parseInt(btn.dataset.cents, 10);
-      const price = cents / 100;
+      const price = parseFloat(btn.dataset.price);
       const payBtn = document.getElementById('renewal-pay-btn');
-      if (payBtn) payBtn.innerHTML = `<i class="fa-solid fa-lock"></i> Payer ${price} €`;
-      await loadPaymentElement(site, currentRenewalYears, cents);
+      if (payBtn) payBtn.innerHTML = `<i class="fa-solid fa-lock"></i> Payer ${price.toFixed(2)} €`;
+      await loadPaymentElement(site, currentRenewalYears);
     });
   });
 
@@ -590,7 +591,7 @@ async function initStripePaymentElement(site, plans) {
   }
 }
 
-async function loadPaymentElement(site, years, amountCents) {
+async function loadPaymentElement(site, years) {
   const container = document.getElementById('renewal-stripe-element');
   if (!container) return;
   container.innerHTML = '<div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement...</div>';
@@ -601,7 +602,7 @@ async function loadPaymentElement(site, years, amountCents) {
     const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/create-payment-intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ years, amountCents: amountCents || null })
+      body: JSON.stringify({ years })
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();

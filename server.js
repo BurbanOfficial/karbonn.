@@ -8,13 +8,6 @@ const Stripe = require('stripe');
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY || '');
 
-const ovh = require('ovh')({
-  endpoint: process.env.OVH_ENDPOINT || 'ovh-eu',
-  appKey: process.env.OVH_APP_KEY || '',
-  appSecret: process.env.OVH_APP_SECRET || '',
-  consumerKey: process.env.OVH_CONSUMER_KEY || ''
-});
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 const QONTO_BASE_URL = 'https://thirdparty.qonto.com/v2';
@@ -267,76 +260,8 @@ app.delete('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {
   }
 });
 
-// OVH helper: promisify ovh.request
-function ovhRequest(method, path, body) {
-  return new Promise((resolve, reject) => {
-    if (body !== undefined) {
-      ovh.request(method, path, body, (err, result) => err ? reject(err) : resolve(result));
-    } else {
-      ovh.request(method, path, (err, result) => err ? reject(err) : resolve(result));
-    }
-  });
-}
-
-// Fetch renewal prices from OVHcloud for a given domain
-app.get('/api/public/sites/:siteId/renewal-prices', async (req, res) => {
-  console.log('[OVH] renewal-prices for site:', req.params.siteId);
-  try {
-    const { siteId } = req.params;
-    const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
-    if (!siteDoc.exists) return res.status(404).json({ error: 'Site not found' });
-
-    const domain = siteDoc.data().domain;
-    if (!domain) return res.status(400).json({ error: 'No domain on site' });
-
-    const cartId = await ovhRequest('POST', '/order/cart', { ovhSubsidiary: 'FR' });
-    console.log('[OVH] Cart created:', cartId);
-
-    let items;
-    try {
-      items = await ovhRequest('GET', `/order/cart/${cartId}/domain?domain=${encodeURIComponent(domain)}`);
-    } catch (err) {
-      await ovhRequest('DELETE', `/order/cart/${cartId}`).catch(() => {});
-      console.warn('[OVH] Domain not found in OVH catalog:', err.message || err);
-      return res.status(404).json({ error: 'Domain not found in OVH catalog', fallback: true });
-    }
-
-    await ovhRequest('DELETE', `/order/cart/${cartId}`).catch(() => {});
-
-    const DURATIONS = ['P1Y', 'P2Y', 'P5Y'];
-    const durationMap = { 'P1Y': 1, 'P2Y': 2, 'P5Y': 5 };
-    const prices = [];
-
-    (items || []).forEach(item => {
-      if (!item.prices) return;
-      const dur = item.duration;
-      if (!durationMap[dur]) return;
-      const priceObj = item.prices.find(p => p.label === 'TOTAL') || item.prices[0];
-      if (!priceObj) return;
-      const vatIncl = priceObj.price?.value ?? priceObj.priceInUcents / 100000000;
-      prices.push({
-        years: durationMap[dur],
-        price: Math.round(vatIncl * 100) / 100,
-        cents: Math.round(vatIncl * 100)
-      });
-    });
-
-    prices.sort((a, b) => a.years - b.years);
-
-    if (!prices.length) {
-      return res.status(404).json({ error: 'No renewal offers found for this domain', fallback: true });
-    }
-
-    console.log('[OVH] Prices fetched:', prices);
-    res.json({ domain, prices });
-  } catch (err) {
-    console.error('[OVH] Error fetching renewal prices:', err);
-    res.status(500).json({ error: err.message, fallback: true });
-  }
-});
-
 // Stripe renewal: create a PaymentIntent for domain renewal
-const RENEWAL_PRICES = { 1: 1500, 2: 2800, 5: 6000 }; // fallback prices in euro cents
+const RENEWAL_PRICES = { 1: 1500, 2: 2800, 5: 6000 }; // in euro cents
 
 app.post('/api/public/sites/:siteId/create-payment-intent', async (req, res) => {
   console.log('[Stripe] create-payment-intent for site:', req.params.siteId);
@@ -345,7 +270,7 @@ app.post('/api/public/sites/:siteId/create-payment-intent', async (req, res) => 
   }
   try {
     const { siteId } = req.params;
-    const { years, amountCents } = req.body || {};
+    const { years } = req.body || {};
     const yearsInt = parseInt(years, 10);
     if (![1, 2, 5].includes(yearsInt)) {
       return res.status(400).json({ error: 'Invalid duration. Choose 1, 2 or 5 years.' });
@@ -353,9 +278,7 @@ app.post('/api/public/sites/:siteId/create-payment-intent', async (req, res) => 
     const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
     if (!siteDoc.exists) return res.status(404).json({ error: 'Site not found' });
 
-    const amount = (amountCents && Number.isInteger(amountCents) && amountCents > 0)
-      ? amountCents
-      : RENEWAL_PRICES[yearsInt];
+    const amount = RENEWAL_PRICES[yearsInt];
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: 'eur',
