@@ -749,7 +749,7 @@ const formSite = document.getElementById('form-site');
 const siteClientSelect = document.getElementById('site-client');
 const siteClientIdDisplay = document.getElementById('site-client-id-display');
 
-const SITE_STATUSES = ['Actif','Suspendu','En maintenance','Expiré','Bientôt expiré','En attente'];
+const SITE_STATUSES = ['Actif','Suspendu','En maintenance','Expiré','En attente'];
 
 function getSiteStatusClass(status) {
   const key = (status || 'En attente').toLowerCase().replace(/\s+/g, '-');
@@ -758,14 +758,13 @@ function getSiteStatusClass(status) {
 
 function getEffectiveSiteStatus(site) {
   if (!site) return 'En attente';
+  // Auto-expiration: only 'Actif' automatically switches to 'Expiré'
   if (site.status === 'Actif' && site.expirationDate) {
     const exp = new Date(site.expirationDate);
     const now = new Date();
     now.setHours(0,0,0,0);
     exp.setHours(23,59,59,999);
     if (exp < now) return 'Expiré';
-    const daysUntil = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
-    if (daysUntil <= 90) return 'Bientôt expiré';
   }
   return site.status || 'En attente';
 }
