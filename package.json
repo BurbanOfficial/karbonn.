@@ -17,6 +17,7 @@
     "firebase-admin": "^12.2.0",
     "form-data": "^4.0.1",
     "mailgun.js": "^11.1.0",
+    "ovh": "^2.0.3",
     "stripe": "^22.3.1"
   }
 }

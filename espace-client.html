@@ -1117,34 +1117,58 @@
       padding: 24px;
     }
 
-    .renewal-card h2 {
-      font-size: 1.1rem;
-      font-weight: 600;
+    .renewal-why-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
       margin: 0 0 16px 0;
     }
 
-    .renewal-reason {
+    .renewal-why-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .renewal-why-item {
       display: flex;
       align-items: flex-start;
-      gap: 12px;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--border);
+      gap: 14px;
+      padding: 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      transition: box-shadow 0.15s ease;
     }
 
-    .renewal-reason:last-child {
-      border-bottom: none;
+    .renewal-why-item:hover {
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
     }
 
-    .renewal-reason i {
-      font-size: 1.1rem;
-      color: var(--primary);
-      margin-top: 2px;
+    .renewal-why-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
     }
 
-    .renewal-reason p {
-      margin: 0;
-      font-size: 0.9rem;
+    .renewal-why-label {
+      font-size: 0.88rem;
+      font-weight: 700;
       color: var(--text);
+      margin: 0 0 4px 0;
+    }
+
+    .renewal-why-desc {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin: 0;
       line-height: 1.5;
     }
 

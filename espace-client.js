@@ -10,6 +10,7 @@ const clientBadgeEl = document.getElementById('client-badge');
 
 let currentClient = null;
 let clientSites = [];
+let sitesPollingInterval = null;
 
 const SITE_STATUSES = ['Actif','Suspendu','En maintenance','Expiré','En attente'];
 
@@ -421,7 +422,7 @@ function shouldShowRenewalForm(site) {
   return daysUntilExp <= 90;
 }
 
-function openRenewal(site) {
+async function openRenewal(site) {
   const domain = site.domain || '—';
   const status = getEffectiveSiteStatus(site);
   const statusClass = getSiteStatusClass(status);
@@ -452,22 +453,64 @@ function openRenewal(site) {
       Ne perdez pas votre nom de domaine, renouvelez-le avant son expiration pour éviter toute interruption de service.
     </div>
     <div class="renewal-card">
-      <h2><i class="fa-solid fa-circle-question"></i> Pourquoi renouveler maintenant ?</h2>
-      <div class="renewal-reason">
-        <i class="fa-solid fa-shield-halved"></i>
-        <p><strong>Éviter la perte de votre domaine :</strong> si votre domaine expire, il peut être racheté par quelqu'un d'autre.</p>
-      </div>
-      <div class="renewal-reason">
-        <i class="fa-solid fa-server"></i>
-        <p><strong>Continuité de vos services :</strong> votre site Web, vos emails et tous vos services resteront actifs sans interruption.</p>
-      </div>
-      <div class="renewal-reason">
-        <i class="fa-solid fa-headset"></i>
-        <p><strong>Support Karbonn. :</strong> Notre équipe reste à disposition pour vous accompagner.</p>
+      <p class="renewal-why-title">Pourquoi renouveler maintenant ?</p>
+      <div class="renewal-why-grid">
+        <div class="renewal-why-item">
+          <div class="renewal-why-icon" style="background:rgba(239,68,68,0.1);color:#ef4444;">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <div>
+            <p class="renewal-why-label">Évitez la perte de votre domaine</p>
+            <p class="renewal-why-desc">Un domaine expiré peut être racheté par n'importe qui en quelques heures.</p>
+          </div>
+        </div>
+        <div class="renewal-why-item">
+          <div class="renewal-why-icon" style="background:rgba(99,102,241,0.1);color:#6366f1;">
+            <i class="fa-solid fa-server"></i>
+          </div>
+          <div>
+            <p class="renewal-why-label">Continuité de vos services</p>
+            <p class="renewal-why-desc">Site Web, emails et services restent actifs sans la moindre interruption.</p>
+          </div>
+        </div>
+        <div class="renewal-why-item">
+          <div class="renewal-why-icon" style="background:rgba(16,185,129,0.1);color:#10b981;">
+            <i class="fa-solid fa-headset"></i>
+          </div>
+          <div>
+            <p class="renewal-why-label">Support Karbonn.</p>
+            <p class="renewal-why-desc">Notre équipe reste à votre disposition à chaque étape.</p>
+          </div>
+        </div>
       </div>
     </div>`;
 
   const showForm = shouldShowRenewalForm(site);
+
+  renewalContent.innerHTML = `
+    <div class="renewal-layout">
+      <div class="renewal-left">${leftHtml}</div>
+      <div class="renewal-right"><div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement des tarifs...</div></div>
+    </div>`;
+  showSection('section-renouveler');
+
+  let ovhPrices = null;
+  if (showForm) {
+    try {
+      const priceRes = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/renewal-prices`);
+      if (priceRes.ok) {
+        const priceData = await priceRes.json();
+        if (priceData.prices && priceData.prices.length) ovhPrices = priceData.prices;
+      }
+    } catch (e) {
+      console.warn('[OVH] Could not fetch renewal prices, using fallback:', e);
+    }
+  }
+
+  const plans = ovhPrices
+    ? ovhPrices.map(p => ({ years: p.years, label: p.years === 1 ? '1 an' : `${p.years} ans`, price: p.price, cents: p.cents }))
+    : RENEWAL_PLANS;
+
   let rightHtml;
   if (!showForm && site.lastRenewalAt) {
     const renewDate = new Date(site.lastRenewalAt);
@@ -481,10 +524,11 @@ function openRenewal(site) {
         <p style="margin-top:12px;font-size:0.8rem;">Le formulaire de renouvellement sera réactivé 90 jours avant l'expiration.</p>
       </div>`;
   } else {
+    const priceSource = ovhPrices ? '<span style="font-size:0.7rem;color:var(--muted);font-weight:400;"> · Tarifs OVHcloud</span>' : '<span style="font-size:0.7rem;color:var(--muted);font-weight:400;"> · Tarifs indicatifs</span>';
     rightHtml = `
-      <h2><i class="fa-solid fa-rotate"></i> Renouveler ce domaine</h2>
+      <h2><i class="fa-solid fa-rotate"></i> Renouveler ce domaine${priceSource}</h2>
       <div class="renewal-plans">
-        ${RENEWAL_PLANS.map((p, i) => `
+        ${plans.map((p, i) => `
           <button class="renewal-plan-btn${i === 0 ? ' selected' : ''}" data-years="${p.years}" data-cents="${p.cents}">
             <span class="plan-years">${p.label}</span>
             <span class="plan-price">${p.price} €</span>
@@ -494,22 +538,17 @@ function openRenewal(site) {
         <div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement du formulaire...</div>
       </div>
       <button id="renewal-pay-btn" class="renewal-pay-btn" disabled>
-        <i class="fa-solid fa-lock"></i> Payer 15 €
+        <i class="fa-solid fa-lock"></i> Payer ${plans[0].price} €
       </button>
       <div id="renewal-pay-error" class="renewal-pay-error"></div>`;
   }
 
-  renewalContent.innerHTML = `
-    <div class="renewal-layout">
-      <div class="renewal-left">${leftHtml}</div>
-      <div class="renewal-right">${rightHtml}</div>
-    </div>`;
+  const rightEl = renewalContent.querySelector('.renewal-right');
+  if (rightEl) rightEl.innerHTML = rightHtml;
 
   if (showForm) {
-    initStripePaymentElement(site);
+    initStripePaymentElement(site, plans);
   }
-
-  showSection('section-renouveler');
 }
 
 let stripeInstance = null;
@@ -518,7 +557,7 @@ let currentPaymentElement = null;
 let currentRenewalYears = 1;
 let currentPaymentIntentId = null;
 
-async function initStripePaymentElement(site) {
+async function initStripePaymentElement(site, plans) {
   const pubKey = getStripePublicKey();
   if (!pubKey || pubKey === 'pk_test_VOTRE_CLE_PUBLIQUE') {
     document.getElementById('renewal-stripe-element').innerHTML =
@@ -527,8 +566,8 @@ async function initStripePaymentElement(site) {
   }
   if (!stripeInstance) stripeInstance = Stripe(pubKey);
 
-  currentRenewalYears = 1;
-  await loadPaymentElement(site, 1);
+  currentRenewalYears = plans[0].years;
+  await loadPaymentElement(site, plans[0].years, plans[0].cents);
 
   document.querySelectorAll('.renewal-plan-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -538,8 +577,8 @@ async function initStripePaymentElement(site) {
       const cents = parseInt(btn.dataset.cents, 10);
       const price = cents / 100;
       const payBtn = document.getElementById('renewal-pay-btn');
-      if (payBtn) payBtn.textContent = `Payer ${price} €`;
-      await loadPaymentElement(site, currentRenewalYears);
+      if (payBtn) payBtn.innerHTML = `<i class="fa-solid fa-lock"></i> Payer ${price} €`;
+      await loadPaymentElement(site, currentRenewalYears, cents);
     });
   });
 
@@ -551,7 +590,7 @@ async function initStripePaymentElement(site) {
   }
 }
 
-async function loadPaymentElement(site, years) {
+async function loadPaymentElement(site, years, amountCents) {
   const container = document.getElementById('renewal-stripe-element');
   if (!container) return;
   container.innerHTML = '<div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement...</div>';
@@ -562,7 +601,7 @@ async function loadPaymentElement(site, years) {
     const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/create-payment-intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ years })
+      body: JSON.stringify({ years, amountCents: amountCents || null })
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
@@ -653,6 +692,8 @@ async function submitRenewalPayment(site) {
           <p style="margin-top:4px;">Nouvelle date d'expiration : <strong>${newExpDisplay}</strong>.</p>
         </div>`;
     }
+
+    await loadSites();
   } catch (err) {
     console.error('[Stripe] confirm-renewal error:', err);
     if (errEl) { errEl.textContent = 'Paiement reçu mais erreur d\'enregistrement : ' + err.message; errEl.style.display = ''; }
@@ -727,6 +768,18 @@ function renderDomaines(sites) {
   });
 }
 
+async function loadSites() {
+  if (!currentClient) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${currentClient.clientId}/sites`);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    renderDomaines(data.sites || []);
+  } catch (err) {
+    console.warn('[Client] Failed to load sites:', err);
+  }
+}
+
 async function showApp(client) {
   loginScreen.classList.add('hidden');
   appContent.classList.remove('hidden');
@@ -735,27 +788,14 @@ async function showApp(client) {
   if (clientNameEl) clientNameEl.textContent = name;
   if (clientBadgeEl) clientBadgeEl.textContent = client.clientId;
 
-  const sitesUrl = `${API_BASE_URL}/api/public/client/${client.clientId}/sites`;
-  console.log('[Client] Fetching sites from:', sitesUrl);
-  try {
-    const res = await fetch(sitesUrl);
-    console.log('[Client] Sites response status:', res.status, res.statusText);
-    if (res.ok) {
-      const data = await res.json();
-      console.log('[Client] Sites loaded:', data.sites?.length || 0);
-      renderDomaines(data.sites || []);
-    } else {
-      const text = await res.text();
-      console.warn('[Client] Sites request failed:', res.status, text);
-      renderDomaines(client.sites || []);
-    }
-  } catch (err) {
-    console.warn('[Client] Failed to load sites from API:', err);
-    renderDomaines(client.sites || []);
-  }
+  await loadSites();
+
+  if (sitesPollingInterval) clearInterval(sitesPollingInterval);
+  sitesPollingInterval = setInterval(() => { loadSites(); }, 30000);
 }
 
 function logout() {
+  if (sitesPollingInterval) { clearInterval(sitesPollingInterval); sitesPollingInterval = null; }
   currentClient = null;
   loginScreen.classList.remove('hidden');
   appContent.classList.add('hidden');
