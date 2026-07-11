@@ -366,12 +366,16 @@ app.post('/api/cron/check-expiring-domains', async (req, res) => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
-    const [sitesSnap, managersSnap] = await Promise.all([
+    const [sitesSnap, managersSnapObj, managersSnapStr] = await Promise.all([
       db.collection('sitesWeb').get(),
-      db.collection('users').where('role.label', '==', 'Manager').get()
+      db.collection('users').where('role.label', '==', 'Manager').get(),
+      db.collection('users').where('role', '==', 'Manager').get()
     ]);
 
-    const managerEmails = managersSnap.docs
+    const managerDocs = new Map();
+    managersSnapObj.docs.forEach(d => managerDocs.set(d.id, d));
+    managersSnapStr.docs.forEach(d => managerDocs.set(d.id, d));
+    const managerEmails = [...managerDocs.values()]
       .map(d => d.data().email)
       .filter(Boolean);
 
