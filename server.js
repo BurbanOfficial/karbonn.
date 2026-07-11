@@ -420,11 +420,60 @@ app.post('/api/cron/check-expiring-domains', async (req, res) => {
         const recipients = [...(clientEmail ? [clientEmail] : []), ...managerEmails].filter(Boolean);
         if (recipients.length) {
           await sendAndRecord(key, recipients,
-            `⚠️ Domaine expiré : ${domain}`,
-            `<p>Bonjour ${clientName},</p>
-             <p>Le nom de domaine <strong>${domain}</strong> a expiré le <strong>${expStr}</strong>.</p>
-             <p>Veuillez contacter votre équipe Karbonn. dès que possible pour éviter toute perte définitive.</p>
-             <p>— L'équipe Karbonn.</p>`
+            `🚨 Domaine expiré : ${domain}`,
+            `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6fb;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fb;padding:40px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.07);max-width:600px;width:100%;">
+        <tr>
+          <td style="background:#0f172a;padding:28px 40px;text-align:center;">
+            <span style="font-size:1.6rem;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">KARBONN<span style="color:#4361ee;">.</span></span>
+          </td>
+        </tr>
+        <tr><td style="padding:0;"><div style="background:#ef4444;height:4px;"></div></td></tr>
+        <tr>
+          <td style="padding:40px 40px 24px;">
+            <p style="margin:0 0 8px;font-size:0.85rem;color:#ef4444;text-transform:uppercase;letter-spacing:0.05em;font-weight:700;">🚨 Domaine expiré</p>
+            <h1 style="margin:0 0 24px;font-size:1.5rem;font-weight:800;color:#0f172a;line-height:1.3;">Votre nom de domaine a expiré</h1>
+            <p style="margin:0 0 16px;font-size:1rem;color:#334155;line-height:1.6;">Bonjour <strong>${clientName}</strong>,</p>
+            <p style="margin:0 0 24px;font-size:1rem;color:#334155;line-height:1.6;">
+              Le nom de domaine <strong style="color:#0f172a;">${domain}</strong> a expiré le <strong>${expStr}</strong>.
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;margin-bottom:28px;">
+              <tr>
+                <td style="padding:18px 24px;">
+                  <p style="margin:0;font-size:0.95rem;color:#991b1b;line-height:1.6;">
+                    ⚠️ Sans action rapide, votre domaine peut être libéré et racheté par un tiers. Contactez notre équipe dès maintenant.
+                  </p>
+                </td>
+              </tr>
+            </table>
+            <table cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+              <tr>
+                <td style="background:#4361ee;border-radius:10px;padding:0;">
+                  <a href="mailto:hello@karbonn.fr" style="display:inline-block;padding:14px 32px;font-size:1rem;font-weight:700;color:#ffffff;text-decoration:none;">Contacter Karbonn. →</a>
+                </td>
+              </tr>
+            </table>
+            <hr style="border:none;border-top:1px solid #e2e8f0;margin:0 0 24px;">
+            <p style="margin:0;font-size:0.85rem;color:#94a3b8;line-height:1.6;">
+              Besoin d'aide ? Écrivez-nous à <a href="mailto:hello@karbonn.fr" style="color:#4361ee;text-decoration:none;">hello@karbonn.fr</a>
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;padding:20px 40px;text-align:center;border-top:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:0.8rem;color:#94a3b8;">— L'équipe Karbonn. · <a href="https://karbonn.fr" style="color:#4361ee;text-decoration:none;">karbonn.fr</a></p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
           );
         }
         continue;
@@ -433,12 +482,61 @@ app.post('/api/cron/check-expiring-domains', async (req, res) => {
       for (const days of EXPIRY_REMINDER_DAYS) {
         if (daysUntilExp === days && clientEmail) {
           const key = `client_d${days}`;
+          const urgency = days <= 7 ? '#ef4444' : days <= 30 ? '#f59e0b' : '#4361ee';
+          const urgencyLabel = days <= 7 ? '🚨 Urgent' : days <= 30 ? '⚠️ Rappel important' : '📅 Rappel';
           await sendAndRecord(key, [clientEmail],
-            `Rappel : votre domaine ${domain} expire dans ${days} jour${days > 1 ? 's' : ''}`,
-            `<p>Bonjour ${clientName},</p>
-             <p>Votre nom de domaine <strong>${domain}</strong> expire le <strong>${expStr}</strong>, soit dans <strong>${days} jour${days > 1 ? 's' : ''}</strong>.</p>
-             <p>Pour éviter toute interruption de service, rendez-vous dans votre <a href="https://karbonn.fr/espace-client.html">espace client</a> et renouvelez-le dès maintenant.</p>
-             <p>— L'équipe Karbonn.</p>`
+            `${urgencyLabel} : votre domaine ${domain} expire dans ${days} jour${days > 1 ? 's' : ''}`,
+            `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6fb;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fb;padding:40px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.07);max-width:600px;width:100%;">
+        <tr>
+          <td style="background:#0f172a;padding:28px 40px;text-align:center;">
+            <span style="font-size:1.6rem;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">KARBONN<span style="color:#4361ee;">.</span></span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0;">
+            <div style="background:${urgency};height:4px;"></div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:40px 40px 24px;">
+            <p style="margin:0 0 8px;font-size:0.85rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">${urgencyLabel}</p>
+            <h1 style="margin:0 0 24px;font-size:1.5rem;font-weight:800;color:#0f172a;line-height:1.3;">Votre domaine expire dans <span style="color:${urgency};">${days} jour${days > 1 ? 's' : ''}</span></h1>
+            <p style="margin:0 0 16px;font-size:1rem;color:#334155;line-height:1.6;">Bonjour <strong>${clientName}</strong>,</p>
+            <p style="margin:0 0 24px;font-size:1rem;color:#334155;line-height:1.6;">
+              Votre nom de domaine <strong style="color:#0f172a;">${domain}</strong> expire le <strong>${expStr}</strong>, soit dans <strong>${days} jour${days > 1 ? 's' : ''}</strong>.
+            </p>
+            <p style="margin:0 0 32px;font-size:1rem;color:#334155;line-height:1.6;">
+              Pour éviter toute interruption de vos services (site web, emails…), renouvelez-le dès maintenant depuis votre espace client.
+            </p>
+            <table cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+              <tr>
+                <td style="background:#4361ee;border-radius:10px;padding:0;">
+                  <a href="https://karbonn.fr/espace-client.html" style="display:inline-block;padding:14px 32px;font-size:1rem;font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:0.01em;">Renouveler mon domaine →</a>
+                </td>
+              </tr>
+            </table>
+            <hr style="border:none;border-top:1px solid #e2e8f0;margin:0 0 24px;">
+            <p style="margin:0;font-size:0.85rem;color:#94a3b8;line-height:1.6;">
+              Besoin d'aide ? Contactez-nous à <a href="mailto:hello@karbonn.fr" style="color:#4361ee;text-decoration:none;">hello@karbonn.fr</a>
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;padding:20px 40px;text-align:center;border-top:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:0.8rem;color:#94a3b8;">— L'équipe Karbonn. · <a href="https://karbonn.fr" style="color:#4361ee;text-decoration:none;">karbonn.fr</a></p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
           );
         }
       }
@@ -448,8 +546,49 @@ app.post('/api/cron/check-expiring-domains', async (req, res) => {
           const key = `manager_d${days}`;
           await sendAndRecord(key, managerEmails,
             `[Action requise] Domaine ${domain} expire dans ${days} jour${days > 1 ? 's' : ''}`,
-            `<p>Le domaine <strong>${domain}</strong> (client : ${clientName}) n'a pas encore été renouvelé et expire le <strong>${expStr}</strong> (J-${days}).</p>
-             <p>Veuillez contacter le client ou prendre les mesures nécessaires.</p>`
+            `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f4f6fb;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fb;padding:40px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.07);max-width:600px;width:100%;">
+        <tr>
+          <td style="background:#0f172a;padding:28px 40px;text-align:center;">
+            <span style="font-size:1.6rem;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">KARBONN<span style="color:#4361ee;">.</span></span>
+            <p style="margin:8px 0 0;font-size:0.8rem;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;">Alerte interne</p>
+          </td>
+        </tr>
+        <tr><td style="padding:0;"><div style="background:#ef4444;height:4px;"></div></td></tr>
+        <tr>
+          <td style="padding:40px 40px 24px;">
+            <h1 style="margin:0 0 24px;font-size:1.4rem;font-weight:800;color:#0f172a;">Action requise : domaine non renouvelé (J-${days})</h1>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;margin-bottom:24px;">
+              <tr>
+                <td style="padding:20px 24px;">
+                  <p style="margin:0 0 8px;font-size:0.8rem;color:#ef4444;font-weight:700;text-transform:uppercase;">Domaine concerné</p>
+                  <p style="margin:0;font-size:1.1rem;font-weight:800;color:#0f172a;">${domain}</p>
+                  <p style="margin:6px 0 0;font-size:0.9rem;color:#64748b;">Client : ${clientName} · Expiration : <strong>${expStr}</strong></p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 24px;font-size:1rem;color:#334155;line-height:1.6;">
+              Ce domaine n'a pas encore été renouvelé et expire dans <strong>${days} jour${days > 1 ? 's' : ''}</strong>. Veuillez contacter le client ou prendre les mesures nécessaires.
+            </p>
+            <hr style="border:none;border-top:1px solid #e2e8f0;margin:0 0 20px;">
+            <p style="margin:0;font-size:0.8rem;color:#94a3b8;">Email généré automatiquement par le système Karbonn.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;padding:20px 40px;text-align:center;border-top:1px solid #e2e8f0;">
+            <p style="margin:0;font-size:0.8rem;color:#94a3b8;">— Karbonn. · <a href="https://karbonn.fr" style="color:#4361ee;text-decoration:none;">karbonn.fr</a></p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
           );
         }
       }
