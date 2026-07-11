@@ -382,22 +382,12 @@ app.post('/api/cron/check-expiring-domains', async (req, res) => {
       const site = siteDoc.data();
       if (!site.expirationDate || !site.clientId) continue;
 
-      const effectiveStatus = (() => {
-        if (site.status === 'Actif') {
-          const exp = new Date(site.expirationDate);
-          exp.setHours(23, 59, 59, 999);
-          if (exp < now) return 'Expiré';
-          const days = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
-          if (days <= 30) return 'Bientôt expiré';
-        }
-        return site.status || 'En attente';
-      })();
-
-      if (effectiveStatus === 'Actif') continue;
-
       const exp = new Date(site.expirationDate);
       exp.setHours(0, 0, 0, 0);
       const daysUntilExp = Math.round((exp - now) / (1000 * 60 * 60 * 24));
+
+      if (site.status === 'Suspendu' || site.status === 'En attente') continue;
+      if (daysUntilExp > 90) continue;
 
       const remindersSent = Array.isArray(site.remindersSent) ? site.remindersSent : [];
 
