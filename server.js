@@ -4,6 +4,9 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 const FormData = require('form-data');
 const Mailgun = require('mailgun.js');
+const Stripe = require('stripe');
+
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY || '');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -154,6 +157,8 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
         creationDate: data.creationDate,
         clientName: data.clientName,
         createdAt: data.createdAt,
+        renewals: data.renewals || [],
+        lastRenewalAt: data.lastRenewalAt ? (data.lastRenewalAt.toDate ? data.lastRenewalAt.toDate().toISOString() : data.lastRenewalAt) : null,
         history
       });
     }
@@ -251,6 +256,79 @@ app.delete('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[Public API] Error deleting site note:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stripe renewal: create a PaymentIntent for domain renewal
+const RENEWAL_PRICES = { 1: 1500, 2: 2800, 5: 6000 }; // in euro cents
+
+app.post('/api/public/sites/:siteId/create-payment-intent', async (req, res) => {
+  console.log('[Stripe] create-payment-intent for site:', req.params.siteId);
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(500).json({ error: 'Stripe not configured' });
+  }
+  try {
+    const { siteId } = req.params;
+    const { years } = req.body || {};
+    const yearsInt = parseInt(years, 10);
+    if (![1, 2, 5].includes(yearsInt)) {
+      return res.status(400).json({ error: 'Invalid duration. Choose 1, 2 or 5 years.' });
+    }
+    const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+    if (!siteDoc.exists) return res.status(404).json({ error: 'Site not found' });
+
+    const amount = RENEWAL_PRICES[yearsInt];
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency: 'eur',
+      metadata: { siteId, years: String(yearsInt) }
+    });
+    console.log('[Stripe] PaymentIntent created:', paymentIntent.id, '| amount:', amount);
+    res.json({ clientSecret: paymentIntent.client_secret, amount, paymentIntentId: paymentIntent.id });
+  } catch (err) {
+    console.error('[Stripe] Error creating payment intent:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stripe renewal: confirm after successful payment and record in Firestore
+app.post('/api/public/sites/:siteId/confirm-renewal', async (req, res) => {
+  console.log('[Stripe] confirm-renewal for site:', req.params.siteId);
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(500).json({ error: 'Stripe not configured' });
+  }
+  try {
+    const { siteId } = req.params;
+    const { paymentIntentId, years, clientName, clientId } = req.body || {};
+    if (!paymentIntentId || !years || !clientId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(402).json({ error: 'Payment not completed', status: paymentIntent.status });
+    }
+
+    const yearsInt = parseInt(years, 10);
+    const amount = paymentIntent.amount;
+    const renewal = {
+      paymentIntentId,
+      years: yearsInt,
+      amount,
+      clientName: clientName || '',
+      clientId: clientId || '',
+      paidAt: new Date().toISOString()
+    };
+
+    await db.collection('sitesWeb').doc(siteId).update({
+      renewals: admin.firestore.FieldValue.arrayUnion(renewal),
+      lastRenewalAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    console.log('[Stripe] Renewal recorded for site:', siteId, '| paymentIntent:', paymentIntentId);
+    res.json({ success: true, renewal });
+  } catch (err) {
+    console.error('[Stripe] Error confirming renewal:', err);
     res.status(500).json({ error: err.message });
   }
 });

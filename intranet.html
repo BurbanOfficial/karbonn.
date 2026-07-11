@@ -2422,6 +2422,45 @@
       font-weight: 600;
     }
 
+    .site-renewals-section {
+      grid-column: 1 / -1;
+    }
+
+    .renewals-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    .renewals-table thead th {
+      text-align: left;
+      padding: 10px 14px;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .renewals-table tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s ease;
+    }
+
+    .renewals-table tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    .renewals-table tbody tr:hover {
+      background: rgba(67, 97, 238, 0.03);
+    }
+
+    .renewals-table tbody td {
+      padding: 12px 14px;
+      vertical-align: middle;
+      color: var(--text);
+    }
+
     .client-note-status-pending { background: rgba(245, 158, 11, 0.12); color: #d97706; }
     .client-note-status-accepted { background: rgba(16, 185, 129, 0.12); color: #059669; }
     .client-note-status-rejected { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
@@ -3389,6 +3428,13 @@
                 <div class="detail-section-title"><i class="fa-regular fa-comment-dots"></i> Remarques client</div>
                 <div class="site-client-notes-list" id="site-client-notes">
                   <p class="empty-history">Aucune remarque client.</p>
+                </div>
+              </div>
+
+              <div class="detail-section site-renewals-section">
+                <div class="detail-section-title"><i class="fa-solid fa-rotate"></i> Renouvellements</div>
+                <div id="site-renewals-list">
+                  <p class="empty-history">Aucun paiement enregistré.</p>
                 </div>
               </div>
             </div>

@@ -401,6 +401,26 @@ function renderTeamNotes(notes) {
   </div>`;
 }
 
+const RENEWAL_PLANS = [
+  { years: 1, label: '1 an', price: 15, cents: 1500 },
+  { years: 2, label: '2 ans', price: 28, cents: 2800 },
+  { years: 5, label: '5 ans', price: 60, cents: 6000 }
+];
+
+function getStripePublicKey() {
+  const el = document.getElementById('stripe-pub-key');
+  return el ? (el.dataset.key || '') : '';
+}
+
+function shouldShowRenewalForm(site) {
+  if (!site.lastRenewalAt) return true;
+  if (!site.expirationDate) return true;
+  const exp = new Date(site.expirationDate);
+  const now = new Date();
+  const daysUntilExp = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+  return daysUntilExp <= 90;
+}
+
 function openRenewal(site) {
   const domain = site.domain || '—';
   const status = getEffectiveSiteStatus(site);
@@ -410,7 +430,7 @@ function openRenewal(site) {
 
   renewalTitle.textContent = 'Renouveler ' + domain;
 
-  renewalContent.innerHTML = `
+  const leftHtml = `
     <div class="renewal-header">
       <i class="fa-solid fa-globe"></i>
       <div>
@@ -418,22 +438,19 @@ function openRenewal(site) {
         <div style="margin-top:6px;"><span class="site-status-badge ${statusClass}">${status}</span></div>
       </div>
     </div>
-
     <div class="renewal-info-grid">
       <div class="renewal-info-item">
-        <div class="label">Date d'expiration</div>
+        <div class="label">DATE D'EXPIRATION</div>
         <div class="value">${expiration}</div>
       </div>
       <div class="renewal-info-item">
-        <div class="label">Extension</div>
+        <div class="label">EXTENSION</div>
         <div class="value">${extension}</div>
       </div>
     </div>
-
     <div class="renewal-warning">
       Ne perdez pas votre nom de domaine, renouvelez-le avant son expiration pour éviter toute interruption de service.
     </div>
-
     <div class="renewal-card">
       <h2><i class="fa-solid fa-circle-question"></i> Pourquoi renouveler maintenant ?</h2>
       <div class="renewal-reason">
@@ -448,10 +465,182 @@ function openRenewal(site) {
         <i class="fa-solid fa-headset"></i>
         <p><strong>Support Karbonn. :</strong> Notre équipe reste à disposition pour vous accompagner.</p>
       </div>
-    </div>
-  `;
+    </div>`;
+
+  const showForm = shouldShowRenewalForm(site);
+  let rightHtml;
+  if (!showForm && site.lastRenewalAt) {
+    const renewDate = new Date(site.lastRenewalAt);
+    const daysAgo = Math.floor((Date.now() - renewDate) / (1000 * 60 * 60 * 24));
+    const renewDateStr = renewDate.toLocaleDateString('fr-FR');
+    rightHtml = `
+      <div class="renewal-already-box">
+        <div class="already-icon"><i class="fa-solid fa-circle-check"></i></div>
+        <h3>Domaine déjà renouvelé</h3>
+        <p>Ce domaine a été renouvelé le <strong>${renewDateStr}</strong><br>Il y a <strong>${daysAgo} jour${daysAgo !== 1 ? 's' : ''}</strong>.</p>
+        <p style="margin-top:12px;font-size:0.8rem;">Le formulaire de renouvellement sera réactivé 90 jours avant l'expiration.</p>
+      </div>`;
+  } else {
+    rightHtml = `
+      <h2><i class="fa-solid fa-rotate"></i> Renouveler ce domaine</h2>
+      <div class="renewal-plans">
+        ${RENEWAL_PLANS.map((p, i) => `
+          <button class="renewal-plan-btn${i === 0 ? ' selected' : ''}" data-years="${p.years}" data-cents="${p.cents}">
+            <span class="plan-years">${p.label}</span>
+            <span class="plan-price">${p.price} €</span>
+          </button>`).join('')}
+      </div>
+      <div id="renewal-stripe-element" class="renewal-stripe-element">
+        <div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement du formulaire...</div>
+      </div>
+      <button id="renewal-pay-btn" class="renewal-pay-btn" disabled>
+        <i class="fa-solid fa-lock"></i> Payer 15 €
+      </button>
+      <div id="renewal-pay-error" class="renewal-pay-error"></div>`;
+  }
+
+  renewalContent.innerHTML = `
+    <div class="renewal-layout">
+      <div class="renewal-left">${leftHtml}</div>
+      <div class="renewal-right">${rightHtml}</div>
+    </div>`;
+
+  if (showForm) {
+    initStripePaymentElement(site);
+  }
 
   showSection('section-renouveler');
+}
+
+let stripeInstance = null;
+let stripeElements = null;
+let currentPaymentElement = null;
+let currentRenewalYears = 1;
+let currentPaymentIntentId = null;
+
+async function initStripePaymentElement(site) {
+  const pubKey = getStripePublicKey();
+  if (!pubKey || pubKey === 'pk_test_VOTRE_CLE_PUBLIQUE') {
+    document.getElementById('renewal-stripe-element').innerHTML =
+      '<p style="color:#dc2626;font-size:0.85rem;">Clé Stripe non configurée.</p>';
+    return;
+  }
+  if (!stripeInstance) stripeInstance = Stripe(pubKey);
+
+  currentRenewalYears = 1;
+  await loadPaymentElement(site, 1);
+
+  document.querySelectorAll('.renewal-plan-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      document.querySelectorAll('.renewal-plan-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      currentRenewalYears = parseInt(btn.dataset.years, 10);
+      const cents = parseInt(btn.dataset.cents, 10);
+      const price = cents / 100;
+      const payBtn = document.getElementById('renewal-pay-btn');
+      if (payBtn) payBtn.textContent = `Payer ${price} €`;
+      await loadPaymentElement(site, currentRenewalYears);
+    });
+  });
+
+  const payBtn = document.getElementById('renewal-pay-btn');
+  if (payBtn) {
+    payBtn.addEventListener('click', async () => {
+      await submitRenewalPayment(site);
+    });
+  }
+}
+
+async function loadPaymentElement(site, years) {
+  const container = document.getElementById('renewal-stripe-element');
+  if (!container) return;
+  container.innerHTML = '<div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement...</div>';
+  const payBtn = document.getElementById('renewal-pay-btn');
+  if (payBtn) payBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/create-payment-intent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ years })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    currentPaymentIntentId = data.paymentIntentId;
+
+    stripeElements = stripeInstance.elements({ clientSecret: data.clientSecret, appearance: { theme: 'stripe' } });
+    currentPaymentElement = stripeElements.create('payment');
+    container.innerHTML = '';
+    currentPaymentElement.mount(container);
+    currentPaymentElement.on('ready', () => {
+      if (payBtn) {
+        payBtn.innerHTML = `<i class="fa-solid fa-lock"></i> Payer ${data.amount / 100} €`;
+        payBtn.disabled = false;
+      }
+    });
+  } catch (err) {
+    console.error('[Stripe] loadPaymentElement error:', err);
+    container.innerHTML = `<p style="color:#dc2626;font-size:0.85rem;">Erreur : ${err.message}</p>`;
+  }
+}
+
+async function submitRenewalPayment(site) {
+  const payBtn = document.getElementById('renewal-pay-btn');
+  const errEl = document.getElementById('renewal-pay-error');
+  if (!stripeInstance || !stripeElements) return;
+
+  payBtn.disabled = true;
+  payBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Traitement...';
+  if (errEl) errEl.style.display = 'none';
+
+  const { error } = await stripeInstance.confirmPayment({
+    elements: stripeElements,
+    confirmParams: { return_url: window.location.href },
+    redirect: 'if_required'
+  });
+
+  if (error) {
+    console.error('[Stripe] confirmPayment error:', error);
+    if (errEl) { errEl.textContent = error.message; errEl.style.display = ''; }
+    payBtn.disabled = false;
+    payBtn.innerHTML = `<i class="fa-solid fa-lock"></i> Réessayer`;
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/confirm-renewal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        paymentIntentId: currentPaymentIntentId,
+        years: currentRenewalYears,
+        clientName: currentClient ? (currentClient.name || '') : '',
+        clientId: currentClient ? (currentClient.id || '') : ''
+      })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+
+    const renewDate = new Date(data.renewal.paidAt);
+    const renewDateStr = renewDate.toLocaleDateString('fr-FR');
+    site.lastRenewalAt = data.renewal.paidAt;
+
+    const rightEl = renewalContent.querySelector('.renewal-right');
+    if (rightEl) {
+      rightEl.innerHTML = `
+        <div class="renewal-success-box">
+          <div class="success-icon"><i class="fa-solid fa-circle-check"></i></div>
+          <h3>Paiement réussi !</h3>
+          <p>Votre domaine <strong>${site.domain}</strong> a été renouvelé pour <strong>${currentRenewalYears} an${currentRenewalYears > 1 ? 's' : ''}</strong>.</p>
+          <p style="margin-top:8px;">Renouvelé le <strong>${renewDateStr}</strong>.</p>
+        </div>`;
+    }
+  } catch (err) {
+    console.error('[Stripe] confirm-renewal error:', err);
+    if (errEl) { errEl.textContent = 'Paiement reçu mais erreur d\'enregistrement : ' + err.message; errEl.style.display = ''; }
+    payBtn.disabled = false;
+    payBtn.innerHTML = '<i class="fa-solid fa-lock"></i> Réessayer';
+  }
 }
 
 function renderDomaines(sites) {

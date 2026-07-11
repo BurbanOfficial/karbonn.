@@ -16,6 +16,7 @@
     "express": "^4.19.2",
     "firebase-admin": "^12.2.0",
     "form-data": "^4.0.1",
-    "mailgun.js": "^11.1.0"
+    "mailgun.js": "^11.1.0",
+    "stripe": "^22.3.1"
   }
 }

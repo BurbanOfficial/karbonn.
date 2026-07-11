@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://js.stripe.com/v3/"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
@@ -1147,6 +1148,199 @@
       line-height: 1.5;
     }
 
+    /* ---- Renewal 2-column layout ---- */
+    .renewal-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+
+    .renewal-right {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+    }
+
+    .renewal-right h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0 0 20px 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .renewal-plans {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .renewal-plan-btn {
+      flex: 1;
+      min-width: 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 14px 10px;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s ease;
+      color: var(--text);
+    }
+
+    .renewal-plan-btn:hover {
+      border-color: var(--primary);
+    }
+
+    .renewal-plan-btn.selected {
+      border-color: var(--primary);
+      background: rgba(67, 97, 238, 0.07);
+      color: var(--primary);
+    }
+
+    .renewal-plan-btn .plan-years {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .renewal-plan-btn .plan-price {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    .renewal-plan-btn.selected .plan-price {
+      color: var(--primary);
+    }
+
+    .renewal-stripe-element {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 20px;
+      min-height: 50px;
+    }
+
+    .renewal-pay-btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .renewal-pay-btn:hover {
+      background: #3151d3;
+    }
+
+    .renewal-pay-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .renewal-pay-error {
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: rgba(239,68,68,0.1);
+      color: #dc2626;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    .renewal-success-box {
+      text-align: center;
+      padding: 32px 20px;
+    }
+
+    .renewal-success-box .success-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: rgba(16, 185, 129, 0.12);
+      color: #059669;
+      font-size: 1.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+
+    .renewal-success-box h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin: 0 0 8px;
+    }
+
+    .renewal-success-box p {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .renewal-already-box {
+      text-align: center;
+      padding: 28px 20px;
+    }
+
+    .renewal-already-box .already-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: rgba(67, 97, 238, 0.1);
+      color: var(--primary);
+      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+    }
+
+    .renewal-already-box h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin: 0 0 8px;
+    }
+
+    .renewal-already-box p {
+      font-size: 0.87rem;
+      color: var(--muted);
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    .renewal-loading {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 900px) {
+      .renewal-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
     @media (max-width: 768px) {
       :root {
         --sidebar-width: 64px;
@@ -1298,6 +1492,7 @@
     </main>
   </div>
 
+  <script id="stripe-pub-key" data-key="pk_test_VOTRE_CLE_PUBLIQUE"></script>
   <script src="espace-client.js"></script>
 </body>
 </html>

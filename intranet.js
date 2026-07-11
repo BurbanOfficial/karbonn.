@@ -741,6 +741,7 @@ const sitePageDomain = document.getElementById('site-page-domain');
 const sitePageInfo = document.getElementById('site-page-info');
 const siteHistoryList = document.getElementById('site-history-list');
 const siteClientNotes = document.getElementById('site-client-notes');
+const siteRenewalsList = document.getElementById('site-renewals-list');
 
 const siteModal = document.getElementById('site-modal');
 const siteModalClose = document.getElementById('site-modal-close');
@@ -976,6 +977,42 @@ function openSitePage(site, loadHistory = true) {
   }
 
   if (loadHistory) loadSiteHistory(site.id);
+  renderSiteRenewals(site);
+}
+
+function renderSiteRenewals(site) {
+  const list = document.getElementById('site-renewals-list');
+  if (!list) return;
+  const renewals = (site.renewals || []).slice().sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt));
+  if (!renewals.length) {
+    list.innerHTML = '<p class="empty-history">Aucun paiement enregistré.</p>';
+    return;
+  }
+  list.innerHTML = `<table class="renewals-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Client</th>
+        <th>Durée</th>
+        <th>Montant</th>
+        <th>ID Paiement</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${renewals.map(r => {
+        const date = r.paidAt ? new Date(r.paidAt).toLocaleDateString('fr-FR') : '—';
+        const amount = r.amount ? (r.amount / 100).toFixed(2) + ' €' : '—';
+        const years = r.years ? `${r.years} an${r.years > 1 ? 's' : ''}` : '—';
+        return `<tr>
+          <td>${date}</td>
+          <td>${escapeHtml(r.clientName || r.clientId || '—')}</td>
+          <td>${years}</td>
+          <td><strong>${amount}</strong></td>
+          <td><code style="font-size:0.75rem;color:var(--muted);">${escapeHtml(r.paymentIntentId || '—')}</code></td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
 }
 
 function closeSitePage() {
