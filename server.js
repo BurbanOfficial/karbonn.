@@ -270,7 +270,7 @@ app.post('/api/public/sites/:siteId/create-payment-intent', async (req, res) => 
   }
   try {
     const { siteId } = req.params;
-    const { years } = req.body || {};
+    const { years, amount: requestedAmount } = req.body || {};
     const yearsInt = parseInt(years, 10);
     if (![1, 2, 5].includes(yearsInt)) {
       return res.status(400).json({ error: 'Invalid duration. Choose 1, 2 or 5 years.' });
@@ -278,7 +278,9 @@ app.post('/api/public/sites/:siteId/create-payment-intent', async (req, res) => 
     const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
     if (!siteDoc.exists) return res.status(404).json({ error: 'Site not found' });
 
-    const amount = RENEWAL_PRICES[yearsInt];
+    const amount = (requestedAmount && Number.isInteger(requestedAmount) && requestedAmount >= 100)
+      ? requestedAmount
+      : RENEWAL_PRICES[yearsInt];
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: 'eur',

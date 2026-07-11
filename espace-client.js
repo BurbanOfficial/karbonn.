@@ -569,7 +569,7 @@ async function initStripePaymentElement(site) {
 
   const plans = getRenewalPlans(site.domain || '');
   currentRenewalYears = 1;
-  await loadPaymentElement(site, 1);
+  await loadPaymentElement(site, 1, plans[0].cents);
 
   document.querySelectorAll('.renewal-plan-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -577,9 +577,10 @@ async function initStripePaymentElement(site) {
       btn.classList.add('selected');
       currentRenewalYears = parseInt(btn.dataset.years, 10);
       const price = parseFloat(btn.dataset.price);
+      const cents = parseInt(btn.dataset.cents, 10);
       const payBtn = document.getElementById('renewal-pay-btn');
       if (payBtn) payBtn.innerHTML = `<i class="fa-solid fa-lock"></i> Payer ${price.toFixed(2)} €`;
-      await loadPaymentElement(site, currentRenewalYears);
+      await loadPaymentElement(site, currentRenewalYears, cents);
     });
   });
 
@@ -591,7 +592,7 @@ async function initStripePaymentElement(site) {
   }
 }
 
-async function loadPaymentElement(site, years) {
+async function loadPaymentElement(site, years, cents) {
   const container = document.getElementById('renewal-stripe-element');
   if (!container) return;
   container.innerHTML = '<div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement...</div>';
@@ -602,7 +603,7 @@ async function loadPaymentElement(site, years) {
     const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/create-payment-intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ years })
+      body: JSON.stringify({ years, amount: cents })
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
