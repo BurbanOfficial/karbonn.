@@ -625,6 +625,23 @@ async function submitRenewalPayment(site) {
     const renewDateStr = renewDate.toLocaleDateString('fr-FR');
     site.lastRenewalAt = data.renewal.paidAt;
 
+    if (data.renewal.newExpirationDate) {
+      site.expirationDate = data.renewal.newExpirationDate;
+      site.status = 'Actif';
+      const newExpStr = new Date(data.renewal.newExpirationDate).toLocaleDateString('fr-FR');
+      const expValEl = renewalContent.querySelector('.renewal-info-item .value');
+      if (expValEl) expValEl.textContent = newExpStr;
+      const statusBadgeEl = renewalContent.querySelector('.site-status-badge');
+      if (statusBadgeEl) {
+        statusBadgeEl.textContent = 'Actif';
+        statusBadgeEl.className = `site-status-badge ${getSiteStatusClass('Actif')}`;
+      }
+    }
+
+    const newExpDisplay = data.renewal.newExpirationDate
+      ? new Date(data.renewal.newExpirationDate).toLocaleDateString('fr-FR')
+      : '—';
+
     const rightEl = renewalContent.querySelector('.renewal-right');
     if (rightEl) {
       rightEl.innerHTML = `
@@ -633,6 +650,7 @@ async function submitRenewalPayment(site) {
           <h3>Paiement réussi !</h3>
           <p>Votre domaine <strong>${site.domain}</strong> a été renouvelé pour <strong>${currentRenewalYears} an${currentRenewalYears > 1 ? 's' : ''}</strong>.</p>
           <p style="margin-top:8px;">Renouvelé le <strong>${renewDateStr}</strong>.</p>
+          <p style="margin-top:4px;">Nouvelle date d'expiration : <strong>${newExpDisplay}</strong>.</p>
         </div>`;
     }
   } catch (err) {

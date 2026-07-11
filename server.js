@@ -312,21 +312,32 @@ app.post('/api/public/sites/:siteId/confirm-renewal', async (req, res) => {
 
     const yearsInt = parseInt(years, 10);
     const amount = paymentIntent.amount;
+    const paidAt = new Date().toISOString();
     const renewal = {
       paymentIntentId,
       years: yearsInt,
       amount,
       clientName: clientName || '',
       clientId: clientId || '',
-      paidAt: new Date().toISOString()
+      paidAt
     };
+
+    const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+    const siteData = siteDoc.data() || {};
+
+    const currentExp = siteData.expirationDate ? new Date(siteData.expirationDate) : new Date();
+    const baseDate = currentExp > new Date() ? currentExp : new Date();
+    baseDate.setFullYear(baseDate.getFullYear() + yearsInt);
+    const newExpirationDate = baseDate.toISOString().split('T')[0];
 
     await db.collection('sitesWeb').doc(siteId).update({
       renewals: admin.firestore.FieldValue.arrayUnion(renewal),
-      lastRenewalAt: admin.firestore.FieldValue.serverTimestamp()
+      lastRenewalAt: admin.firestore.FieldValue.serverTimestamp(),
+      expirationDate: newExpirationDate,
+      status: 'Actif'
     });
-    console.log('[Stripe] Renewal recorded for site:', siteId, '| paymentIntent:', paymentIntentId);
-    res.json({ success: true, renewal });
+    console.log('[Stripe] Renewal recorded for site:', siteId, '| new expiration:', newExpirationDate);
+    res.json({ success: true, renewal: { ...renewal, newExpirationDate } });
   } catch (err) {
     console.error('[Stripe] Error confirming renewal:', err);
     res.status(500).json({ error: err.message });
