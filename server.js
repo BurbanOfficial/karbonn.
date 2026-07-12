@@ -303,7 +303,7 @@ app.get('/api/public/client/:clientId/documents', async (req, res) => {
 
     const documents = [...invoices, ...quotes].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     console.log('[Public API] Returning', documents.length, 'documents for clientId:', clientId);
-    res.json({ documents });
+    res.json({ documents, iban: qontoBankIban || '' });
   } catch (err) {
     console.error('[Public API] Error fetching documents:', err);
     res.status(500).json({ error: err.message });

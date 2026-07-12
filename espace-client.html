@@ -1509,6 +1509,33 @@
     .payment-terms i {
       color: var(--primary);
     }
+    .bank-details {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .bank-details-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+    }
+    .bank-details-label {
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .bank-details-value {
+      color: var(--text);
+      font-weight: 600;
+      font-family: 'Source Code Pro', monospace;
+      letter-spacing: 0.3px;
+      word-break: break-all;
+    }
     .documents-list {
       display: flex;
       flex-direction: column;
@@ -1723,9 +1750,19 @@
                 <h2>Devis</h2>
                 <span class="documents-count" id="quotes-count">0</span>
               </div>
-              <div class="payment-terms">
+              <div class="payment-terms" id="payment-terms">
                 <i class="fa-solid fa-circle-info"></i>
-                <span>Modalités de paiement : 30% à la commande, 70% à la livraison.</span>
+                <span>Modalités de paiement : 30% à la commande, 70% à la livraison. Règlement par virement bancaire.</span>
+              </div>
+              <div class="bank-details" id="bank-details">
+                <div class="bank-details-row">
+                  <span class="bank-details-label">Bénéficiaire</span>
+                  <span class="bank-details-value" id="bank-beneficiary">Karbonn</span>
+                </div>
+                <div class="bank-details-row">
+                  <span class="bank-details-label">IBAN</span>
+                  <span class="bank-details-value" id="bank-iban">—</span>
+                </div>
               </div>
               <div class="documents-list" id="quotes-list">
                 <div class="documents-empty">Aucun devis.</div>

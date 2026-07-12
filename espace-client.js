@@ -864,6 +864,8 @@ const quotesList = document.getElementById('quotes-list');
 const invoicesList = document.getElementById('invoices-list');
 const quotesCount = document.getElementById('quotes-count');
 const invoicesCount = document.getElementById('invoices-count');
+const bankIbanEl = document.getElementById('bank-iban');
+const bankDetailsEl = document.getElementById('bank-details');
 
 const STATUS_LABELS = {
   paid: 'Payée',
@@ -969,12 +971,15 @@ async function loadClientDocuments() {
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     clientDocuments = data.documents || [];
+    if (bankIbanEl) bankIbanEl.textContent = data.iban || '—';
+    if (bankDetailsEl) bankDetailsEl.style.display = data.iban ? 'flex' : 'none';
     populateDocumentYears();
     renderDocuments();
   } catch (err) {
     console.error('[Client] Error loading documents:', err);
     if (quotesList) quotesList.innerHTML = '<div class="documents-empty">Erreur lors du chargement des documents.</div>';
     if (invoicesList) invoicesList.innerHTML = '<div class="documents-empty">Erreur lors du chargement des documents.</div>';
+    if (bankDetailsEl) bankDetailsEl.style.display = 'none';
   }
 }
 
