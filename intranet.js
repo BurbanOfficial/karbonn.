@@ -252,15 +252,19 @@ function _toDate(ts) {
   return isNaN(d) ? null : d;
 }
 
-function _getLast7MonthsTimeSeries(items, getDate) {
+function _getLast7DaysTimeSeries(items, getDate) {
   const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const points = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const y = d.getFullYear(), m = d.getMonth();
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
     const count = items.filter(item => {
       const dt = getDate(item);
-      return dt && dt.getFullYear() === y && dt.getMonth() === m;
+      if (!dt) return false;
+      const itemDate = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+      return itemDate.getFullYear() === y && itemDate.getMonth() === m && itemDate.getDate() === day;
     }).length;
     points.push([d.getTime(), count]);
   }
@@ -333,10 +337,10 @@ function renderDashboard() {
 
   if (typeof ApexCharts === 'undefined') return;
 
-  const projetsData = _getLast7MonthsTimeSeries(allProjets, p => _toDate(p.createdAt));
-  const clientsData = _getLast7MonthsTimeSeries(allClients, c => _toDate(c.createdAt));
-  const caData      = _getLast7MonthsTimeSeries([], () => null);
-  const tachesData  = _getLast7MonthsTimeSeries(
+  const projetsData = _getLast7DaysTimeSeries(allProjets, p => _toDate(p.createdAt));
+  const clientsData = _getLast7DaysTimeSeries(allClients, c => _toDate(c.createdAt));
+  const caData      = _getLast7DaysTimeSeries([], () => null);
+  const tachesData  = _getLast7DaysTimeSeries(
     allProjets.flatMap(p => Object.values(p.folderDates || {}).map(d => ({ d }))),
     item => { const d = new Date(item.d); return isNaN(d) ? null : d; }
   );

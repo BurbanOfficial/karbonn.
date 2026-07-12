@@ -190,6 +190,52 @@ app.post('/api/public/sites/:siteId/notes', async (req, res) => {
     };
     await noteRef.set(note);
 
+    // Notify managers about the new client note
+    try {
+      const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+      const siteData = siteDoc.exists ? siteDoc.data() : {};
+      const domain = siteData.domain || '—';
+      const clientId = siteData.clientId || siteData.clientIdDisplay || '—';
+      let clientName = 'Client';
+      let clientEmail = '';
+      if (siteData.clientId) {
+        const clientDoc = await db.collection('clients').doc(siteData.clientId).get();
+        if (clientDoc.exists) {
+          const c = clientDoc.data();
+          clientName = c.prenom && c.nom ? `${c.prenom} ${c.nom}` : c.entreprise || c.raisonSociale || c.nom || c.prenom || 'Client';
+          clientEmail = c.email || '';
+        }
+      }
+
+      const managersSnap = await db.collection('users').where('role', '==', 'Manager').get();
+      const managerEmails = [];
+      managersSnap.forEach(doc => {
+        const u = doc.data();
+        if (u.email) managerEmails.push(u.email);
+      });
+
+      if (managerEmails.length > 0) {
+        const html = buildRenewalEmailHtml({
+          title: 'Nouvelle remarque client',
+          intro: `Une nouvelle remarque a été ajoutée depuis l'espace client.`,
+          lines: [
+            `Site web : ${domain}`,
+            `Client : ${clientName}`,
+            `Identifiant client : ${clientId}`,
+            clientEmail ? `Email client : ${clientEmail}` : '',
+            `Remarque : « ${content.trim()} »`
+          ].filter(Boolean),
+          buttonText: 'Accéder à l’intranet',
+          buttonHref: 'https://karbonn.fr/intranet'
+        });
+        const text = `Nouvelle remarque client\n\nSite web : ${domain}\nClient : ${clientName}\nIdentifiant client : ${clientId}${clientEmail ? '\nEmail client : ' + clientEmail : ''}\n\nRemarque : « ${content.trim()} »\n\nhttps://karbonn.fr/intranet`;
+        await sendEmail({ to: managerEmails, subject: '[Karbonn] Nouvelle remarque client', text, html });
+        console.log('[Public API] Manager notification sent for note on', domain);
+      }
+    } catch (emailErr) {
+      console.error('[Public API] Failed to notify managers about note:', emailErr);
+    }
+
     res.json({
       success: true,
       note: {
