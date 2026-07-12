@@ -560,7 +560,7 @@ let currentPaymentIntentId = null;
 
 async function initStripePaymentElement(site) {
   const pubKey = getStripePublicKey();
-  if (!pubKey || pubKey === 'pk_test_VOTRE_CLE_PUBLIQUE') {
+  if (!pubKey || !pubKey.startsWith('pk_')) {
     document.getElementById('renewal-stripe-element').innerHTML =
       '<p style="color:#dc2626;font-size:0.85rem;">Clé Stripe non configurée.</p>';
     return;
