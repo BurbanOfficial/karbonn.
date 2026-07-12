@@ -507,27 +507,16 @@ function openRenewal(site) {
   const plans = getRenewalPlans(domain);
   const firstPlan = plans[0];
   let rightHtml;
-  if (!showForm) {
-    const daysUntilExp = site.expirationDate
-      ? Math.ceil((new Date(site.expirationDate) - Date.now()) / (1000 * 60 * 60 * 24))
-      : null;
-    const daysUntilRenewal = daysUntilExp !== null ? Math.max(0, daysUntilExp - 90) : null;
-    let renewalMsg = daysUntilRenewal !== null
-      ? `Renouvellement possible dans <strong>${daysUntilRenewal} jour${daysUntilRenewal !== 1 ? 's' : ''}</strong>.`
-      : `Le formulaire de renouvellement sera réactivé 90 jours avant l'expiration.`;
-    let lastRenewalMsg = '';
-    if (site.lastRenewalAt) {
-      const renewDate = new Date(site.lastRenewalAt);
-      const daysAgo = Math.floor((Date.now() - renewDate) / (1000 * 60 * 60 * 24));
-      const renewDateStr = renewDate.toLocaleDateString('fr-FR');
-      lastRenewalMsg = `<p style="margin-top:10px;">Dernier renouvellement le <strong>${renewDateStr}</strong> — il y a <strong>${daysAgo} jour${daysAgo !== 1 ? 's' : ''}</strong>.</p>`;
-    }
+  if (!showForm && site.lastRenewalAt) {
+    const renewDate = new Date(site.lastRenewalAt);
+    const daysAgo = Math.floor((Date.now() - renewDate) / (1000 * 60 * 60 * 24));
+    const renewDateStr = renewDate.toLocaleDateString('fr-FR');
     rightHtml = `
       <div class="renewal-already-box">
         <div class="already-icon"><i class="fa-solid fa-circle-check"></i></div>
-        <h3>Domaine actif</h3>
-        <p>${renewalMsg}</p>
-        ${lastRenewalMsg}
+        <h3>Domaine déjà renouvelé</h3>
+        <p>Ce domaine a été renouvelé le <strong>${renewDateStr}</strong><br>Il y a <strong>${daysAgo} jour${daysAgo !== 1 ? 's' : ''}</strong>.</p>
+        <p style="margin-top:12px;font-size:0.8rem;">Le formulaire de renouvellement sera réactivé 90 jours avant l'expiration.</p>
       </div>`;
   } else {
     rightHtml = `
