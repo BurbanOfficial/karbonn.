@@ -1165,22 +1165,57 @@ formSite.addEventListener('submit', async e => {
 
 document.getElementById('site-back-btn').addEventListener('click', closeSitePage);
 
+async function deleteSiteSubcollections(siteId) {
+  try {
+    const historySnap = await db.collection('sitesWeb').doc(siteId).collection('history').get();
+    const batch = db.batch();
+    let count = 0;
+    historySnap.forEach(doc => {
+      batch.delete(doc.ref);
+      count++;
+    });
+    if (count > 0) await batch.commit();
+    console.log('[Sites] Deleted', count, 'history entries for site', siteId);
+  } catch (err) {
+    console.warn('[Sites] Failed to delete history subcollection:', err);
+  }
+}
+
+async function removeSiteFromClient(site) {
+  if (!site.clientId || !site.domain) return;
+  try {
+    await db.collection('clients').doc(site.clientId).update({
+      sites: firebase.firestore.FieldValue.arrayRemove(site.domain)
+    });
+  } catch (err) {
+    console.warn('[Sites] Failed to update client sites:', err);
+  }
+}
+
+async function removeSiteFromProjets(site) {
+  if (!site.domain) return;
+  try {
+    const snap = await db.collection('projets').where('sites', 'array-contains', site.domain).get();
+    const batch = db.batch();
+    snap.forEach(doc => {
+      batch.update(doc.ref, { sites: firebase.firestore.FieldValue.arrayRemove(site.domain) });
+    });
+    if (!snap.empty) await batch.commit();
+  } catch (err) {
+    console.warn('[Sites] Failed to remove site from projets:', err);
+  }
+}
+
 document.getElementById('btn-delete-site').addEventListener('click', async () => {
   if (!currentPageSite) return;
   if (!isManager()) { showToast('Action réservée aux managers.', 'error'); return; }
   const confirmed = await appConfirm(`Supprimer définitivement le site ${currentPageSite.domain} ?`, { title: 'Supprimer un site Web', confirmLabel: 'Supprimer', cancelLabel: 'Annuler', icon: 'fa-trash' });
   if (!confirmed) return;
   try {
+    await deleteSiteSubcollections(currentPageSite.id);
+    await removeSiteFromClient(currentPageSite);
+    await removeSiteFromProjets(currentPageSite);
     await db.collection('sitesWeb').doc(currentPageSite.id).delete();
-    if (currentPageSite.clientId && currentPageSite.domain) {
-      try {
-        await db.collection('clients').doc(currentPageSite.clientId).update({
-          sites: firebase.firestore.FieldValue.arrayRemove(currentPageSite.domain)
-        });
-      } catch (err) {
-        console.warn('[Sites] Failed to update client sites:', err);
-      }
-    }
     closeSitePage();
     showToast('Site Web supprimé.', 'success');
   } catch (err) {
