@@ -1414,47 +1414,6 @@
     }
 
     /* Documents (factures & devis) */
-    .documents-toolbar {
-      display: flex;
-      align-items: flex-end;
-      gap: 16px;
-      margin-bottom: 24px;
-      flex-wrap: wrap;
-    }
-    .documents-filter {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .documents-filter label {
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--muted);
-      font-weight: 600;
-    }
-    .documents-filter select {
-      padding: 8px 12px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--panel);
-      color: var(--text);
-      font-size: 0.9rem;
-      min-width: 140px;
-    }
-    .btn-doc-reset {
-      padding: 8px 14px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--panel);
-      color: var(--text);
-      font-size: 0.85rem;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .btn-doc-reset:hover {
-      background: var(--border);
-    }
     .documents-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1716,33 +1675,6 @@
           <div class="section-header">
             <h1>Mes factures &amp; Devis</h1>
           </div>
-          <div class="documents-toolbar">
-            <div class="documents-filter">
-              <label for="doc-filter-month">Mois</label>
-              <select id="doc-filter-month">
-                <option value="">Tous</option>
-                <option value="01">Janvier</option>
-                <option value="02">Février</option>
-                <option value="03">Mars</option>
-                <option value="04">Avril</option>
-                <option value="05">Mai</option>
-                <option value="06">Juin</option>
-                <option value="07">Juillet</option>
-                <option value="08">Août</option>
-                <option value="09">Septembre</option>
-                <option value="10">Octobre</option>
-                <option value="11">Novembre</option>
-                <option value="12">Décembre</option>
-              </select>
-            </div>
-            <div class="documents-filter">
-              <label for="doc-filter-year">Année</label>
-              <select id="doc-filter-year">
-                <option value="">Toutes</option>
-              </select>
-            </div>
-            <button id="doc-filter-reset" class="btn-doc-reset">Réinitialiser</button>
-          </div>
           <div class="documents-grid">
             <div class="documents-column documents-column-quotes">
               <div class="documents-column-header">
@@ -1752,16 +1684,20 @@
               </div>
               <div class="payment-terms" id="payment-terms">
                 <i class="fa-solid fa-circle-info"></i>
-                <span>Modalités de paiement : 30% à la commande, 70% à la livraison. Règlement par virement bancaire.</span>
+                <span>Modalités de paiement : 30% à la commande, 70% à la livraison.<br><br>Consultez le devis pour connaitre le montant divisé.<br>Règlement par virement bancaire.</span>
               </div>
               <div class="bank-details" id="bank-details">
                 <div class="bank-details-row">
                   <span class="bank-details-label">Bénéficiaire</span>
-                  <span class="bank-details-value" id="bank-beneficiary">Karbonn</span>
+                  <span class="bank-details-value" id="bank-beneficiary">Rémy CORMON</span>
                 </div>
                 <div class="bank-details-row">
                   <span class="bank-details-label">IBAN</span>
                   <span class="bank-details-value" id="bank-iban">—</span>
+                </div>
+                <div class="bank-details-row">
+                  <span class="bank-details-label">BIC</span>
+                  <span class="bank-details-value" id="bank-beneficiary">REVOFRP2</span>
                 </div>
               </div>
               <div class="documents-list" id="quotes-list">

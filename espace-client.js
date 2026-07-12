@@ -857,9 +857,6 @@ loginIdInput.addEventListener('input', () => {
 // ── Client documents (factures & devis) ──
 let clientDocuments = [];
 
-const docFilterMonth = document.getElementById('doc-filter-month');
-const docFilterYear = document.getElementById('doc-filter-year');
-const docFilterReset = document.getElementById('doc-filter-reset');
 const quotesList = document.getElementById('quotes-list');
 const invoicesList = document.getElementById('invoices-list');
 const quotesCount = document.getElementById('quotes-count');
@@ -888,38 +885,6 @@ function formatAmount(amount, currency = 'EUR') {
   const value = Number(amount);
   if (isNaN(value)) return String(amount);
   return value.toLocaleString('fr-FR', { style: 'currency', currency }) + ' TTC';
-}
-
-function populateDocumentYears() {
-  if (!docFilterYear) return;
-  const current = docFilterYear.value;
-  docFilterYear.innerHTML = '<option value="">Toutes</option>';
-  const years = new Set();
-  clientDocuments.forEach(d => {
-    const date = d.created_at || d.issue_date;
-    if (date) years.add(new Date(date).getFullYear());
-  });
-  const sorted = Array.from(years).sort((a, b) => b - a);
-  sorted.forEach(y => {
-    const opt = document.createElement('option');
-    opt.value = y;
-    opt.textContent = y;
-    docFilterYear.appendChild(opt);
-  });
-  if (current && sorted.includes(Number(current))) docFilterYear.value = current;
-}
-
-function filterDocuments() {
-  const month = docFilterMonth ? docFilterMonth.value : '';
-  const year = docFilterYear ? docFilterYear.value : '';
-  return clientDocuments.filter(d => {
-    const dateStr = d.created_at || d.issue_date;
-    if (!dateStr) return false;
-    const date = new Date(dateStr);
-    if (month && String(date.getMonth() + 1).padStart(2, '0') !== month) return false;
-    if (year && String(date.getFullYear()) !== year) return false;
-    return true;
-  });
 }
 
 function getDocumentStatusClass(status) {
@@ -955,9 +920,8 @@ function renderDocumentCard(doc) {
 
 function renderDocuments() {
   if (!quotesList || !invoicesList) return;
-  const filtered = filterDocuments();
-  const quotes = filtered.filter(d => d.type === 'quote');
-  const invoices = filtered.filter(d => d.type === 'invoice');
+  const quotes = clientDocuments.filter(d => d.type === 'quote');
+  const invoices = clientDocuments.filter(d => d.type === 'invoice');
   if (quotesCount) quotesCount.textContent = quotes.length;
   if (invoicesCount) invoicesCount.textContent = invoices.length;
   quotesList.innerHTML = quotes.length ? quotes.map(renderDocumentCard).join('') : '<div class="documents-empty">Aucun devis.</div>';
@@ -973,7 +937,6 @@ async function loadClientDocuments() {
     clientDocuments = data.documents || [];
     if (bankIbanEl) bankIbanEl.textContent = data.iban || '—';
     if (bankDetailsEl) bankDetailsEl.style.display = data.iban ? 'flex' : 'none';
-    populateDocumentYears();
     renderDocuments();
   } catch (err) {
     console.error('[Client] Error loading documents:', err);
@@ -983,10 +946,3 @@ async function loadClientDocuments() {
   }
 }
 
-if (docFilterMonth) docFilterMonth.addEventListener('change', renderDocuments);
-if (docFilterYear) docFilterYear.addEventListener('change', renderDocuments);
-if (docFilterReset) docFilterReset.addEventListener('click', () => {
-  if (docFilterMonth) docFilterMonth.value = '';
-  if (docFilterYear) docFilterYear.value = '';
-  renderDocuments();
-});
