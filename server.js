@@ -284,7 +284,12 @@ app.post('/api/public/sites/:siteId/create-payment-intent', async (req, res) => 
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: 'eur',
-      metadata: { siteId, years: String(yearsInt) }
+      metadata: { siteId, years: String(yearsInt) },
+      payment_method_options: {
+        card: {
+          request_three_d_secure: 'any'
+        }
+      }
     });
     console.log('[Stripe] PaymentIntent created:', paymentIntent.id, '| amount:', amount);
     res.json({ clientSecret: paymentIntent.client_secret, amount, paymentIntentId: paymentIntent.id });
@@ -1095,6 +1100,8 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Karbonn API running on port ${PORT}`);
+  const stripeKey = process.env.STRIPE_SECRET_KEY || '';
+  console.log(`[Stripe] Mode: ${stripeKey.startsWith('sk_live') ? 'LIVE' : stripeKey.startsWith('sk_test') ? 'TEST' : 'NOT CONFIGURED'}`);
   const [qLogin] = QONTO_AUTH.split(':');
   console.log(`[Qonto] Auth token login part: "${qLogin || 'MISSING'}" | key length: ${(QONTO_AUTH.split(':')[1] || '').length}`);
   loadQontoBankAccount();
