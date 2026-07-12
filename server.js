@@ -360,29 +360,50 @@ function escapeHtml(str) {
 
 function buildRenewalEmailHtml({ title, intro, lines, buttonText, buttonHref }) {
   const linesHtml = (lines || []).map(line => `<div>${escapeHtml(line)}<br></div>`).join('');
+  const introHtml = intro ? `<div>${escapeHtml(intro)}<br></div>` : '';
+  const introSpacer = intro ? '<div><br></div>' : '';
+  const buttonHtml = buttonText && buttonHref
+    ? `<div style="text-align: center; margin-top: 30px">
+        <a target="_blank" style="background: rgb(11, 11, 11); color: rgb(255, 255, 255); padding: 12px 22px; border-radius: 2px; text-decoration: none; font-size: 14px; display: inline-block" href="${escapeHtml(buttonHref)}">
+          ${escapeHtml(buttonText)}
+        </a>
+        <br>
+      </div>`
+    : '';
+
   return `<div>
     <table style="padding: 40px 0" width="100%">
       <tbody>
         <tr>
           <td align="center">
-            <table style="border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; max-width: 520px" width="100%">
+            <table style="background: rgb(255, 255, 255); border-radius: 14px; overflow: hidden" width="600">
               <tbody>
                 <tr>
-                  <td style="padding: 30px 30px 0; text-align: center; font-size: 22px; font-weight: 700; letter-spacing: 1px; color: #111111">KARBONN.</td>
+                  <td style="background: rgb(255, 255, 255); padding: 0px; text-align: center">
+                    <img style="display: block; margin: 0 auto 10px auto; max-width: 140px; max-height: 70px; width: auto; height: auto" alt="Karbonn" src="https://i.imgur.com/61Dv12I.png">
+                    <div style="color: rgb(170, 170, 170); font-size: 12px; letter-spacing: 1.5px">
+                      <div>KARBONN.<br></div>
+                      <div><br></div>
+                      <div>Communication Digitale &amp; Développement Web<br></div>
+                    </div>
+                  </td>
                 </tr>
                 <tr>
                   <td style="padding: 40px">
-                    <h2 style="text-align: center; margin: 0 0 10px 0; color: #111111">${escapeHtml(title)}<br></h2>
-                    <div><br></div>
-                    <div style="text-align: center; color: #444444; font-size: 14px; line-height: 1.6">
-                      ${intro ? `<div>${escapeHtml(intro)}<br></div><div><br></div>` : ''}
+                    <h2 style="text-align: center; margin: 0 0 10px 0; color: rgb(17, 17, 17)">
+                      <div>${escapeHtml(title)}<br></div>
+                    </h2>
+                    <div style="text-align: center; color: rgb(68, 68, 68); font-size: 14px; line-height: 1.6">
+                      ${introHtml}
+                      ${introSpacer}
                       ${linesHtml}
                     </div>
-                    <div style="text-align: center; margin-top: 30px">
-                      <a target="_blank" style="background: #0b0b0b; color: #ffffff; padding: 12px 22px; border-radius: 2px; text-decoration: none; font-size: 14px" href="${escapeHtml(buttonHref)}">
-                        ${escapeHtml(buttonText)}
-                      </a><br>
-                    </div>
+                    ${buttonHtml}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background: rgb(255, 255, 255); text-align: center; padding: 15px; font-size: 11px; color: rgb(119, 119, 119)">
+                    © Karbonn. Tous droits réservés.<br>
                   </td>
                 </tr>
               </tbody>
@@ -391,6 +412,7 @@ function buildRenewalEmailHtml({ title, intro, lines, buttonText, buttonHref }) 
         </tr>
       </tbody>
     </table>
+    <div><br></div>
   </div>`;
 }
 
@@ -474,8 +496,8 @@ async function sendReminderEmail(site, type, daysLeft) {
   }
 
   let subject, title, intro, lines, buttonText, buttonHref;
-  const clientHref = `https://karbonn-x-abby.onrender.com/espace-client.html`;
-  const intranetHref = `https://karbonn-x-abby.onrender.com/intranet.html`;
+  const clientHref = `https://karbonn.fr/espace-client`;
+  const intranetHref = `https://karbonn.fr/intranet`;
 
   if (isExpired) {
     subject = `[Karbonn] Domaine expiré – ${domain}`;
@@ -697,6 +719,28 @@ app.post('/api/clients', async (req, res) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: req.user.uid,
     });
+
+    // Send welcome email with client ID
+    if (client.email) {
+      try {
+        const clientName = client.prenom && client.nom ? `${client.prenom} ${client.nom}` : client.entreprise || client.raisonSociale || client.nom || client.prenom || client.email.split('@')[0] || 'Client';
+        const clientId = client.clientId || '—';
+        const subject = '[Karbonn] Votre espace client est créé';
+        const html = buildRenewalEmailHtml({
+          title: 'Bienvenue chez Karbonn',
+          intro: `${clientName}, votre espace client Karbonn vient d'être créé. Retrouvez ci-dessous votre identifiant personnel.`,
+          lines: [`Identifiant client : ${clientId}`, 'Conservez-le précieusement.', 'En cas de perte, contactez Karbonn.'],
+          buttonText: 'Accéder à mon espace client',
+          buttonHref: 'https://karbonn.fr/espace-client'
+        });
+        const text = `${clientName}, votre espace client Karbonn vient d'être créé.\n\nIdentifiant client : ${clientId}\nConservez-le précieusement.\nEn cas de perte, contactez Karbonn.\n\nhttps://karbonn.fr/espace-client`;
+        await sendEmail({ to: [client.email], subject, text, html });
+        console.log('[Clients] Welcome email sent to:', client.email);
+      } catch (emailErr) {
+        console.error('[Clients] Failed to send welcome email:', emailErr);
+      }
+    }
+
     res.json({ success: true, id: docRef.id, qontoClientId });
   } catch (err) {
     console.error('Create client error:', err.message, err.data);
