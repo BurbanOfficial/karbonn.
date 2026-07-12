@@ -742,6 +742,7 @@ const sitePageInfo = document.getElementById('site-page-info');
 const siteHistoryList = document.getElementById('site-history-list');
 const siteClientNotes = document.getElementById('site-client-notes');
 const siteRenewalsList = document.getElementById('site-renewals-list');
+const sitesWebNavBadge = document.getElementById('sites-web-nav-badge');
 
 const siteModal = document.getElementById('site-modal');
 const siteModalClose = document.getElementById('site-modal-close');
@@ -758,13 +759,15 @@ function getSiteStatusClass(status) {
 
 function getEffectiveSiteStatus(site) {
   if (!site) return 'En attente';
-  // Auto-expiration: only 'Actif' automatically switches to 'Expiré'
+  // Auto-expiration / soon-to-expire: only 'Actif' automatically switches
   if (site.status === 'Actif' && site.expirationDate) {
     const exp = new Date(site.expirationDate);
     const now = new Date();
     now.setHours(0,0,0,0);
     exp.setHours(23,59,59,999);
     if (exp < now) return 'Expiré';
+    const daysUntil = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+    if (daysUntil <= 30) return 'Bientôt expiré';
   }
   return site.status || 'En attente';
 }
@@ -815,6 +818,41 @@ function renderAllSites() {
     });
   }
   renderSites(filtered);
+  updateSitesWebBadge();
+}
+
+function daysUntil(dateString) {
+  if (!dateString) return null;
+  const exp = new Date(dateString);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  exp.setHours(23, 59, 59, 999);
+  return Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+}
+
+function isRecentRenewal(site, days = 7) {
+  if (!site || !site.lastRenewalAt) return false;
+  const paidAt = site.lastRenewalAt.toDate ? site.lastRenewalAt.toDate().getTime() : new Date(site.lastRenewalAt).getTime();
+  const threshold = Date.now() - days * 24 * 60 * 60 * 1000;
+  return paidAt > threshold;
+}
+
+function updateSitesWebBadge() {
+  if (!sitesWebNavBadge) return;
+
+  const hasRecentRenewal = allSites.some(s => isRecentRenewal(s));
+
+  const hasExpiringSoon = allSites.some(s => {
+    const days = daysUntil(s.expirationDate);
+    if (days === null) return false;
+    return days <= 30 && days >= 0;
+  });
+
+  if (hasRecentRenewal || hasExpiringSoon) {
+    sitesWebNavBadge.classList.add('visible');
+  } else {
+    sitesWebNavBadge.classList.remove('visible');
+  }
 }
 
 function renderSites(sites) {
@@ -829,7 +867,9 @@ function renderSites(sites) {
     const status = getEffectiveSiteStatus(s);
     const statusClass = getSiteStatusClass(status);
     const expiration = s.expirationDate ? new Date(s.expirationDate).toLocaleDateString('fr-FR') : '—';
-    return `<tr data-site-id="${s.id}">
+    const recentRenewal = isRecentRenewal(s);
+    const rowClass = recentRenewal ? 'site-row-recent-renewal' : '';
+    return `<tr data-site-id="${s.id}" class="${rowClass}">
       <td>${escapeHtml(domain)}</td>
       <td>${escapeHtml(clientName)}</td>
       <td>${escapeHtml(clientId)}</td>
@@ -984,11 +1024,21 @@ function renderSiteRenewals(site) {
   const list = document.getElementById('site-renewals-list');
   if (!list) return;
   const renewals = (site.renewals || []).slice().sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt));
+
+  let recentBadge = '';
+  if (site.lastRenewalAt) {
+    const paidAt = site.lastRenewalAt.toDate ? site.lastRenewalAt.toDate().getTime() : new Date(site.lastRenewalAt).getTime();
+    const daysAgo = Math.floor((Date.now() - paidAt) / (1000 * 60 * 60 * 24));
+    if (daysAgo <= 7) {
+      recentBadge = `<div class="renewal-recent-badge"><span class="renewal-dot"></span> Paiement réussi il y a ${daysAgo} jour${daysAgo !== 1 ? 's' : ''}</div>`;
+    }
+  }
+
   if (!renewals.length) {
-    list.innerHTML = '<p class="empty-history">Aucun paiement enregistré.</p>';
+    list.innerHTML = recentBadge + '<p class="empty-history">Aucun paiement enregistré.</p>';
     return;
   }
-  list.innerHTML = `<table class="renewals-table">
+  list.innerHTML = recentBadge + `<table class="renewals-table">
     <thead>
       <tr>
         <th>Date</th>

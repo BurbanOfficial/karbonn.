@@ -336,7 +336,8 @@ app.post('/api/public/sites/:siteId/confirm-renewal', async (req, res) => {
       renewals: admin.firestore.FieldValue.arrayUnion(renewal),
       lastRenewalAt: admin.firestore.FieldValue.serverTimestamp(),
       expirationDate: newExpirationDate,
-      status: 'Actif'
+      status: 'Actif',
+      reminderEmailsSent: []
     });
     console.log('[Stripe] Renewal recorded for site:', siteId, '| new expiration:', newExpirationDate);
     res.json({ success: true, renewal: { ...renewal, newExpirationDate } });
@@ -345,6 +346,222 @@ app.post('/api/public/sites/:siteId/confirm-renewal', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ---- Renewal reminder emails ----
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function buildRenewalEmailHtml({ title, intro, lines, buttonText, buttonHref }) {
+  const linesHtml = (lines || []).map(line => `<div>${escapeHtml(line)}<br></div>`).join('');
+  return `<div>
+    <table style="padding: 40px 0" width="100%">
+      <tbody>
+        <tr>
+          <td align="center">
+            <table style="border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; max-width: 520px" width="100%">
+              <tbody>
+                <tr>
+                  <td style="padding: 30px 30px 0; text-align: center; font-size: 22px; font-weight: 700; letter-spacing: 1px; color: #111111">KARBONN.</td>
+                </tr>
+                <tr>
+                  <td style="padding: 40px">
+                    <h2 style="text-align: center; margin: 0 0 10px 0; color: #111111">${escapeHtml(title)}<br></h2>
+                    <div><br></div>
+                    <div style="text-align: center; color: #444444; font-size: 14px; line-height: 1.6">
+                      ${intro ? `<div>${escapeHtml(intro)}<br></div><div><br></div>` : ''}
+                      ${linesHtml}
+                    </div>
+                    <div style="text-align: center; margin-top: 30px">
+                      <a target="_blank" style="background: #0b0b0b; color: #ffffff; padding: 12px 22px; border-radius: 2px; text-decoration: none; font-size: 14px" href="${escapeHtml(buttonHref)}">
+                        ${escapeHtml(buttonText)}
+                      </a><br>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+async function getClientEmailById(clientId) {
+  if (!clientId) return null;
+  try {
+    const doc = await db.collection('clients').doc(clientId).get();
+    if (!doc.exists) return null;
+    return doc.data().email || null;
+  } catch (err) {
+    console.error('[Reminders] Failed to get client email:', err);
+    return null;
+  }
+}
+
+async function getManagerEmails() {
+  try {
+    const snap = await db.collection('users').where('role', '==', 'Manager').get();
+    const emails = [];
+    snap.forEach(d => { if (d.data().email) emails.push(d.data().email); });
+    // Also support nested role objects
+    if (emails.length === 0) {
+      const allSnap = await db.collection('users').get();
+      allSnap.forEach(d => {
+        const role = d.data().role;
+        const label = typeof role === 'object' ? role?.label : role;
+        if (label === 'Manager' && d.data().email) emails.push(d.data().email);
+      });
+    }
+    return emails;
+  } catch (err) {
+    console.error('[Reminders] Failed to get manager emails:', err);
+    return [];
+  }
+}
+
+function daysUntil(dateString) {
+  if (!dateString) return null;
+  const exp = new Date(dateString);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  exp.setHours(23, 59, 59, 999);
+  return Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+}
+
+function reminderAlreadySent(site, type) {
+  const list = site.reminderEmailsSent || [];
+  return list.some(r => r.type === type);
+}
+
+async function markReminderSent(siteId, type) {
+  await db.collection('sitesWeb').doc(siteId).update({
+    reminderEmailsSent: admin.firestore.FieldValue.arrayUnion({ type, sentAt: new Date().toISOString() })
+  });
+}
+
+function isRecentlyRenewed(site, thresholdDays = 90) {
+  if (!site.lastRenewalAt || !site.expirationDate) return false;
+  const days = daysUntil(site.expirationDate);
+  return days !== null && days > thresholdDays;
+}
+
+async function sendReminderEmail(site, type, daysLeft) {
+  const domain = site.domain || '—';
+  const expirationDate = site.expirationDate ? new Date(site.expirationDate).toLocaleDateString('fr-FR') : '—';
+  const clientName = site.clientName || 'Client';
+  const isManagerEmail = type.startsWith('manager_') || type === 'expired';
+  const isExpired = type === 'expired';
+
+  let recipients = [];
+  if (isManagerEmail) {
+    recipients = await getManagerEmails();
+  } else {
+    const clientEmail = await getClientEmailById(site.clientId);
+    if (clientEmail) recipients = [clientEmail];
+  }
+
+  if (recipients.length === 0) {
+    console.log('[Reminders] No recipients for', type, '| site:', site.id);
+    return;
+  }
+
+  let subject, title, intro, lines, buttonText, buttonHref;
+  const clientHref = `https://karbonn-x-abby.onrender.com/espace-client.html`;
+  const intranetHref = `https://karbonn-x-abby.onrender.com/intranet.html`;
+
+  if (isExpired) {
+    subject = `[Karbonn] Domaine expiré – ${domain}`;
+    title = 'Domaine expiré';
+    intro = `${clientName}, votre nom de domaine ${domain} a expiré.`;
+    lines = [`Domaine : ${domain}`, `Date d'expiration : ${expirationDate}`, 'Renouvelez-le rapidement pour éviter la perte du domaine.'];
+    buttonText = 'Voir le site';
+    buttonHref = isManagerEmail ? intranetHref : clientHref;
+  } else if (isManagerEmail) {
+    subject = `[Karbonn] Relance renouvellement – ${domain}`;
+    title = 'Relance renouvellement';
+    intro = `Le domaine ${domain} de ${clientName} expire dans ${daysLeft} jour${daysLeft > 1 ? 's' : ''}.`;
+    lines = [`Domaine : ${domain}`, `Client : ${clientName}`, `Date d'expiration : ${expirationDate}`];
+    buttonText = 'Voir le site';
+    buttonHref = intranetHref;
+  } else {
+    subject = `[Karbonn] Votre domaine expire bientôt – ${domain}`;
+    title = 'Votre domaine expire bientôt';
+    intro = `${clientName}, renouvelez votre nom de domaine ${domain} avant qu'il ne soit trop tard.`;
+    lines = [`Domaine : ${domain}`, `Date d'expiration : ${expirationDate}`, `Il reste ${daysLeft} jour${daysLeft > 1 ? 's' : ''}.`];
+    buttonText = 'Renouveler mon domaine';
+    buttonHref = clientHref;
+  }
+
+  const html = buildRenewalEmailHtml({ title, intro, lines, buttonText, buttonHref });
+  const text = `${title}\n\n${intro}\n\n${lines.join('\n')}\n\n${buttonHref}`;
+
+  try {
+    await sendEmail({ to: recipients, subject, text, html });
+    console.log('[Reminders] Email sent:', type, '| recipients:', recipients.length, '| site:', site.id);
+    await markReminderSent(site.id, type);
+  } catch (err) {
+    console.error('[Reminders] Failed to send email:', type, err);
+  }
+}
+
+async function processRenewalReminders() {
+  console.log('[Reminders] Running daily renewal reminder check');
+  try {
+    const snap = await db.collection('sitesWeb').get();
+    const managerEmails = await getManagerEmails();
+
+    for (const doc of snap.docs) {
+      const site = { id: doc.id, ...doc.data() };
+      const daysLeft = daysUntil(site.expirationDate);
+      if (daysLeft === null) continue;
+
+      const status = site.status || 'En attente';
+      const expired = status === 'Expiré' || daysLeft < 0;
+
+      if (expired) {
+        if (!reminderAlreadySent(site, 'expired')) {
+          await sendReminderEmail(site, 'expired', 0);
+          if (managerEmails.length) await sendReminderEmail(site, 'expired_manager', 0);
+        }
+        continue;
+      }
+
+      // If recently renewed far enough, skip all reminders
+      if (isRecentlyRenewed(site, 90)) continue;
+
+      const thresholds = [
+        { days: 90, clientType: 'client_90' },
+        { days: 30, clientType: 'client_30' },
+        { days: 10, clientType: 'client_10' },
+        { days: 7,  clientType: 'client_7', managerType: 'manager_7' },
+        { days: 1,  clientType: 'client_1', managerType: 'manager_1' }
+      ];
+
+      for (const t of thresholds) {
+        if (daysLeft <= t.days && daysLeft > t.days - 1) {
+          // Client email
+          if (!reminderAlreadySent(site, t.clientType)) {
+            await sendReminderEmail(site, t.clientType, daysLeft);
+          }
+          // Manager escalation (J-7, J-1)
+          if (t.managerType && !reminderAlreadySent(site, t.managerType)) {
+            await sendReminderEmail(site, t.managerType, daysLeft);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Reminders] Error in processRenewalReminders:', err);
+  }
+}
 
 // Notification endpoint: authenticated, any role
 app.post('/notify/email', cors({ origin: true, credentials: true }), verifyAuth, async (req, res) => {
@@ -839,4 +1056,8 @@ app.listen(PORT, () => {
   loadQontoBankAccount();
   const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
   setInterval(() => fetch(`${SELF_URL}/health`).catch(() => {}), 30 * 1000);
+
+  // Daily renewal reminder check
+  setTimeout(() => { processRenewalReminders(); }, 60 * 1000);
+  setInterval(() => { processRenewalReminders(); }, 24 * 60 * 60 * 1000);
 });

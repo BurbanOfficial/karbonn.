@@ -92,6 +92,23 @@
       font-size: 1.15rem;
     }
 
+    .nav-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 9px;
+      height: 9px;
+      background: #ef4444;
+      border-radius: 50%;
+      border: 2px solid var(--bg);
+      display: none;
+      z-index: 2;
+    }
+
+    .nav-badge.visible {
+      display: block;
+    }
+
     .nav-item::after {
       content: attr(data-label);
       position: absolute;
@@ -2426,6 +2443,27 @@
       grid-column: 1 / -1;
     }
 
+    .renewal-recent-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: rgba(16, 185, 129, 0.1);
+      color: #059669;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+
+    .renewal-dot {
+      width: 8px;
+      height: 8px;
+      background: #10b981;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
     .renewals-table {
       width: 100%;
       border-collapse: collapse;
@@ -2546,6 +2584,15 @@
     .site-status-en-maintenance { background: rgba(99,102,241,0.1); color: #6366f1; }
     .site-status-expiré { background: rgba(239,68,68,0.1); color: #ef4444; }
     .site-status-en-attente { background: rgba(148,163,184,0.1); color: #64748b; }
+    .site-status-bientôt-expiré { background: rgba(249,115,22,0.1); color: #f97316; }
+
+    #sites-tbody tr.site-row-recent-renewal {
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    #sites-tbody tr.site-row-recent-renewal:hover {
+      background: rgba(16, 185, 129, 0.14);
+    }
 
     #site-page-info {
       display: grid;
@@ -3025,8 +3072,9 @@
         <a href="#" class="nav-item" data-label="Projets & Services">
           <i class="fa-solid fa-diagram-project"></i>
         </a>
-        <a href="#" class="nav-item" data-label="Sites Web">
+        <a href="#" class="nav-item" data-label="Sites Web" id="nav-sites-web">
           <i class="fa-solid fa-globe"></i>
+          <span class="nav-badge" id="sites-web-nav-badge"></span>
         </a>
         <a href="#" class="nav-item" data-label="Équipe">
           <i class="fa-solid fa-people-group"></i>
