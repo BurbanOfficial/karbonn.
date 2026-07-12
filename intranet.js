@@ -219,6 +219,16 @@ function showApp(user, profile) {
     createProjetBtn.style.display = role === 'Manager' ? '' : 'none';
   }
 
+  const createClientBtn = document.getElementById('create-client-btn');
+  if (createClientBtn) {
+    createClientBtn.style.display = role === 'Manager' ? '' : 'none';
+  }
+
+  const createSiteBtn = document.getElementById('create-site-btn');
+  if (createSiteBtn) {
+    createSiteBtn.style.display = role === 'Manager' ? '' : 'none';
+  }
+
   const equipeNav = document.querySelector(`.nav-item[data-label="Équipe"]`);
   if (equipeNav) {
     if (role === 'Manager') {
