@@ -1412,6 +1412,211 @@
         align-items: flex-start;
       }
     }
+
+    /* Documents (factures & devis) */
+    .documents-toolbar {
+      display: flex;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .documents-filter {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .documents-filter label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .documents-filter select {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 0.9rem;
+      min-width: 140px;
+    }
+    .btn-doc-reset {
+      padding: 8px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-doc-reset:hover {
+      background: var(--border);
+    }
+    .documents-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .documents-column {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .documents-column-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .documents-column-header i {
+      font-size: 1.1rem;
+      color: var(--primary);
+    }
+    .documents-column-header h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0;
+      flex: 1;
+    }
+    .documents-count {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: var(--bg);
+      padding: 4px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .payment-terms {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      background: var(--bg);
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px dashed var(--border);
+    }
+    .payment-terms i {
+      color: var(--primary);
+    }
+    .documents-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .documents-empty {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 24px 0;
+    }
+    .document-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: box-shadow 0.15s, transform 0.15s;
+    }
+    .document-card:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+      transform: translateY(-1px);
+    }
+    .document-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .document-card-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: var(--text);
+      margin: 0;
+    }
+    .document-card-meta {
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .document-card-status {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .document-status-paid { color: #16a34a; background: #dcfce7; border-color: #86efac; }
+    .document-status-unpaid { color: #d97706; background: #fef3c7; border-color: #fcd34d; }
+    .document-status-draft { color: #6b7280; background: #f3f4f6; border-color: #d1d5db; }
+    .document-status-canceled { color: #dc2626; background: #fee2e2; border-color: #fca5a5; }
+    .document-status-pending_approval { color: #2563eb; background: #dbeafe; border-color: #93c5fd; }
+    .document-status-approved { color: #16a34a; background: #dcfce7; border-color: #86efac; }
+    .document-card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .btn-doc-download {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 8px;
+      background: var(--text);
+      color: var(--bg);
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-doc-download:hover {
+      opacity: 0.85;
+    }
+    .btn-doc-view {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-doc-view:hover {
+      background: var(--border);
+    }
+    @media (max-width: 900px) {
+      .documents-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1442,7 +1647,7 @@
         <a href="#" class="nav-item active" data-label="Mes domaines">
           <i class="fa-solid fa-globe"></i>
         </a>
-        <a href="#" class="nav-item" data-label="Mes factures">
+        <a href="#" class="nav-item" data-label="Mes factures &amp; Devis">
           <i class="fa-solid fa-file-invoice-dollar"></i>
         </a>
         <a href="#" class="nav-item" data-label="Support">
@@ -1479,14 +1684,63 @@
           </div>
         </section>
 
-        <!-- Mes factures -->
+        <!-- Mes factures & Devis -->
         <section class="section-page" id="section-factures">
           <div class="section-header">
-            <h1>Mes factures</h1>
+            <h1>Mes factures &amp; Devis</h1>
           </div>
-          <div class="placeholder">
-            <i class="fa-solid fa-file-invoice-dollar fa-2x"></i>
-            <p>Vos factures et devis apparaîtront ici.</p>
+          <div class="documents-toolbar">
+            <div class="documents-filter">
+              <label for="doc-filter-month">Mois</label>
+              <select id="doc-filter-month">
+                <option value="">Tous</option>
+                <option value="01">Janvier</option>
+                <option value="02">Février</option>
+                <option value="03">Mars</option>
+                <option value="04">Avril</option>
+                <option value="05">Mai</option>
+                <option value="06">Juin</option>
+                <option value="07">Juillet</option>
+                <option value="08">Août</option>
+                <option value="09">Septembre</option>
+                <option value="10">Octobre</option>
+                <option value="11">Novembre</option>
+                <option value="12">Décembre</option>
+              </select>
+            </div>
+            <div class="documents-filter">
+              <label for="doc-filter-year">Année</label>
+              <select id="doc-filter-year">
+                <option value="">Toutes</option>
+              </select>
+            </div>
+            <button id="doc-filter-reset" class="btn-doc-reset">Réinitialiser</button>
+          </div>
+          <div class="documents-grid">
+            <div class="documents-column documents-column-quotes">
+              <div class="documents-column-header">
+                <i class="fa-solid fa-file-contract"></i>
+                <h2>Devis</h2>
+                <span class="documents-count" id="quotes-count">0</span>
+              </div>
+              <div class="payment-terms">
+                <i class="fa-solid fa-circle-info"></i>
+                <span>Modalités de paiement : 30% à la commande, 70% à la livraison.</span>
+              </div>
+              <div class="documents-list" id="quotes-list">
+                <div class="documents-empty">Aucun devis.</div>
+              </div>
+            </div>
+            <div class="documents-column documents-column-invoices">
+              <div class="documents-column-header">
+                <i class="fa-solid fa-file-invoice-dollar"></i>
+                <h2>Factures</h2>
+                <span class="documents-count" id="invoices-count">0</span>
+              </div>
+              <div class="documents-list" id="invoices-list">
+                <div class="documents-empty">Aucune facture.</div>
+              </div>
+            </div>
           </div>
         </section>
 

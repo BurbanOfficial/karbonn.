@@ -253,6 +253,89 @@ app.post('/api/public/sites/:siteId/notes', async (req, res) => {
   }
 });
 
+// Public endpoint for client space: list invoices and quotes for the authenticated client
+app.get('/api/public/client/:clientId/documents', async (req, res) => {
+  console.log('[Public API] Documents request for clientId:', req.params.clientId);
+  try {
+    const { clientId } = req.params;
+    const clientSnap = await db.collection('clients').where('clientId', '==', clientId).limit(1).get();
+    if (clientSnap.empty) return res.status(404).json({ error: 'Client not found' });
+    const qontoClientId = clientSnap.docs[0].data().qontoClientId;
+    if (!qontoClientId) return res.status(404).json({ error: 'Qonto client not linked' });
+
+    const [invoicesData, quotesData] = await Promise.all([
+      qontoRequest('/client_invoices?per_page=100&sort_by=created_at:desc').catch(err => { console.error('[Qonto] invoices error:', err.message); return { client_invoices: [] }; }),
+      qontoRequest('/quotes?per_page=100&sort_by=created_at:desc').catch(err => { console.error('[Qonto] quotes error:', err.message); return { quotes: [] }; })
+    ]);
+
+    const invoices = (invoicesData.client_invoices || [])
+      .filter(inv => inv.client?.id === qontoClientId)
+      .map(inv => ({
+        id: inv.id,
+        type: 'invoice',
+        number: inv.number,
+        status: inv.status,
+        total_amount: inv.total_amount?.value,
+        currency: inv.total_amount?.currency || 'EUR',
+        issue_date: inv.issue_date,
+        due_date: inv.due_date,
+        paid_at: inv.paid_at,
+        created_at: inv.created_at,
+        attachment_id: inv.attachment_id,
+        invoice_url: inv.invoice_url
+      }));
+
+    const quotes = (quotesData.quotes || [])
+      .filter(q => q.client?.id === qontoClientId)
+      .map(q => ({
+        id: q.id,
+        type: 'quote',
+        number: q.number,
+        status: q.status,
+        total_amount: q.total_amount?.value,
+        currency: q.total_amount?.currency || 'EUR',
+        issue_date: q.issue_date,
+        expiry_date: q.expiry_date,
+        created_at: q.created_at,
+        attachment_id: q.attachment_id,
+        quote_url: q.quote_url
+      }));
+
+    const documents = [...invoices, ...quotes].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    console.log('[Public API] Returning', documents.length, 'documents for clientId:', clientId);
+    res.json({ documents });
+  } catch (err) {
+    console.error('[Public API] Error fetching documents:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public endpoint for client space: download a document attachment through Qonto
+app.get('/api/public/client/:clientId/documents/:attachmentId/download', async (req, res) => {
+  try {
+    const { clientId, attachmentId } = req.params;
+    const clientSnap = await db.collection('clients').where('clientId', '==', clientId).limit(1).get();
+    if (clientSnap.empty) return res.status(404).json({ error: 'Client not found' });
+    if (!clientSnap.docs[0].data().qontoClientId) return res.status(404).json({ error: 'Qonto client not linked' });
+
+    const response = await fetch(`${QONTO_BASE_URL}/attachments/${attachmentId}`, {
+      headers: { 'Authorization': QONTO_AUTH, 'Accept': 'application/pdf' }
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      return res.status(response.status).json({ error: 'Document unavailable', detail: text });
+    }
+    const contentType = response.headers.get('content-type') || 'application/pdf';
+    const contentDisposition = response.headers.get('content-disposition') || `attachment; filename="document-${attachmentId}.pdf"`;
+    res.set('Content-Type', contentType);
+    res.set('Content-Disposition', contentDisposition);
+    response.body.pipe(res);
+  } catch (err) {
+    console.error('[Public API] Error downloading document:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Public endpoint for client space: edit own pending note
 app.patch('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {
   console.log('[Public API] Edit note request:', req.method, req.path);
