@@ -88,6 +88,17 @@ body {
   border-color: #ffffff;
 }
 
+.client-space-btn {
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+.client-space-btn:hover {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+}
+
 .globe-page__scroll-btn {
   position: absolute;
   bottom: 40px;

@@ -13,6 +13,17 @@
   border-color: var(--accent);
 }
 
+.client-space-btn {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.client-space-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
 .hero-descriptor {
   color: #fff;
 }
