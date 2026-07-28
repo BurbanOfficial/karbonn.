@@ -745,6 +745,7 @@ app.use('/api', (req, res, next) => {
   verifyAuth(req, res, next);
 }, (req, res, next) => {
   if (req.path === '/chat') return next();
+  if (req.path.startsWith('/finances')) return next(); // Finances visible to all authenticated users
   requireManager(req, res, next);
 });
 
@@ -1055,6 +1056,352 @@ app.post('/api/invoices/:id/mark_as_canceled', async (req, res) => {
     res.json(data);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// ===========================
+// FINANCES (Bunq)
+// ===========================
+
+const bunq = require('./bunq');
+
+const FINANCE_CATEGORIES = [
+  { key: 'hebergement', label: 'Hébergement', keywords: ['ovh', 'infomaniak', 'ionos', 'aws', 'amazon web services', 'google cloud', 'azure', 'hetzner', 'digitalocean', 'o2switch', 'hostinger', 'hebergement', 'hébergement', 'render', 'vercel', 'netlify', 'scaleway'] },
+  { key: 'domaine', label: 'Nom de domaine', keywords: ['gandi', 'namecheap', 'godaddy', 'afnic', 'domaine', 'domain'] },
+  { key: 'logiciels', label: 'Logiciels', keywords: ['adobe', 'figma', 'canva', 'microsoft', 'jetbrains', 'sketch', 'affinity', 'notion'] },
+  { key: 'publicite', label: 'Publicité', keywords: ['google ads', 'meta', 'facebook', 'instagram', 'linkedin', 'tiktok', 'ads'] },
+  { key: 'salaires', label: 'Salaires', keywords: ['salaire', 'paie', 'payroll', 'remuneration', 'rémunération'] },
+  { key: 'impots', label: 'Impôts', keywords: ['impot', 'impôt', 'urssaf', 'tva', 'dgfip', 'tresor', 'trésor', 'taxe'] },
+  { key: 'materiel', label: 'Matériel', keywords: ['apple', 'dell', 'fnac', 'darty', 'boulanger', 'ldlc', 'amazon', 'materiel', 'matériel', 'logitech'] },
+  { key: 'abonnements', label: 'Abonnements', keywords: ['abonnement', 'subscription', 'slack', 'github', 'openai', 'anthropic', 'huggingface', 'mailgun', 'stripe', 'netflix', 'spotify', 'google workspace'] },
+];
+
+const FINANCE_CATEGORY_LABELS = {
+  hebergement: 'Hébergement',
+  domaine: 'Nom de domaine',
+  logiciels: 'Logiciels',
+  publicite: 'Publicité',
+  salaires: 'Salaires',
+  impots: 'Impôts',
+  materiel: 'Matériel',
+  abonnements: 'Abonnements',
+  clients: 'Clients',
+  divers: 'Divers',
+};
+
+function normalizeText(str) {
+  return (str || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function categorizeTransaction(tx, clients) {
+  const text = normalizeText(`${tx.label} ${tx.counterparty}`);
+  if (tx.amount > 0) {
+    const client = clients.find(c => {
+      const names = [c.fullName, c.entreprise].filter(Boolean).map(normalizeText);
+      return names.some(n => n.length > 2 && text.includes(n));
+    });
+    return { category: 'clients', clientId: client?.id || null, clientName: client?.fullName || null };
+  }
+  for (const cat of FINANCE_CATEGORIES) {
+    if (cat.keywords.some(k => text.includes(normalizeText(k)))) return { category: cat.key };
+  }
+  return { category: 'divers' };
+}
+
+async function loadBunqStore() {
+  const doc = await db.collection('financesConfig').doc('bunq').get();
+  return doc.exists ? doc.data() : {};
+}
+
+async function saveBunqStore(store) {
+  await db.collection('financesConfig').doc('bunq').set(store, { merge: true });
+}
+
+function bunqPaymentToTransaction(payment, accountId) {
+  const counterparty = payment.counterparty_alias?.display_name || payment.counterparty_alias?.label_user?.display_name || '';
+  return {
+    bunqId: `${accountId}-${payment.id}`,
+    accountId,
+    date: payment.created || null,
+    amount: parseFloat(payment.amount?.value || '0'),
+    currency: payment.amount?.currency || 'EUR',
+    label: payment.description || payment.merchant_reference || '',
+    counterparty,
+    paymentMethod: payment.type || '',
+    source: 'bunq',
+  };
+}
+
+// Sync transactions from Bunq into Firestore (respects manual corrections)
+app.post('/api/finances/sync', async (req, res) => {
+  if (!bunq.isConfigured()) return res.status(503).json({ error: 'Bunq not configured (BUNQ_API_KEY / BUNQ_PRIVATE_KEY missing)' });
+  try {
+    const store = await loadBunqStore();
+    const persist = async s => saveBunqStore(s);
+
+    // Load clients for auto-matching
+    const clientsSnap = await db.collection('clients').get();
+    const clients = clientsSnap.docs.map(d => ({
+      id: d.id,
+      fullName: [d.data().prenom, d.data().nom].filter(Boolean).join(' '),
+      entreprise: d.data().entreprise || '',
+    }));
+
+    const accounts = await bunq.getMonetaryAccounts(store, persist);
+    let imported = 0, updated = 0;
+
+    for (const account of accounts) {
+      const payments = await bunq.getPayments(store, account.id);
+      for (const payment of payments) {
+        const tx = bunqPaymentToTransaction(payment, account.id);
+        const docRef = db.collection('financesTransactions').doc(tx.bunqId);
+        const existing = await docRef.get();
+        if (existing.exists) {
+          const prev = existing.data();
+          const patch = { ...tx, updatedAt: new Date().toISOString() };
+          // Never overwrite manual corrections
+          if (!prev.manualCategory) {
+            const auto = categorizeTransaction(tx, clients);
+            patch.category = auto.category;
+            if (!prev.manualClient) { patch.clientId = auto.clientId; patch.clientName = auto.clientName; }
+          }
+          await docRef.set(patch, { merge: true });
+          updated++;
+        } else {
+          const auto = categorizeTransaction(tx, clients);
+          await docRef.set({
+            ...tx,
+            category: auto.category,
+            clientId: auto.clientId,
+            clientName: auto.clientName,
+            projectId: null,
+            projectName: null,
+            manualCategory: false,
+            manualClient: false,
+            createdAt: new Date().toISOString(),
+          });
+          imported++;
+        }
+      }
+    }
+
+    const balance = accounts.reduce((sum, a) => sum + a.balance, 0);
+    await saveBunqStore({ ...store, balance, balanceCurrency: accounts[0]?.currency || 'EUR', balanceUpdatedAt: new Date().toISOString() });
+    console.log(`[Finances] Sync done: ${imported} imported, ${updated} updated, balance ${balance}`);
+    res.json({ success: true, imported, updated, balance, accounts: accounts.length });
+  } catch (err) {
+    console.error('[Finances] Sync error:', err.message, JSON.stringify(err.data || {}));
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+async function getAllFinanceTransactions() {
+  const snap = await db.collection('financesTransactions').get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+function monthKey(dateStr) {
+  const d = new Date(dateStr);
+  if (isNaN(d)) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Dashboard aggregation
+app.get('/api/finances/dashboard', async (req, res) => {
+  try {
+    const [transactions, storeDoc, invoicesData, sitesSnap] = await Promise.all([
+      getAllFinanceTransactions(),
+      db.collection('financesConfig').doc('bunq').get(),
+      qontoRequest('/client_invoices?per_page=100&sort_by=created_at:desc').catch(() => ({ client_invoices: [] })),
+      db.collection('sitesWeb').get().catch(() => ({ docs: [] })),
+    ]);
+
+    const store = storeDoc.exists ? storeDoc.data() : {};
+    const balance = store.balance ?? null;
+
+    const now = new Date();
+    const currentMonthKey = monthKey(now.toISOString());
+    let revenusMois = 0, depensesMois = 0;
+    transactions.forEach(t => {
+      const key = monthKey(t.date);
+      if (key !== currentMonthKey) return;
+      if (t.amount > 0) revenusMois += t.amount;
+      else depensesMois += Math.abs(t.amount);
+    });
+
+    // 12-month buckets
+    const buckets = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({ key: monthKey(d.toISOString()), revenus: 0, depenses: 0 });
+    }
+    transactions.forEach(t => {
+      const key = monthKey(t.date);
+      const bucket = buckets.find(b => b.key === key);
+      if (!bucket) return;
+      if (t.amount > 0) bucket.revenus += t.amount;
+      else bucket.depenses += Math.abs(t.amount);
+    });
+
+    // Solde evolution: walk backwards from current balance
+    let running = balance ?? 0;
+    const soldeSeries = [];
+    for (let i = buckets.length - 1; i >= 0; i--) {
+      soldeSeries.unshift(running);
+      running -= (buckets[i].revenus - buckets[i].depenses);
+    }
+
+    // Expense breakdown by category (12 months)
+    const expenseByCategory = {};
+    transactions.forEach(t => {
+      if (t.amount >= 0) return;
+      const cat = t.category || 'divers';
+      expenseByCategory[cat] = (expenseByCategory[cat] || 0) + Math.abs(t.amount);
+    });
+
+    // Unpaid invoices → trésorerie prévisionnelle
+    const invoices = invoicesData.client_invoices || [];
+    const unpaidTotal = invoices
+      .filter(inv => inv.status !== 'paid' && inv.status !== 'canceled')
+      .reduce((sum, inv) => sum + parseFloat(inv.total_amount?.value || '0'), 0);
+
+    // Revenu récurrent hébergement : sites actifs × 19,99 €
+    const HOSTING_MONTHLY = 19.99;
+    const activeSites = sitesSnap.docs.filter(d => {
+      const s = d.data();
+      if (s.statut === 'Expiré' || s.statut === 'Suspendu') return false;
+      if (s.expirationDate) {
+        const exp = s.expirationDate.toDate ? s.expirationDate.toDate() : new Date(s.expirationDate);
+        if (exp < now) return false;
+      }
+      return true;
+    }).length;
+
+    res.json({
+      solde: balance,
+      soldeUpdatedAt: store.balanceUpdatedAt || null,
+      revenusMois,
+      depensesMois,
+      beneficeMois: revenusMois - depensesMois,
+      tresorerie: (balance ?? 0) + unpaidTotal,
+      revenuRecurrent: activeSites * HOSTING_MONTHLY,
+      activeSites,
+      unpaidInvoicesTotal: unpaidTotal,
+      months: buckets.map(b => b.key),
+      revenusSeries: buckets.map(b => Math.round(b.revenus * 100) / 100),
+      depensesSeries: buckets.map(b => Math.round(b.depenses * 100) / 100),
+      beneficeSeries: buckets.map(b => Math.round((b.revenus - b.depenses) * 100) / 100),
+      soldeSeries: soldeSeries.map(v => Math.round(v * 100) / 100),
+      expenseByCategory: Object.entries(expenseByCategory).map(([key, value]) => ({
+        key, label: FINANCE_CATEGORY_LABELS[key] || key, value: Math.round(value * 100) / 100,
+      })),
+      transactionsCount: transactions.length,
+    });
+  } catch (err) {
+    console.error('[Finances] Dashboard error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List transactions with search/filters
+app.get('/api/finances/transactions', async (req, res) => {
+  try {
+    let transactions = await getAllFinanceTransactions();
+    const { search, category, type, from, to } = req.query;
+    if (category) transactions = transactions.filter(t => t.category === category);
+    if (type === 'revenu') transactions = transactions.filter(t => t.amount > 0);
+    if (type === 'depense') transactions = transactions.filter(t => t.amount < 0);
+    if (from) transactions = transactions.filter(t => new Date(t.date) >= new Date(from));
+    if (to) transactions = transactions.filter(t => new Date(t.date) <= new Date(to + 'T23:59:59'));
+    if (search) {
+      const q = normalizeText(search);
+      transactions = transactions.filter(t =>
+        normalizeText(`${t.label} ${t.counterparty} ${t.clientName || ''} ${t.projectName || ''}`).includes(q));
+    }
+    transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json({ transactions: transactions.slice(0, 500), categories: FINANCE_CATEGORY_LABELS });
+  } catch (err) {
+    console.error('[Finances] Transactions error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Manual correction (category, client, project)
+app.patch('/api/finances/transactions/:id', async (req, res) => {
+  try {
+    const { category, clientId, clientName, projectId, projectName } = req.body || {};
+    const patch = { updatedAt: new Date().toISOString() };
+    if (category) { patch.category = category; patch.manualCategory = true; }
+    if (clientId !== undefined) { patch.clientId = clientId || null; patch.clientName = clientName || null; patch.manualClient = true; }
+    if (projectId !== undefined) { patch.projectId = projectId || null; patch.projectName = projectName || null; }
+    await db.collection('financesTransactions').doc(req.params.id).set(patch, { merge: true });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Finances] Correction error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Bank reconciliation: Qonto invoices vs Bunq transactions
+app.get('/api/finances/reconciliation', async (req, res) => {
+  try {
+    const [invoicesData, transactions] = await Promise.all([
+      qontoRequest('/client_invoices?per_page=100&sort_by=created_at:desc'),
+      getAllFinanceTransactions(),
+    ]);
+    const invoices = (invoicesData.client_invoices || []).filter(inv => inv.status !== 'canceled');
+    const incoming = transactions.filter(t => t.amount > 0);
+
+    const result = invoices.map(inv => {
+      const amount = parseFloat(inv.total_amount?.value || '0');
+      const issueDate = inv.issue_date ? new Date(inv.issue_date) : null;
+      const match = incoming.find(t => {
+        if (Math.abs(t.amount - amount) > 0.01) return false;
+        const txDate = new Date(t.date);
+        if (issueDate && txDate < new Date(issueDate.getTime() - 3 * 24 * 60 * 60 * 1000)) return false;
+        return true;
+      });
+      return {
+        id: inv.id,
+        number: inv.number,
+        status: inv.status,
+        client: inv.client?.name || '',
+        total_amount: amount,
+        issue_date: inv.issue_date,
+        due_date: inv.due_date,
+        reconciled: Boolean(match),
+        matchedTransaction: match ? { id: match.id, date: match.date, amount: match.amount, label: match.label, counterparty: match.counterparty } : null,
+      };
+    });
+    res.json({ invoices: result });
+  } catch (err) {
+    console.error('[Finances] Reconciliation error:', err.message);
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// Category totals + rules (for the Catégories sub-section)
+app.get('/api/finances/categories', async (req, res) => {
+  try {
+    const transactions = await getAllFinanceTransactions();
+    const totals = {};
+    const counts = {};
+    transactions.forEach(t => {
+      const cat = t.category || 'divers';
+      totals[cat] = (totals[cat] || 0) + t.amount;
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    const categories = Object.entries(FINANCE_CATEGORY_LABELS).map(([key, label]) => ({
+      key,
+      label,
+      total: Math.round((totals[key] || 0) * 100) / 100,
+      count: counts[key] || 0,
+      keywords: (FINANCE_CATEGORIES.find(c => c.key === key) || {}).keywords || [],
+    }));
+    res.json({ categories });
+  } catch (err) {
+    console.error('[Finances] Categories error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

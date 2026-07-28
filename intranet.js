@@ -1410,6 +1410,7 @@ const sectionMap = [
   'section-taches',
   'section-projets',
   'section-sitesweb',
+  'section-finances',
   'section-equipe',
   'section-parametres'
 ];
@@ -1433,6 +1434,11 @@ navItems.forEach((item, index) => {
     // Load team data when opening the team section
     if (sectionId === 'section-equipe' && currentUserRole === 'Manager') {
       loadTeamMembers();
+    }
+
+    // Load finances data when opening the finances section
+    if (sectionId === 'section-finances') {
+      loadFinances();
     }
 
   });
@@ -4387,4 +4393,348 @@ equipeSearch?.addEventListener('input', () => {
   );
   renderEquipeTable(filtered);
 });
+
+// ===========================
+// FINANCES
+// ===========================
+
+let financesCharts = {};
+let finAllTransactions = [];
+let finCategoryLabels = {};
+
+function fmtEUR(v) {
+  if (v == null) return '—';
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v);
+}
+
+// Tab switching
+document.querySelectorAll('.finances-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.finances-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.finances-pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    const pane = document.getElementById(`finances-pane-${tab.dataset.tab}`);
+    if (pane) pane.classList.add('active');
+  });
+});
+
+// Sync button
+document.getElementById('btn-sync-finances')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-sync-finances');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Synchronisation...';
+  try {
+    const result = await apiRequest('/api/finances/sync', { method: 'POST' });
+    showToast(`Synchronisation terminée : ${result.imported || 0} transactions importées.`, 'success');
+    loadFinances();
+  } catch (err) {
+    showToast('Erreur synchronisation Bunq : ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Synchroniser Bunq';
+  }
+});
+
+async function loadFinances() {
+  try {
+    const [dashData, txData, reconData, catData] = await Promise.all([
+      apiRequest('/api/finances/dashboard'),
+      apiRequest('/api/finances/transactions'),
+      apiRequest('/api/finances/reconciliation').catch(() => ({ invoices: [] })),
+      apiRequest('/api/finances/categories').catch(() => ({ categories: [] })),
+    ]);
+
+    renderFinDashboard(dashData);
+    renderFinCharts(dashData);
+    renderFinTransactions(txData);
+    renderFinReconciliation(reconData);
+    renderFinCategories(catData);
+  } catch (err) {
+    console.error('[Finances] Load error:', err);
+    showToast('Erreur chargement finances : ' + err.message, 'error');
+  }
+}
+
+// Dashboard cards
+function renderFinDashboard(d) {
+  document.getElementById('fin-solde').textContent = fmtEUR(d.solde);
+  document.getElementById('fin-solde-date').textContent = d.soldeUpdatedAt ? `Mis à jour ${new Date(d.soldeUpdatedAt).toLocaleDateString('fr-FR')}` : '';
+  document.getElementById('fin-revenus').textContent = fmtEUR(d.revenusMois);
+  document.getElementById('fin-depenses').textContent = fmtEUR(d.depensesMois);
+  const benEl = document.getElementById('fin-benefice');
+  benEl.textContent = fmtEUR(d.beneficeMois);
+  benEl.className = 'finances-stat-value ' + (d.beneficeMois >= 0 ? 'fin-positive' : 'fin-negative');
+  document.getElementById('fin-tresorerie').textContent = fmtEUR(d.tresorerie);
+  document.getElementById('fin-tresorerie-sub').textContent = d.unpaidInvoicesTotal ? `Dont ${fmtEUR(d.unpaidInvoicesTotal)} factures en attente` : '';
+  document.getElementById('fin-mrr').textContent = fmtEUR(d.revenuRecurrent);
+  document.getElementById('fin-mrr-sub').textContent = d.activeSites ? `${d.activeSites} sites actifs × 19,99 €` : '';
+}
+
+// Charts
+function renderFinCharts(d) {
+  const months = (d.months || []).map(m => {
+    const [y, mo] = m.split('-');
+    return new Date(y, mo - 1).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+  });
+  const chartDefaults = {
+    chart: { toolbar: { show: false }, fontFamily: 'Space Grotesk, sans-serif' },
+    stroke: { curve: 'smooth', width: 2 },
+    xaxis: { categories: months },
+    tooltip: { y: { formatter: v => fmtEUR(v) } },
+    grid: { borderColor: 'var(--border)', strokeDashArray: 3 },
+  };
+
+  // Destroy old charts
+  Object.values(financesCharts).forEach(c => { try { c.destroy(); } catch {} });
+  financesCharts = {};
+
+  // 1. Évolution du solde
+  financesCharts.solde = new ApexCharts(document.getElementById('chart-fin-solde'), {
+    ...chartDefaults,
+    chart: { ...chartDefaults.chart, type: 'area', height: 240 },
+    series: [{ name: 'Solde', data: d.soldeSeries || [] }],
+    colors: ['#6366f1'],
+    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05 } },
+  });
+  financesCharts.solde.render();
+
+  // 2. Revenus / Dépenses
+  financesCharts.revDep = new ApexCharts(document.getElementById('chart-fin-rev-dep'), {
+    ...chartDefaults,
+    chart: { ...chartDefaults.chart, type: 'bar', height: 240 },
+    series: [
+      { name: 'Revenus', data: d.revenusSeries || [] },
+      { name: 'Dépenses', data: d.depensesSeries || [] },
+    ],
+    colors: ['#16a34a', '#dc2626'],
+    plotOptions: { bar: { borderRadius: 4, columnWidth: '55%' } },
+  });
+  financesCharts.revDep.render();
+
+  // 3. Bénéfice mensuel
+  financesCharts.benefice = new ApexCharts(document.getElementById('chart-fin-benefice'), {
+    ...chartDefaults,
+    chart: { ...chartDefaults.chart, type: 'bar', height: 240 },
+    series: [{ name: 'Bénéfice', data: d.beneficeSeries || [] }],
+    colors: ['#6366f1'],
+    plotOptions: { bar: { borderRadius: 4, columnWidth: '45%', colors: { ranges: [{ from: -999999, to: 0, color: '#dc2626' }] } } },
+  });
+  financesCharts.benefice.render();
+
+  // 4. Trésorerie sur 12 mois
+  let tresRunning = d.solde ?? 0;
+  const tresSeries = (d.beneficeSeries || []).map(b => { tresRunning += b; return Math.round(tresRunning * 100) / 100; });
+  financesCharts.tresorerie = new ApexCharts(document.getElementById('chart-fin-tresorerie'), {
+    ...chartDefaults,
+    chart: { ...chartDefaults.chart, type: 'line', height: 240 },
+    series: [{ name: 'Trésorerie projetée', data: tresSeries }],
+    colors: ['#0891b2'],
+  });
+  financesCharts.tresorerie.render();
+
+  // 5. Répartition des dépenses (donut)
+  const expCats = d.expenseByCategory || [];
+  financesCharts.depenses = new ApexCharts(document.getElementById('chart-fin-depenses'), {
+    chart: { type: 'donut', height: 260, fontFamily: 'Space Grotesk, sans-serif' },
+    series: expCats.map(e => e.value),
+    labels: expCats.map(e => e.label),
+    colors: ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#64748b'],
+    legend: { position: 'bottom', fontSize: '12px' },
+    tooltip: { y: { formatter: v => fmtEUR(v) } },
+    dataLabels: { enabled: false },
+  });
+  financesCharts.depenses.render();
+}
+
+// Transactions table
+function renderFinTransactions(data) {
+  finAllTransactions = data.transactions || [];
+  finCategoryLabels = data.categories || {};
+
+  // Populate category filter
+  const catSelect = document.getElementById('fin-tx-category');
+  const currentVal = catSelect.value;
+  catSelect.innerHTML = '<option value="">Toutes catégories</option>';
+  Object.entries(finCategoryLabels).forEach(([key, label]) => {
+    catSelect.innerHTML += `<option value="${key}">${label}</option>`;
+  });
+  catSelect.value = currentVal;
+
+  // Populate edit modal category
+  const editCat = document.getElementById('fin-tx-edit-category');
+  editCat.innerHTML = '';
+  Object.entries(finCategoryLabels).forEach(([key, label]) => {
+    editCat.innerHTML += `<option value="${key}">${label}</option>`;
+  });
+
+  // Populate client + project selects in modal
+  const editClient = document.getElementById('fin-tx-edit-client');
+  editClient.innerHTML = '<option value="">— Aucun —</option>';
+  allClients.forEach(c => {
+    editClient.innerHTML += `<option value="${c.id}">${c.nom || c.entreprise || c.email}</option>`;
+  });
+
+  const editProject = document.getElementById('fin-tx-edit-project');
+  editProject.innerHTML = '<option value="">— Aucun —</option>';
+  (typeof allProjets !== 'undefined' ? allProjets : []).forEach(p => {
+    editProject.innerHTML += `<option value="${p.id}">${p.nom || p.name || ''}</option>`;
+  });
+
+  renderFinTxTable(finAllTransactions);
+}
+
+function renderFinTxTable(transactions) {
+  const tbody = document.getElementById('fin-tx-tbody');
+  if (!transactions.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Aucune transaction trouvée.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = transactions.map(t => {
+    const amountClass = t.amount >= 0 ? 'fin-amount-positive' : 'fin-amount-negative';
+    const catLabel = finCategoryLabels[t.category] || t.category || '—';
+    return `<tr>
+      <td>${new Date(t.date).toLocaleDateString('fr-FR')}</td>
+      <td class="${amountClass}">${fmtEUR(t.amount)}</td>
+      <td title="${escapeHTML(t.counterparty || '')}">${escapeHTML(t.label || t.counterparty || '—')}</td>
+      <td><span class="fin-category-badge">${escapeHTML(catLabel)}</span></td>
+      <td>${escapeHTML(t.clientName || '—')}</td>
+      <td>${escapeHTML(t.projectName || '—')}</td>
+      <td>${escapeHTML(t.paymentType || '—')}</td>
+      <td style="text-align:right;"><button class="btn-icon" title="Corriger" onclick="openFinTxEdit('${t.id}')"><i class="fa-solid fa-pen"></i></button></td>
+    </tr>`;
+  }).join('');
+}
+
+function escapeHTML(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+// Filter listeners
+['fin-tx-search', 'fin-tx-category', 'fin-tx-type', 'fin-tx-from', 'fin-tx-to'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(el.tagName === 'INPUT' && el.type === 'text' ? 'input' : 'change', applyFinTxFilters);
+});
+
+function applyFinTxFilters() {
+  const search = (document.getElementById('fin-tx-search')?.value || '').toLowerCase().trim();
+  const category = document.getElementById('fin-tx-category')?.value || '';
+  const type = document.getElementById('fin-tx-type')?.value || '';
+  const from = document.getElementById('fin-tx-from')?.value || '';
+  const to = document.getElementById('fin-tx-to')?.value || '';
+
+  let filtered = [...finAllTransactions];
+  if (category) filtered = filtered.filter(t => t.category === category);
+  if (type === 'revenu') filtered = filtered.filter(t => t.amount > 0);
+  if (type === 'depense') filtered = filtered.filter(t => t.amount < 0);
+  if (from) filtered = filtered.filter(t => t.date >= from);
+  if (to) filtered = filtered.filter(t => t.date <= to + 'T23:59:59');
+  if (search) {
+    filtered = filtered.filter(t =>
+      `${t.label} ${t.counterparty} ${t.clientName || ''} ${t.projectName || ''} ${t.category || ''}`.toLowerCase().includes(search)
+    );
+  }
+  renderFinTxTable(filtered);
+}
+
+// Transaction edit modal
+let finEditingTxId = null;
+
+function openFinTxEdit(txId) {
+  const tx = finAllTransactions.find(t => t.id === txId);
+  if (!tx) return;
+  finEditingTxId = txId;
+  const modal = document.getElementById('fin-tx-modal');
+  modal.classList.remove('hidden');
+
+  document.getElementById('fin-tx-modal-info').innerHTML = `
+    <div><strong>Date :</strong> ${new Date(tx.date).toLocaleDateString('fr-FR')}</div>
+    <div><strong>Montant :</strong> ${fmtEUR(tx.amount)}</div>
+    <div><strong>Libellé :</strong> ${escapeHTML(tx.label || tx.counterparty || '')}</div>
+  `;
+  document.getElementById('fin-tx-edit-category').value = tx.category || 'divers';
+  document.getElementById('fin-tx-edit-client').value = tx.clientId || '';
+  document.getElementById('fin-tx-edit-project').value = tx.projectId || '';
+}
+
+document.getElementById('fin-tx-modal-close')?.addEventListener('click', closeFinTxModal);
+document.getElementById('fin-tx-edit-cancel')?.addEventListener('click', closeFinTxModal);
+
+function closeFinTxModal() {
+  document.getElementById('fin-tx-modal')?.classList.add('hidden');
+  finEditingTxId = null;
+}
+
+document.getElementById('fin-tx-edit-save')?.addEventListener('click', async () => {
+  if (!finEditingTxId) return;
+  const category = document.getElementById('fin-tx-edit-category').value;
+  const clientSelect = document.getElementById('fin-tx-edit-client');
+  const clientId = clientSelect.value;
+  const clientName = clientId ? clientSelect.options[clientSelect.selectedIndex].text : '';
+  const projectSelect = document.getElementById('fin-tx-edit-project');
+  const projectId = projectSelect.value;
+  const projectName = projectId ? projectSelect.options[projectSelect.selectedIndex].text : '';
+
+  try {
+    await apiRequest(`/api/finances/transactions/${finEditingTxId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ category, clientId, clientName, projectId, projectName }),
+    });
+    showToast('Transaction corrigée.', 'success');
+    closeFinTxModal();
+    // Refresh transactions
+    const txData = await apiRequest('/api/finances/transactions');
+    renderFinTransactions(txData);
+  } catch (err) {
+    showToast('Erreur : ' + err.message, 'error');
+  }
+});
+
+// Reconciliation (Factures)
+function renderFinReconciliation(data) {
+  const tbody = document.getElementById('fin-inv-tbody');
+  const invoices = data.invoices || [];
+  if (!invoices.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Aucune facture trouvée.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = invoices.map(inv => {
+    const statusLabel = { pending: 'En attente', paid: 'Payée', unpaid: 'Impayée', draft: 'Brouillon' }[inv.status] || inv.status;
+    const reconClass = inv.reconciled ? 'fin-reconciled' : 'fin-not-reconciled';
+    const reconText = inv.reconciled
+      ? `✓ Rapproché (${new Date(inv.matchedTransaction.date).toLocaleDateString('fr-FR')})`
+      : '✗ Non rapproché';
+    return `<tr>
+      <td>${escapeHTML(inv.number || '—')}</td>
+      <td>${escapeHTML(inv.client || '—')}</td>
+      <td>${fmtEUR(inv.total_amount)}</td>
+      <td>${inv.issue_date ? new Date(inv.issue_date).toLocaleDateString('fr-FR') : '—'}</td>
+      <td>${inv.due_date ? new Date(inv.due_date).toLocaleDateString('fr-FR') : '—'}</td>
+      <td>${escapeHTML(statusLabel)}</td>
+      <td class="${reconClass}">${reconText}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Categories
+function renderFinCategories(data) {
+  const grid = document.getElementById('fin-categories-grid');
+  const categories = data.categories || [];
+  if (!categories.length) {
+    grid.innerHTML = '<p class="finances-empty">Aucune donnée de catégorie.</p>';
+    return;
+  }
+  grid.innerHTML = categories.map(cat => {
+    const totalClass = cat.total < 0 ? 'fin-amount-negative' : (cat.total > 0 ? 'fin-amount-positive' : '');
+    return `<div class="fin-category-card">
+      <div class="fin-category-card-title">
+        <span>${escapeHTML(cat.label)}</span>
+        <span class="fin-category-card-count">${cat.count} transaction${cat.count > 1 ? 's' : ''}</span>
+      </div>
+      <div class="fin-category-card-total ${totalClass}">${fmtEUR(cat.total)}</div>
+      ${cat.keywords.length ? `<div class="fin-category-card-keywords">Mots-clés : ${cat.keywords.slice(0, 8).join(', ')}${cat.keywords.length > 8 ? '…' : ''}</div>` : ''}
+    </div>`;
+  }).join('');
+}
 

@@ -3009,6 +3009,162 @@
         min-width: 100%;
       }
     }
+
+    /* ── Finances ── */
+    .finances-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+    }
+    .finances-tab {
+      padding: 10px 18px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .finances-tab:hover { color: var(--text); }
+    .finances-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .finances-pane { display: none; flex-direction: column; gap: 20px; }
+    .finances-pane.active { display: flex; }
+
+    .finances-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+    }
+    .finances-stat-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .finances-stat-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+    }
+    .finances-stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .finances-stat-value.fin-positive { color: #16a34a; }
+    .finances-stat-value.fin-negative { color: #dc2626; }
+    .finances-stat-sub { font-size: 0.75rem; color: var(--muted); }
+
+    .finances-charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 14px;
+    }
+    .finances-chart-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .finances-chart-card h3 {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .finances-chart { min-height: 240px; }
+
+    .finances-filters {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .finances-filters .search-bar { flex: 1; min-width: 220px; }
+    .finances-filters select,
+    .finances-filters input[type="date"] {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 0.85rem;
+      font-family: inherit;
+    }
+
+    .fin-amount-positive { color: #16a34a; font-weight: 600; }
+    .fin-amount-negative { color: #dc2626; font-weight: 600; }
+    .fin-category-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .fin-reconciled { color: #16a34a; font-weight: 600; }
+    .fin-not-reconciled { color: #d97706; font-weight: 600; }
+
+    .finances-categories-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .fin-category-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .fin-category-card-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: var(--text);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .fin-category-card-total { font-size: 1.2rem; font-weight: 700; color: var(--text); }
+    .fin-category-card-count { font-size: 0.78rem; color: var(--muted); }
+    .fin-category-card-keywords {
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .finances-empty { color: var(--muted); font-size: 0.9rem; padding: 24px 0; text-align: center; }
+
+    .fin-tx-modal-info {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .fin-tx-modal-info strong { color: var(--text); }
   </style>
 </head>
 <body>
@@ -3075,6 +3231,9 @@
         <a href="#" class="nav-item" data-label="Sites Web" id="nav-sites-web">
           <i class="fa-solid fa-globe"></i>
           <span class="nav-badge" id="sites-web-nav-badge"></span>
+        </a>
+        <a href="#" class="nav-item" data-label="Finances">
+          <i class="fa-solid fa-euro-sign"></i>
         </a>
         <a href="#" class="nav-item" data-label="Équipe">
           <i class="fa-solid fa-people-group"></i>
@@ -3488,6 +3647,177 @@
             </div>
           </div>
         </section>
+
+        <!-- Finances -->
+        <section class="section-page" id="section-finances">
+          <div class="section-header">
+            <div class="section-header-left">
+              <h1>Finances</h1>
+            </div>
+            <button class="btn-create" id="btn-sync-finances">
+              <i class="fa-solid fa-rotate"></i> Synchroniser Bunq
+            </button>
+          </div>
+
+          <div class="finances-tabs">
+            <button class="finances-tab active" data-tab="dashboard">Tableau de bord</button>
+            <button class="finances-tab" data-tab="transactions">Transactions</button>
+            <button class="finances-tab" data-tab="factures">Factures</button>
+            <button class="finances-tab" data-tab="categories">Catégories</button>
+          </div>
+
+          <!-- Tableau de bord -->
+          <div class="finances-pane active" id="finances-pane-dashboard">
+            <div class="finances-stats">
+              <div class="finances-stat-card">
+                <div class="finances-stat-label">Solde actuel</div>
+                <div class="finances-stat-value" id="fin-solde">—</div>
+                <div class="finances-stat-sub" id="fin-solde-date"></div>
+              </div>
+              <div class="finances-stat-card">
+                <div class="finances-stat-label">Revenus du mois</div>
+                <div class="finances-stat-value fin-positive" id="fin-revenus">—</div>
+              </div>
+              <div class="finances-stat-card">
+                <div class="finances-stat-label">Dépenses du mois</div>
+                <div class="finances-stat-value fin-negative" id="fin-depenses">—</div>
+              </div>
+              <div class="finances-stat-card">
+                <div class="finances-stat-label">Bénéfice du mois</div>
+                <div class="finances-stat-value" id="fin-benefice">—</div>
+              </div>
+              <div class="finances-stat-card">
+                <div class="finances-stat-label">Trésorerie</div>
+                <div class="finances-stat-value" id="fin-tresorerie">—</div>
+                <div class="finances-stat-sub" id="fin-tresorerie-sub"></div>
+              </div>
+              <div class="finances-stat-card">
+                <div class="finances-stat-label">Revenu récurrent (hébergements)</div>
+                <div class="finances-stat-value" id="fin-mrr">—</div>
+                <div class="finances-stat-sub" id="fin-mrr-sub"></div>
+              </div>
+            </div>
+            <div class="finances-charts-grid">
+              <div class="finances-chart-card">
+                <h3>Évolution du solde</h3>
+                <div class="finances-chart" id="chart-fin-solde"></div>
+              </div>
+              <div class="finances-chart-card">
+                <h3>Revenus / Dépenses</h3>
+                <div class="finances-chart" id="chart-fin-rev-dep"></div>
+              </div>
+              <div class="finances-chart-card">
+                <h3>Bénéfice mensuel</h3>
+                <div class="finances-chart" id="chart-fin-benefice"></div>
+              </div>
+              <div class="finances-chart-card">
+                <h3>Trésorerie sur 12 mois</h3>
+                <div class="finances-chart" id="chart-fin-tresorerie"></div>
+              </div>
+              <div class="finances-chart-card">
+                <h3>Répartition des dépenses</h3>
+                <div class="finances-chart" id="chart-fin-depenses"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Transactions -->
+          <div class="finances-pane" id="finances-pane-transactions">
+            <div class="finances-filters">
+              <div class="search-bar">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="fin-tx-search" placeholder="Rechercher une transaction..." />
+              </div>
+              <select id="fin-tx-category">
+                <option value="">Toutes catégories</option>
+              </select>
+              <select id="fin-tx-type">
+                <option value="">Revenus &amp; Dépenses</option>
+                <option value="revenu">Revenus</option>
+                <option value="depense">Dépenses</option>
+              </select>
+              <input type="date" id="fin-tx-from" title="Du" />
+              <input type="date" id="fin-tx-to" title="Au" />
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table" id="fin-tx-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Montant</th>
+                    <th>Libellé</th>
+                    <th>Catégorie</th>
+                    <th>Client associé</th>
+                    <th>Projet associé</th>
+                    <th>Moyen de paiement</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="fin-tx-tbody">
+                  <tr class="empty-row"><td colspan="8">Synchronisez Bunq pour importer vos transactions.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Factures (rapprochement) -->
+          <div class="finances-pane" id="finances-pane-factures">
+            <div class="table-wrapper">
+              <table class="data-table" id="fin-inv-table">
+                <thead>
+                  <tr>
+                    <th>N°</th>
+                    <th>Client</th>
+                    <th>Montant TTC</th>
+                    <th>Émission</th>
+                    <th>Échéance</th>
+                    <th>Statut Qonto</th>
+                    <th>Rapprochement bancaire</th>
+                  </tr>
+                </thead>
+                <tbody id="fin-inv-tbody">
+                  <tr class="empty-row"><td colspan="7">Chargement...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Catégories -->
+          <div class="finances-pane" id="finances-pane-categories">
+            <div class="finances-categories-grid" id="fin-categories-grid">
+              <p class="finances-empty">Chargement...</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Modal correction transaction -->
+        <div class="modal-overlay hidden" id="fin-tx-modal">
+          <div class="modal-card">
+            <div class="modal-header">
+              <h2>Corriger la transaction</h2>
+              <button class="modal-close" id="fin-tx-modal-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="fin-tx-modal-body">
+              <div class="fin-tx-modal-info" id="fin-tx-modal-info"></div>
+              <div class="form-group">
+                <label for="fin-tx-edit-category">Catégorie</label>
+                <select id="fin-tx-edit-category"></select>
+              </div>
+              <div class="form-group">
+                <label for="fin-tx-edit-client">Client associé</label>
+                <select id="fin-tx-edit-client"><option value="">— Aucun —</option></select>
+              </div>
+              <div class="form-group">
+                <label for="fin-tx-edit-project">Projet associé</label>
+                <select id="fin-tx-edit-project"><option value="">— Aucun —</option></select>
+              </div>
+              <div class="modal-actions">
+                <button class="btn-cancel" id="fin-tx-edit-cancel">Annuler</button>
+                <button class="btn-confirm" id="fin-tx-edit-save">Enregistrer</button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- Équipe -->
         <!-- Équipe -->
