@@ -85,6 +85,9 @@ async function createSession(store, onTokensChanged) {
       body: { description: 'Karbonn Intranet', secret: BUNQ_API_KEY, permitted_ips: ['*'] },
     });
     console.log('[Bunq] Installation + device-server registered ✓');
+    // Persist installation token immediately so we don't redo installation on next retry
+    store.installationToken = installationToken;
+    if (onTokensChanged) await onTokensChanged(store);
   }
 
   const session = await bunqFetch('POST', '/session-server', {
