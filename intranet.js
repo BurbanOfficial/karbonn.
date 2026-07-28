@@ -4418,24 +4418,19 @@ document.querySelectorAll('.finances-tab').forEach(tab => {
   });
 });
 
-// Sync button
-document.getElementById('btn-sync-finances')?.addEventListener('click', async () => {
-  const btn = document.getElementById('btn-sync-finances');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Synchronisation...';
-  try {
-    const result = await apiRequest('/api/finances/sync', { method: 'POST' });
-    showToast(`Synchronisation terminée : ${result.imported || 0} transactions importées.`, 'success');
-    loadFinances();
-  } catch (err) {
-    showToast('Erreur synchronisation Bunq : ' + err.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Synchroniser Bunq';
-  }
-});
+// Auto-refresh finances every 5 minutes when section is visible
+let _finAutoRefreshInterval = null;
+function startFinAutoRefresh() {
+  if (_finAutoRefreshInterval) return;
+  _finAutoRefreshInterval = setInterval(() => {
+    const section = document.getElementById('section-finances');
+    if (section && section.classList.contains('active')) loadFinances();
+  }, 5 * 60 * 1000);
+}
+startFinAutoRefresh();
 
 async function loadFinances() {
+  console.log('[Finances] Loading data...');
   try {
     const [dashData, txData, reconData, catData] = await Promise.all([
       apiRequest('/api/finances/dashboard'),
@@ -4444,11 +4439,17 @@ async function loadFinances() {
       apiRequest('/api/finances/categories').catch(() => ({ categories: [] })),
     ]);
 
+    console.log('[Finances] Dashboard:', { solde: dashData.solde, revenusMois: dashData.revenusMois, depensesMois: dashData.depensesMois, transactions: dashData.transactionsCount });
+    console.log('[Finances] Transactions loaded:', txData.transactions?.length || 0);
+    console.log('[Finances] Reconciliation:', reconData.invoices?.length || 0, 'invoices');
+    console.log('[Finances] Categories:', catData.categories?.length || 0);
+
     renderFinDashboard(dashData);
     renderFinCharts(dashData);
     renderFinTransactions(txData);
     renderFinReconciliation(reconData);
     renderFinCategories(catData);
+    console.log('[Finances] Render complete ✓');
   } catch (err) {
     console.error('[Finances] Load error:', err);
     showToast('Erreur chargement finances : ' + err.message, 'error');
@@ -4457,6 +4458,12 @@ async function loadFinances() {
 
 // Dashboard cards
 function renderFinDashboard(d) {
+  // Show last sync time
+  const syncEl = document.getElementById('fin-last-sync');
+  if (syncEl && d.soldeUpdatedAt) {
+    const dt = new Date(d.soldeUpdatedAt);
+    syncEl.textContent = `Dernière synchro : ${dt.toLocaleDateString('fr-FR')} à ${dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+  }
   document.getElementById('fin-solde').textContent = fmtEUR(d.solde);
   document.getElementById('fin-solde-date').textContent = d.soldeUpdatedAt ? `Mis à jour ${new Date(d.soldeUpdatedAt).toLocaleDateString('fr-FR')}` : '';
   document.getElementById('fin-revenus').textContent = fmtEUR(d.revenusMois);

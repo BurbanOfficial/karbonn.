@@ -1133,13 +1133,19 @@ function bunqPaymentToTransaction(payment, accountId) {
 }
 
 // Sync transactions from Bunq into Firestore (respects manual corrections)
-app.post('/api/finances/sync', async (req, res) => {
-  if (!bunq.isConfigured()) return res.status(503).json({ error: 'Bunq not configured (BUNQ_API_KEY / BUNQ_PRIVATE_KEY missing)' });
+// Internal sync function (called by auto-sync interval and endpoint)
+let _bunqSyncRunning = false;
+async function syncBunqTransactions() {
+  if (!bunq.isConfigured()) { console.warn('[Finances] Sync skipped: Bunq not configured'); return { error: 'Bunq not configured' }; }
+  if (_bunqSyncRunning) { console.log('[Finances] Sync skipped: already running'); return { skipped: true }; }
+  _bunqSyncRunning = true;
+  console.log('[Finances] ═══ Starting Bunq sync ═══');
+  const syncStart = Date.now();
   try {
     const store = await loadBunqStore();
+    console.log('[Finances] Store loaded — installationToken:', !!store.installationToken, '| sessionToken:', !!store.sessionToken, '| userId:', store.userId || 'none');
     const persist = async s => saveBunqStore(s);
 
-    // Load clients for auto-matching
     const clientsSnap = await db.collection('clients').get();
     const clients = clientsSnap.docs.map(d => ({
       id: d.id,
@@ -1159,7 +1165,6 @@ app.post('/api/finances/sync', async (req, res) => {
         if (existing.exists) {
           const prev = existing.data();
           const patch = { ...tx, updatedAt: new Date().toISOString() };
-          // Never overwrite manual corrections
           if (!prev.manualCategory) {
             const auto = categorizeTransaction(tx, clients);
             patch.category = auto.category;
@@ -1187,10 +1192,24 @@ app.post('/api/finances/sync', async (req, res) => {
 
     const balance = accounts.reduce((sum, a) => sum + a.balance, 0);
     await saveBunqStore({ ...store, balance, balanceCurrency: accounts[0]?.currency || 'EUR', balanceUpdatedAt: new Date().toISOString() });
-    console.log(`[Finances] Sync done: ${imported} imported, ${updated} updated, balance ${balance}`);
-    res.json({ success: true, imported, updated, balance, accounts: accounts.length });
+    const elapsed = ((Date.now() - syncStart) / 1000).toFixed(1);
+    console.log(`[Finances] ═══ Sync complete in ${elapsed}s: ${imported} imported, ${updated} updated, balance ${balance} EUR ═══`);
+    return { success: true, imported, updated, balance, accounts: accounts.length };
   } catch (err) {
-    console.error('[Finances] Sync error:', err.message, JSON.stringify(err.data || {}));
+    const elapsed = ((Date.now() - syncStart) / 1000).toFixed(1);
+    console.error(`[Finances] ═══ Sync FAILED after ${elapsed}s: ${err.message} ═══`, JSON.stringify(err.data || {}));
+    throw err;
+  } finally {
+    _bunqSyncRunning = false;
+  }
+}
+
+app.post('/api/finances/sync', async (req, res) => {
+  if (!bunq.isConfigured()) return res.status(503).json({ error: 'Bunq not configured (BUNQ_API_KEY / BUNQ_PRIVATE_KEY missing)' });
+  try {
+    const result = await syncBunqTransactions();
+    res.json(result);
+  } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
 });
@@ -1587,4 +1606,11 @@ app.listen(PORT, () => {
   // Daily renewal reminder check
   setTimeout(() => { processRenewalReminders(); }, 60 * 1000);
   setInterval(() => { processRenewalReminders(); }, 24 * 60 * 60 * 1000);
+
+  // Auto-sync Bunq transactions every 5 minutes
+  if (bunq.isConfigured()) {
+    console.log('[Finances] Bunq auto-sync enabled (every 5 min)');
+    setTimeout(() => { syncBunqTransactions().catch(e => console.error('[Finances] Auto-sync error:', e.message)); }, 15 * 1000);
+    setInterval(() => { syncBunqTransactions().catch(e => console.error('[Finances] Auto-sync error:', e.message)); }, 5 * 60 * 1000);
+  }
 });
