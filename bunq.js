@@ -36,16 +36,14 @@ async function bunqFetch(method, path, { token = null, body = null } = {}) {
   };
   if (token) headers['X-Bunq-Client-Authentication'] = token;
 
-  // Signature string: "METHOD path" + sorted X-Bunq-* headers + blank line + body
-  const headerLines = Object.keys(headers)
-    .sort()
-    .map(k => `${k}: ${headers[k]}`)
-    .join('\n');
+  // Bunq requires signing ONLY the request body (not URL/headers)
+  // https://doc.bunq.com/basics/signing
   const bodyStr = body ? JSON.stringify(body) : '';
-  const stringToSign = `${method} ${path}\n${headerLines}\n\n${bodyStr}`;
-  headers['X-Bunq-Client-Signature'] = crypto
-    .sign('sha256', Buffer.from(stringToSign), BUNQ_PRIVATE_KEY)
-    .toString('base64');
+  if (bodyStr) {
+    headers['X-Bunq-Client-Signature'] = crypto
+      .sign('sha256', Buffer.from(bodyStr), { key: BUNQ_PRIVATE_KEY, padding: crypto.constants.RSA_PKCS1_PADDING })
+      .toString('base64');
+  }
   if (body) headers['Content-Type'] = 'application/json';
 
   const response = await fetch(`${BUNQ_BASE_URL}${path}`, {

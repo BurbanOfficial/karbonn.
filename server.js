@@ -1610,7 +1610,15 @@ app.listen(PORT, () => {
   // Auto-sync Bunq transactions every 5 minutes
   if (bunq.isConfigured()) {
     console.log('[Finances] Bunq auto-sync enabled (every 5 min)');
-    setTimeout(() => { syncBunqTransactions().catch(e => console.error('[Finances] Auto-sync error:', e.message)); }, 15 * 1000);
+    // Clear old install token (signature format was fixed) then start sync
+    db.collection('financesConfig').doc('bunq').get().then(doc => {
+      if (doc.exists && doc.data().installationToken && !doc.data()._sigV2) {
+        console.log('[Finances] Clearing old Bunq tokens (signature format updated)');
+        return db.collection('financesConfig').doc('bunq').set({ _sigV2: true }, { merge: true })
+          .then(() => db.collection('financesConfig').doc('bunq').update({ installationToken: null, sessionToken: null, userId: null }));
+      }
+    }).catch(e => console.warn('[Finances] Token migration error:', e.message));
+    setTimeout(() => { syncBunqTransactions().catch(e => console.error('[Finances] Auto-sync error:', e.message)); }, 20 * 1000);
     setInterval(() => { syncBunqTransactions().catch(e => console.error('[Finances] Auto-sync error:', e.message)); }, 5 * 60 * 1000);
   }
 });
