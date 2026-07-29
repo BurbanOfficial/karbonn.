@@ -1411,6 +1411,7 @@ const sectionMap = [
   'section-projets',
   'section-sitesweb',
   'section-finances',
+  'section-simulations',
   'section-equipe',
   'section-parametres'
 ];
@@ -1439,6 +1440,11 @@ navItems.forEach((item, index) => {
     // Load finances data when opening the finances section
     if (sectionId === 'section-finances') {
       loadFinances();
+    }
+
+    // Load simulations when opening the section
+    if (sectionId === 'section-simulations') {
+      loadSimulations();
     }
 
   });
@@ -3282,6 +3288,16 @@ function uploadTaskFile(projetId, folder, fileName) {
     const file = e.target.files[0];
     if (!file) return;
     
+    // Ask for hours
+    const hoursStr = prompt('Nombre d\'heures effectuées sur cette tâche :');
+    if (hoursStr === null) { document.body.removeChild(fileInput); return; }
+    const hours = parseFloat(hoursStr);
+    if (isNaN(hours) || hours < 0) {
+      showToast('Nombre d\'heures invalide.', 'error');
+      document.body.removeChild(fileInput);
+      return;
+    }
+    
     try {
       // Show loading state
       const uploadBtn = document.querySelector(`[onclick="uploadTaskFile('${projetId}', '${folder}', '${fileName}')"]`);
@@ -3327,6 +3343,7 @@ function uploadTaskFile(projetId, folder, fileName) {
       
       await db.collection('projets').doc(projetId).update({ files: currentFiles });
       projet.files = currentFiles;
+      await saveFolderHours(projetId, folder, hours);
       
       // Refresh task modal
       renderTaskList(projet, folder);
@@ -3558,6 +3575,20 @@ function renderProjetPageFiles(projet) {
   }
 }
 
+// Save hours to project folderHours
+async function saveFolderHours(projetId, folder, hours) {
+  if (!hours || hours <= 0) return;
+  const projetRef = db.collection('projets').doc(projetId);
+  const doc = await projetRef.get();
+  const data = doc.data() || {};
+  const folderHours = data.folderHours || {};
+  folderHours[folder] = (folderHours[folder] || 0) + hours;
+  await projetRef.update({ folderHours });
+  // Update local data
+  const projet = allProjets.find(p => p.id === projetId);
+  if (projet) projet.folderHours = folderHours;
+}
+
 // File upload modal
 function openFileUploadModal(folder = '01 - Administration', filename = '') {
   if (!canEditFolder(folder)) {
@@ -3572,6 +3603,7 @@ function openFileUploadModal(folder = '01 - Administration', filename = '') {
 
   fileUploadInput.value = '';
   fileUploadName.value = filename;
+  document.getElementById('file-upload-hours').value = '';
   fileUploadError.textContent = '';
 
   // Update modal title for editing
@@ -3693,6 +3725,13 @@ fileUploadSubmit.addEventListener('click', async () => {
     return;
   }
 
+  const hoursInput = document.getElementById('file-upload-hours');
+  const hours = parseFloat(hoursInput.value);
+  if (isNaN(hours) || hours < 0) {
+    fileUploadError.textContent = 'Veuillez indiquer le nombre d\'heures effectuées.';
+    return;
+  }
+
   const folder = fileUploadFolder.value;
   if (!canEditFolder(folder)) {
     fileUploadError.textContent = 'Vous n\'avez pas la permission d\'ajouter un fichier dans ce dossier.';
@@ -3773,6 +3812,7 @@ fileUploadSubmit.addEventListener('click', async () => {
               
               await db.collection('projets').doc(currentPageProjet.id).update({ files: currentFiles });
               currentPageProjet.files = currentFiles;
+              await saveFolderHours(currentPageProjet.id, folder, hours);
               
               // Real-time refresh
               renderProjetPageFiles(currentPageProjet);
@@ -3812,6 +3852,7 @@ fileUploadSubmit.addEventListener('click', async () => {
       
       await db.collection('projets').doc(currentPageProjet.id).update({ files: currentFiles });
       currentPageProjet.files = currentFiles;
+      await saveFolderHours(currentPageProjet.id, folder, hours);
       
       // Real-time refresh
       renderProjetPageFiles(currentPageProjet);
@@ -4721,4 +4762,286 @@ function renderFinCategories(data) {
     </div>`;
   }).join('');
 }
+
+// ═══════════════════════════════════════════
+// SIMULATIONS
+// ═══════════════════════════════════════════
+
+const FOLDER_TO_PRESTATION = {
+  '01 - Administration': 'Administration',
+  '02 - Analyse': 'Analyse & Stratégie',
+  '03 - Design': 'Design graphique',
+  '04 - Développement': 'Développement web',
+  '05 - Tests': 'Tests & QA',
+  '06 - Livraison': 'Livraison & Mise en production',
+};
+
+const SIM_DEFAULT_RATES = {
+  '01 - Administration': 50,
+  '02 - Analyse': 60,
+  '03 - Design': 55,
+  '04 - Développement': 65,
+  '05 - Tests': 50,
+  '06 - Livraison': 45,
+};
+
+let simTarifs = { ...SIM_DEFAULT_RATES };
+let simManualPrestations = [];
+let simFraisExternes = [];
+let simSelectedProjet = null;
+
+async function loadSimTarifs() {
+  try {
+    const doc = await db.collection('settings').doc('simTarifs').get();
+    if (doc.exists) {
+      simTarifs = { ...SIM_DEFAULT_RATES, ...doc.data() };
+    }
+  } catch (e) {
+    console.warn('Could not load sim tarifs, using defaults', e);
+  }
+}
+
+function renderTarifsGrid() {
+  const section = document.getElementById('sim-tarifs-section');
+  if (currentUserRole !== 'Manager') {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  const grid = document.getElementById('sim-tarifs-grid');
+  grid.innerHTML = Object.entries(FOLDER_TO_PRESTATION).map(([folder, label]) => {
+    const rate = simTarifs[folder] || 0;
+    return `<div class="sim-tarif-item">
+      <span class="sim-tarif-label">${escapeHTML(label)}</span>
+      <input type="number" class="sim-tarif-input" data-folder="${folder}" min="0" step="1" value="${rate}" />
+      <span class="sim-tarif-unit">€/h</span>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('sim-tarifs-save').addEventListener('click', async () => {
+  const inputs = document.querySelectorAll('.sim-tarif-input');
+  const newTarifs = {};
+  inputs.forEach(input => {
+    newTarifs[input.dataset.folder] = parseFloat(input.value) || 0;
+  });
+  try {
+    await db.collection('settings').doc('simTarifs').set(newTarifs);
+    simTarifs = { ...SIM_DEFAULT_RATES, ...newTarifs };
+    showToast('Grille tarifaire sauvegardée.', 'success');
+    if (simSelectedProjet) renderSimulation();
+  } catch (e) {
+    console.error('Error saving tarifs', e);
+    showToast('Erreur lors de la sauvegarde.', 'error');
+  }
+});
+
+async function loadSimulations() {
+  await loadSimTarifs();
+  renderTarifsGrid();
+  const select = document.getElementById('sim-projet-select');
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">Sélectionner un projet</option>';
+  allProjets.forEach(p => {
+    select.innerHTML += `<option value="${p.id}">${escapeHTML(p.nom || 'Sans nom')} (${p.projetId || '—'})</option>`;
+  });
+  if (currentVal) select.value = currentVal;
+  if (simSelectedProjet) renderSimulation();
+}
+
+document.getElementById('sim-projet-select').addEventListener('change', function() {
+  const projetId = this.value;
+  if (!projetId) {
+    simSelectedProjet = null;
+    document.getElementById('sim-client-info').style.display = 'none';
+    clearSimulation();
+    return;
+  }
+  simSelectedProjet = allProjets.find(p => p.id === projetId);
+  simManualPrestations = [];
+  simFraisExternes = [];
+  renderSimulation();
+});
+
+function clearSimulation() {
+  document.getElementById('sim-prestations-body').innerHTML = '<tr><td colspan="5" class="empty">Sélectionnez un projet</td></tr>';
+  document.getElementById('sim-frais-body').innerHTML = '<tr><td colspan="4" class="empty">Aucun frais</td></tr>';
+  document.getElementById('sim-total-heures').textContent = '0h';
+  document.getElementById('sim-total-prestations').textContent = '0,00 €';
+  document.getElementById('sim-total-frais').textContent = '0,00 €';
+  document.getElementById('sim-cout-total').textContent = '0,00 €';
+  document.getElementById('sim-prix-vente-input').value = '0';
+  document.getElementById('sim-marge-brute').textContent = '0,00 €';
+  document.getElementById('sim-marge-pct').textContent = '0 %';
+  const badge = document.getElementById('sim-rentabilite-badge');
+  badge.textContent = '—';
+  badge.className = 'sim-rentabilite-badge';
+}
+
+function renderSimulation() {
+  if (!simSelectedProjet) return;
+
+  // Client info in topbar
+  const clientInfo = document.getElementById('sim-client-info');
+  clientInfo.style.display = '';
+  document.getElementById('sim-client-name').textContent = simSelectedProjet.clientName || '—';
+  document.getElementById('sim-projet-id').textContent = simSelectedProjet.projetId || '—';
+
+  // Build prestations from folderHours + manual
+  const folderHours = simSelectedProjet.folderHours || {};
+  const autoCount = Object.keys(folderHours).filter(k => folderHours[k] > 0).length;
+  const prestations = [];
+  Object.entries(folderHours).forEach(([folder, hours]) => {
+    if (hours > 0) {
+      prestations.push({
+        name: FOLDER_TO_PRESTATION[folder] || folder,
+        hours,
+        rate: simTarifs[folder] || 50,
+        manual: false,
+      });
+    }
+  });
+  simManualPrestations.forEach(p => prestations.push({ ...p, manual: true }));
+
+  // Render prestations table
+  const prestBody = document.getElementById('sim-prestations-body');
+  if (!prestations.length) {
+    prestBody.innerHTML = '<tr><td colspan="5" class="empty">Aucune prestation enregistrée</td></tr>';
+  } else {
+    prestBody.innerHTML = prestations.map((p, i) => `<tr>
+      <td>${escapeHTML(p.name)}</td>
+      <td>${p.hours}h</td>
+      <td>${fmtEUR(p.rate)}</td>
+      <td class="sim-amount">${fmtEUR(p.hours * p.rate)}</td>
+      <td>${p.manual ? `<button class="sim-delete-btn" onclick="simRemovePrestation(${i - autoCount})" title="Supprimer"><i class="fa-solid fa-xmark"></i></button>` : ''}</td>
+    </tr>`).join('');
+  }
+
+  const totalHeures = prestations.reduce((sum, p) => sum + p.hours, 0);
+  const totalPrestations = prestations.reduce((sum, p) => sum + (p.hours * p.rate), 0);
+  document.getElementById('sim-total-heures').textContent = totalHeures + 'h';
+  document.getElementById('sim-total-prestations').textContent = fmtEUR(totalPrestations);
+
+  // Render frais externes
+  const fraisBody = document.getElementById('sim-frais-body');
+  if (!simFraisExternes.length) {
+    fraisBody.innerHTML = '<tr><td colspan="4" class="empty">Aucun frais</td></tr>';
+  } else {
+    fraisBody.innerHTML = simFraisExternes.map((f, i) => `<tr>
+      <td>${escapeHTML(f.type)}</td>
+      <td>${escapeHTML(f.description)}</td>
+      <td class="sim-amount">${fmtEUR(f.cost)}</td>
+      <td><button class="sim-delete-btn" onclick="simRemoveFrais(${i})" title="Supprimer"><i class="fa-solid fa-xmark"></i></button></td>
+    </tr>`).join('');
+  }
+
+  const totalFrais = simFraisExternes.reduce((sum, f) => sum + f.cost, 0);
+  document.getElementById('sim-total-frais').textContent = fmtEUR(totalFrais);
+
+  // Rentabilité
+  const coutTotal = totalPrestations + totalFrais;
+  const prixVenteInput = document.getElementById('sim-prix-vente-input');
+  const prixVente = parseFloat(prixVenteInput.value) || 0;
+  const margeBrute = prixVente - coutTotal;
+  const margePct = prixVente > 0 ? Math.round((margeBrute / prixVente) * 100) : 0;
+
+  document.getElementById('sim-cout-total').textContent = fmtEUR(coutTotal);
+
+  const margeEl = document.getElementById('sim-marge-brute');
+  margeEl.textContent = fmtEUR(margeBrute);
+  margeEl.className = 'sim-rent-value ' + (margeBrute >= 0 ? 'sim-val-green' : 'sim-val-red');
+
+  const pctEl = document.getElementById('sim-marge-pct');
+  pctEl.textContent = margePct + ' %';
+  pctEl.className = 'sim-rent-value ' + (margePct >= 30 ? 'sim-val-green' : margePct >= 15 ? 'sim-val-accent' : 'sim-val-red');
+
+  const badge = document.getElementById('sim-rentabilite-badge');
+  if (margePct >= 30) {
+    badge.textContent = '✓ Projet rentable';
+    badge.className = 'sim-rentabilite-badge sim-badge-green';
+  } else if (margePct >= 15) {
+    badge.textContent = '⚠ Rentabilité moyenne';
+    badge.className = 'sim-rentabilite-badge sim-badge-orange';
+  } else {
+    badge.textContent = '✗ Non rentable';
+    badge.className = 'sim-rentabilite-badge sim-badge-red';
+  }
+}
+
+// Recalculate on price input change
+document.getElementById('sim-prix-vente-input').addEventListener('input', () => {
+  if (simSelectedProjet) renderSimulation();
+});
+
+// Add manual prestation
+document.getElementById('sim-add-prestation').addEventListener('click', () => {
+  const name = prompt('Nom de la prestation :');
+  if (!name) return;
+  const hours = parseFloat(prompt('Nombre d\'heures :'));
+  if (isNaN(hours) || hours <= 0) { showToast('Nombre d\'heures invalide.', 'error'); return; }
+  const avgRate = Math.round(Object.values(simTarifs).reduce((a, b) => a + b, 0) / Object.values(simTarifs).length);
+  const rate = parseFloat(prompt('Coût horaire (€) :', avgRate));
+  if (isNaN(rate) || rate <= 0) { showToast('Coût horaire invalide.', 'error'); return; }
+  simManualPrestations.push({ name, hours, rate });
+  renderSimulation();
+});
+
+// Add frais externe
+document.getElementById('sim-add-frais').addEventListener('click', () => {
+  const type = prompt('Type de frais :');
+  if (!type) return;
+  const description = prompt('Description :') || '';
+  const cost = parseFloat(prompt('Coût (€) :'));
+  if (isNaN(cost) || cost <= 0) { showToast('Coût invalide.', 'error'); return; }
+  simFraisExternes.push({ type, description, cost });
+  renderSimulation();
+});
+
+function simRemovePrestation(manualIndex) {
+  if (manualIndex >= 0 && manualIndex < simManualPrestations.length) {
+    simManualPrestations.splice(manualIndex, 1);
+    renderSimulation();
+  }
+}
+
+function simRemoveFrais(index) {
+  simFraisExternes.splice(index, 1);
+  renderSimulation();
+}
+
+// Calculator modal
+document.getElementById('sim-btn-calculer').addEventListener('click', () => {
+  document.getElementById('sim-calculer-modal').classList.add('visible');
+  document.getElementById('sim-calc-display').value = '0';
+});
+document.getElementById('sim-calculer-close').addEventListener('click', () => {
+  document.getElementById('sim-calculer-modal').classList.remove('visible');
+});
+document.getElementById('sim-calculer-modal').addEventListener('click', e => {
+  if (e.target.id === 'sim-calculer-modal') e.target.classList.remove('visible');
+});
+
+let simCalcExpression = '';
+document.querySelectorAll('.sim-calc-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const val = btn.dataset.val;
+    const display = document.getElementById('sim-calc-display');
+    if (val === 'C') {
+      simCalcExpression = '';
+      display.value = '0';
+    } else if (val === '=') {
+      try {
+        const result = Function('"use strict"; return (' + simCalcExpression + ')')();
+        display.value = isFinite(result) ? Math.round(result * 100) / 100 : 'Erreur';
+        simCalcExpression = String(result);
+      } catch {
+        display.value = 'Erreur';
+        simCalcExpression = '';
+      }
+    } else {
+      simCalcExpression += val;
+      display.value = simCalcExpression;
+    }
+  });
+});
 
