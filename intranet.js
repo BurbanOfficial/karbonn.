@@ -4479,14 +4479,14 @@ function renderFinDashboard(d) {
 
 // Charts
 function renderFinCharts(d) {
-  const months = (d.months || []).map(m => {
-    const [y, mo] = m.split('-');
-    return new Date(y, mo - 1).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+  const labels = (d.days || []).map(day => {
+    const [y, mo, da] = day.split('-');
+    return new Date(y, mo - 1, da).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   });
   const chartDefaults = {
     chart: { toolbar: { show: false }, fontFamily: 'Space Grotesk, sans-serif' },
     stroke: { curve: 'smooth', width: 2 },
-    xaxis: { categories: months },
+    xaxis: { categories: labels, labels: { rotate: -45, rotateAlways: false, hideOverlappingLabels: true, style: { fontSize: '10px' } } },
     tooltip: { y: { formatter: v => fmtEUR(v) } },
     grid: { borderColor: 'var(--border)', strokeDashArray: 3 },
   };
@@ -4518,7 +4518,7 @@ function renderFinCharts(d) {
   });
   financesCharts.revDep.render();
 
-  // 3. Bénéfice mensuel
+  // 3. Bénéfice journalier
   financesCharts.benefice = new ApexCharts(document.getElementById('chart-fin-benefice'), {
     ...chartDefaults,
     chart: { ...chartDefaults.chart, type: 'bar', height: 240 },
@@ -4528,7 +4528,7 @@ function renderFinCharts(d) {
   });
   financesCharts.benefice.render();
 
-  // 4. Trésorerie sur 12 mois
+  // 4. Trésorerie sur 30 jours
   let tresRunning = d.solde ?? 0;
   const tresSeries = (d.beneficeSeries || []).map(b => { tresRunning += b; return Math.round(tresRunning * 100) / 100; });
   financesCharts.tresorerie = new ApexCharts(document.getElementById('chart-fin-tresorerie'), {

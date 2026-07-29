@@ -1248,14 +1248,20 @@ app.get('/api/finances/dashboard', async (req, res) => {
       else depensesMois += Math.abs(t.amount);
     });
 
-    // 12-month buckets
+    // Daily buckets (last 30 days)
+    function dayKey(dateStr) {
+      const d = new Date(dateStr);
+      if (isNaN(d)) return null;
+      return d.toISOString().slice(0, 10); // YYYY-MM-DD
+    }
     const buckets = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      buckets.push({ key: monthKey(d.toISOString()), revenus: 0, depenses: 0 });
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      buckets.push({ key: dayKey(d.toISOString()), revenus: 0, depenses: 0 });
     }
     transactions.forEach(t => {
-      const key = monthKey(t.date);
+      const key = dayKey(t.date);
       const bucket = buckets.find(b => b.key === key);
       if (!bucket) return;
       if (t.amount > 0) bucket.revenus += t.amount;
@@ -1306,7 +1312,7 @@ app.get('/api/finances/dashboard', async (req, res) => {
       revenuRecurrent: activeSites * HOSTING_MONTHLY,
       activeSites,
       unpaidInvoicesTotal: unpaidTotal,
-      months: buckets.map(b => b.key),
+      days: buckets.map(b => b.key),
       revenusSeries: buckets.map(b => Math.round(b.revenus * 100) / 100),
       depensesSeries: buckets.map(b => Math.round(b.depenses * 100) / 100),
       beneficeSeries: buckets.map(b => Math.round((b.revenus - b.depenses) * 100) / 100),
