@@ -4486,7 +4486,7 @@ function renderFinCharts(d) {
   const chartDefaults = {
     chart: { toolbar: { show: false }, fontFamily: 'Space Grotesk, sans-serif' },
     stroke: { curve: 'smooth', width: 2 },
-    xaxis: { categories: labels, labels: { rotate: -45, rotateAlways: false, hideOverlappingLabels: true, style: { fontSize: '10px' } } },
+    xaxis: { categories: labels },
     tooltip: { y: { formatter: v => fmtEUR(v) } },
     grid: { borderColor: 'var(--border)', strokeDashArray: 3 },
   };
@@ -4528,29 +4528,6 @@ function renderFinCharts(d) {
   });
   financesCharts.benefice.render();
 
-  // 4. Trésorerie sur 30 jours
-  let tresRunning = d.solde ?? 0;
-  const tresSeries = (d.beneficeSeries || []).map(b => { tresRunning += b; return Math.round(tresRunning * 100) / 100; });
-  financesCharts.tresorerie = new ApexCharts(document.getElementById('chart-fin-tresorerie'), {
-    ...chartDefaults,
-    chart: { ...chartDefaults.chart, type: 'line', height: 240 },
-    series: [{ name: 'Trésorerie projetée', data: tresSeries }],
-    colors: ['#0891b2'],
-  });
-  financesCharts.tresorerie.render();
-
-  // 5. Répartition des dépenses (donut)
-  const expCats = d.expenseByCategory || [];
-  financesCharts.depenses = new ApexCharts(document.getElementById('chart-fin-depenses'), {
-    chart: { type: 'donut', height: 260, fontFamily: 'Space Grotesk, sans-serif' },
-    series: expCats.map(e => e.value),
-    labels: expCats.map(e => e.label),
-    colors: ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#64748b'],
-    legend: { position: 'bottom', fontSize: '12px' },
-    tooltip: { y: { formatter: v => fmtEUR(v) } },
-    dataLabels: { enabled: false },
-  });
-  financesCharts.depenses.render();
 }
 
 // Transactions table
