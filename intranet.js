@@ -336,6 +336,12 @@ function renderDashboard() {
     greetingEl.textContent = `${salut}, ${firstName} 👋`;
   }
 
+  const dateEl = document.getElementById('dashboard-date');
+  if (dateEl) {
+    const dateStr = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    dateEl.textContent = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+  }
+
   // Projets actifs
   const activeProjects = allProjets.filter(p => p.statut !== 'Projet livré');
   if (projetsVal) projetsVal.textContent = activeProjects.length;
