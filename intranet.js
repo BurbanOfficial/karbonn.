@@ -73,6 +73,13 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+function showSection(sectionId) {
+  const loader = document.getElementById('loader-' + sectionId);
+  const content = document.getElementById('content-' + sectionId);
+  if (loader) loader.style.display = 'none';
+  if (content) content.classList.add('loaded');
+}
+
 function buildEmailHtml({ title, intro, lines, buttonText, buttonHref }) {
   const linesHtml = (lines || []).map(line => `<div>${escapeHtml(line)}<br></div>`).join('');
   return `<div>
@@ -254,6 +261,7 @@ function showApp(user, profile) {
 }
 
 const _dashCharts = {};
+let _dashCaMois = null;
 
 function _toDate(ts) {
   if (!ts) return null;
@@ -313,6 +321,7 @@ function _apexSparklineOptions(seriesData, color, name) {
 }
 
 function renderDashboard() {
+  showSection('dashboard');
   const greetingEl = document.getElementById('dashboard-greeting');
   const projetsVal = document.getElementById('stat-projets-val');
   const clientsVal = document.getElementById('stat-clients-val');
@@ -334,8 +343,8 @@ function renderDashboard() {
   // Clients
   if (clientsVal) clientsVal.textContent = allClients.length;
 
-  // CA du mois — placeholder
-  if (caVal) caVal.textContent = '—';
+  // CA du mois — from finances data
+  if (caVal) caVal.textContent = _dashCaMois != null ? fmtEUR(_dashCaMois) : '—';
 
   // Tâches aujourd'hui
   const today = new Date().toISOString().split('T')[0];
@@ -429,7 +438,18 @@ function renderDashboardHistory() {
   };
 
   const now = new Date();
-  list.innerHTML = _activityLog.map(entry => {
+  const fourDaysAgo = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000);
+  const recentLog = _activityLog.filter(entry => {
+    const ts = entry.createdAt?.seconds ? new Date(entry.createdAt.seconds * 1000) : null;
+    return ts && ts >= fourDaysAgo;
+  });
+
+  if (recentLog.length === 0) {
+    list.innerHTML = '<div class="dashboard-empty">Aucune action ces 4 derniers jours</div>';
+    return;
+  }
+
+  list.innerHTML = recentLog.map(entry => {
     const meta = actionMeta[entry.action] || { icon: 'fa-circle-info', label: (e) => `<strong>${escapeHtml(e.userName)}</strong> — ${escapeHtml(e.action)}` };
     const ts = entry.createdAt?.seconds ? new Date(entry.createdAt.seconds * 1000) : null;
     let timeLabel = '';
@@ -593,6 +613,7 @@ auth.onAuthStateChanged(async user => {
     setupSitesListener();
     setupUsersListener();
     setupActivityListener();
+    loadAbonnements();
 
     // Initialize planning after user is logged in
     setTimeout(() => {
@@ -808,6 +829,7 @@ function setupSitesListener() {
     renderAllSites();
     autoUpdateExpiredSites();
     refreshPlanning();
+    showSection('sitesweb');
     if (currentPageSite) {
       const updated = allSites.find(s => s.id === currentPageSite.id);
       if (updated) {
@@ -818,6 +840,7 @@ function setupSitesListener() {
   }, err => {
     console.error(err);
     sitesTbody.innerHTML = '<tr class="empty-row"><td colspan="5">Erreur lors du chargement.</td></tr>';
+    showSection('sitesweb');
   });
 }
 
@@ -1032,6 +1055,7 @@ function openSitePage(site, loadHistory = true) {
 
   if (loadHistory) loadSiteHistory(site.id);
   renderSiteRenewals(site);
+  renderSiteSubscriptionSelector(site);
 }
 
 function renderSiteRenewals(site) {
@@ -1463,10 +1487,12 @@ function setupClientsListener() {
     });
     renderClients(allClients);
     renderDashboard();
+    showSection('clients');
   }, err => {
     console.error(err);
     const tbody = document.getElementById('clients-tbody');
     if (tbody) tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Erreur lors du chargement.</td></tr>';
+    showSection('clients');
   });
 }
 
@@ -1889,6 +1915,8 @@ function setupProjetsListener() {
     renderAllProjets();
     refreshPlanning(); // Update planning when projects change
     renderDashboard();
+    showSection('projets');
+    showSection('taches');
     // Refresh open projet page
     if (currentPageProjet) {
       const updated = allProjets.find(p => p.id === currentPageProjet.id);
@@ -1901,6 +1929,8 @@ function setupProjetsListener() {
     console.error(err);
     const tbody = document.getElementById('projets-tbody');
     if (tbody) tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Erreur lors du chargement.</td></tr>';
+    showSection('projets');
+    showSection('taches');
   });
 }
 
@@ -2163,6 +2193,7 @@ async function loadTeamMembers() {
       console.error('Error loading team members:', err);
     }
   }
+  showSection('equipe');
 }
 
 function populateTeamCheckboxes() {
@@ -4479,6 +4510,8 @@ async function loadFinances() {
       apiRequest('/api/finances/reconciliation').catch(() => ({ invoices: [] })),
       apiRequest('/api/finances/categories').catch(() => ({ categories: [] })),
     ]);
+    await loadAbonnements();
+    renderAbonnementsTab();
 
     console.log('[Finances] Dashboard:', { solde: dashData.solde, revenusMois: dashData.revenusMois, depensesMois: dashData.depensesMois, transactions: dashData.transactionsCount });
     console.log('[Finances] Transactions loaded:', txData.transactions?.length || 0);
@@ -4490,15 +4523,36 @@ async function loadFinances() {
     renderFinTransactions(txData);
     renderFinReconciliation(reconData);
     renderFinCategories(catData);
+    showSection('finances');
     console.log('[Finances] Render complete ✓');
   } catch (err) {
     console.error('[Finances] Load error:', err);
     showToast('Erreur chargement finances : ' + err.message, 'error');
+    showSection('finances');
   }
+}
+
+// Compute MRR from site subscriptions
+function computeMRR() {
+  let total = 0;
+  let count = 0;
+  allSites.forEach(site => {
+    if (!site.abonnementId) return;
+    if (site.abonnementId === '__custom') {
+      if (site.abonnementCustomPrice > 0) { total += site.abonnementCustomPrice; count++; }
+    } else {
+      const abo = allAbonnements.find(a => a.id === site.abonnementId);
+      if (abo && abo.price > 0) { total += abo.price; count++; }
+    }
+  });
+  return { total, count };
 }
 
 // Dashboard cards
 function renderFinDashboard(d) {
+  // Update dashboard CA du mois
+  _dashCaMois = d.revenusMois;
+  renderDashboard();
   // Show last sync time
   const syncEl = document.getElementById('fin-last-sync');
   if (syncEl && d.soldeUpdatedAt) {
@@ -4514,8 +4568,10 @@ function renderFinDashboard(d) {
   benEl.className = 'finances-stat-value ' + (d.beneficeMois >= 0 ? 'fin-positive' : 'fin-negative');
   document.getElementById('fin-tresorerie').textContent = fmtEUR(d.tresorerie);
   document.getElementById('fin-tresorerie-sub').textContent = d.unpaidInvoicesTotal ? `Dont ${fmtEUR(d.unpaidInvoicesTotal)} factures en attente` : '';
-  document.getElementById('fin-mrr').textContent = fmtEUR(d.revenuRecurrent);
-  document.getElementById('fin-mrr-sub').textContent = d.activeSites ? `${d.activeSites} sites actifs × 19,99 €` : '';
+  // Calculate MRR from actual subscription assignments
+  const mrrData = computeMRR();
+  document.getElementById('fin-mrr').textContent = fmtEUR(mrrData.total);
+  document.getElementById('fin-mrr-sub').textContent = mrrData.count ? `${mrrData.count} site${mrrData.count > 1 ? 's' : ''} avec abonnement` : 'Aucun abonnement actif';
 }
 
 // Charts
@@ -4764,6 +4820,153 @@ function renderFinCategories(data) {
 }
 
 // ═══════════════════════════════════════════
+// ABONNEMENTS (Subscription Plans)
+// ═══════════════════════════════════════════
+
+let allAbonnements = [];
+
+async function loadAbonnements() {
+  try {
+    const snap = await db.collection('abonnements').orderBy('name').get();
+    allAbonnements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    console.warn('[Abonnements] Load error:', e);
+    allAbonnements = [];
+  }
+}
+
+function renderAbonnementsTab() {
+  // Show tab only for managers
+  const tab = document.getElementById('fin-tab-abonnements');
+  if (tab) tab.style.display = currentUserRole === 'Manager' ? '' : 'none';
+
+  const tbody = document.getElementById('abo-tbody');
+  if (!tbody) return;
+  if (!allAbonnements.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="3">Aucun abonnement défini.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allAbonnements.map(abo => `<tr>
+    <td>${escapeHTML(abo.name)}</td>
+    <td>${fmtEUR(abo.price)}</td>
+    <td style="text-align:right;">
+      <div class="action-btns">
+        <button class="btn-icon" onclick="editAbonnement('${abo.id}')" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
+        <button class="btn-icon btn-icon-danger" onclick="deleteAbonnement('${abo.id}')" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </td>
+  </tr>`).join('');
+}
+
+document.getElementById('btn-add-abonnement').addEventListener('click', async () => {
+  const name = prompt('Nom de l\'abonnement :');
+  if (!name) return;
+  const priceStr = prompt('Prix mensuel (€) :');
+  const price = parseFloat(priceStr);
+  if (isNaN(price) || price < 0) { showToast('Prix invalide.', 'error'); return; }
+  try {
+    await db.collection('abonnements').add({ name, price, createdAt: new Date().toISOString() });
+    showToast('Abonnement créé.', 'success');
+    await loadAbonnements();
+    renderAbonnementsTab();
+  } catch (e) {
+    console.error(e);
+    showToast('Erreur lors de la création.', 'error');
+  }
+});
+
+async function editAbonnement(id) {
+  const abo = allAbonnements.find(a => a.id === id);
+  if (!abo) return;
+  const name = prompt('Nom de l\'abonnement :', abo.name);
+  if (!name) return;
+  const priceStr = prompt('Prix mensuel (€) :', abo.price);
+  const price = parseFloat(priceStr);
+  if (isNaN(price) || price < 0) { showToast('Prix invalide.', 'error'); return; }
+  try {
+    await db.collection('abonnements').doc(id).update({ name, price });
+    showToast('Abonnement modifié.', 'success');
+    await loadAbonnements();
+    renderAbonnementsTab();
+  } catch (e) {
+    console.error(e);
+    showToast('Erreur lors de la modification.', 'error');
+  }
+}
+
+async function deleteAbonnement(id) {
+  if (!confirm('Supprimer cet abonnement ?')) return;
+  try {
+    await db.collection('abonnements').doc(id).delete();
+    showToast('Abonnement supprimé.', 'success');
+    await loadAbonnements();
+    renderAbonnementsTab();
+  } catch (e) {
+    console.error(e);
+    showToast('Erreur lors de la suppression.', 'error');
+  }
+}
+
+// Subscription selector in Sites Web detail
+function renderSiteSubscriptionSelector(site) {
+  const select = document.getElementById('site-sub-select');
+  const priceEl = document.getElementById('site-sub-price');
+  if (!select || !priceEl) return;
+
+  select.innerHTML = '<option value="">Aucun abonnement</option>';
+  select.innerHTML += '<option value="__custom">Personnalisé</option>';
+  allAbonnements.forEach(abo => {
+    select.innerHTML += `<option value="${abo.id}">${escapeHTML(abo.name)} — ${fmtEUR(abo.price)}/mois</option>`;
+  });
+
+  // Set current value
+  if (site.abonnementId === '__custom') {
+    select.value = '__custom';
+    priceEl.textContent = site.abonnementCustomPrice ? `${fmtEUR(site.abonnementCustomPrice)}/mois` : '';
+  } else if (site.abonnementId) {
+    select.value = site.abonnementId;
+    const abo = allAbonnements.find(a => a.id === site.abonnementId);
+    priceEl.textContent = abo ? `${fmtEUR(abo.price)}/mois` : '';
+  } else {
+    select.value = '';
+    priceEl.textContent = '';
+  }
+
+  // Remove old listener
+  const newSelect = select.cloneNode(true);
+  select.parentNode.replaceChild(newSelect, select);
+
+  newSelect.addEventListener('change', async () => {
+    const val = newSelect.value;
+    let update = {};
+    if (val === '') {
+      update = { abonnementId: null, abonnementCustomPrice: null };
+      priceEl.textContent = '';
+    } else if (val === '__custom') {
+      const customPrice = parseFloat(prompt('Prix mensuel personnalisé (€) :'));
+      if (isNaN(customPrice) || customPrice < 0) {
+        newSelect.value = site.abonnementId || '';
+        return;
+      }
+      update = { abonnementId: '__custom', abonnementCustomPrice: customPrice };
+      priceEl.textContent = `${fmtEUR(customPrice)}/mois`;
+    } else {
+      const abo = allAbonnements.find(a => a.id === val);
+      update = { abonnementId: val, abonnementCustomPrice: null };
+      priceEl.textContent = abo ? `${fmtEUR(abo.price)}/mois` : '';
+    }
+    try {
+      await db.collection('sitesWeb').doc(site.id).update(update);
+      Object.assign(site, update);
+      showToast('Abonnement mis à jour.', 'success');
+    } catch (e) {
+      console.error(e);
+      showToast('Erreur mise à jour abonnement.', 'error');
+    }
+  });
+}
+
+// ═══════════════════════════════════════════
 // SIMULATIONS
 // ═══════════════════════════════════════════
 
@@ -4847,6 +5050,7 @@ async function loadSimulations() {
   });
   if (currentVal) select.value = currentVal;
   if (simSelectedProjet) renderSimulation();
+  showSection('simulations');
 }
 
 document.getElementById('sim-projet-select').addEventListener('change', function() {

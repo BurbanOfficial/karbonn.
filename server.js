@@ -1248,14 +1248,14 @@ app.get('/api/finances/dashboard', async (req, res) => {
       else depensesMois += Math.abs(t.amount);
     });
 
-    // Daily buckets (last 10 days including today)
+    // Daily buckets (2 days before today + today + 2 days after = 5 days)
     function dayKey(dateStr) {
       const d = new Date(dateStr);
       if (isNaN(d)) return null;
       return d.toISOString().slice(0, 10); // YYYY-MM-DD
     }
     const buckets = [];
-    for (let i = 9; i >= 0; i--) {
+    for (let i = 2; i >= -2; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       buckets.push({ key: dayKey(d.toISOString()), revenus: 0, depenses: 0 });

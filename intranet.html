@@ -30,6 +30,33 @@
       box-sizing: border-box;
     }
 
+    /* Section loader */
+    .section-loader {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 0;
+      width: 100%;
+    }
+    .section-loader .loader {
+      width: 100px;
+      height: 40px;
+      --g: radial-gradient(farthest-side,#0000 calc(95% - 3px),#111 calc(100% - 3px) 98%,#0000 101%) no-repeat;
+      background: var(--g), var(--g), var(--g);
+      background-size: 30px 30px;
+      animation: l9 1s infinite alternate;
+    }
+    @keyframes l9 {
+      0%   { background-position: 0 50%, 50% 50%, 100% 50%; }
+      20%  { background-position: 0 0, 50% 50%, 100% 50%; }
+      40%  { background-position: 0 100%, 50% 0, 100% 50%; }
+      60%  { background-position: 0 50%, 50% 100%, 100% 0; }
+      80%  { background-position: 0 50%, 50% 50%, 100% 100%; }
+      100% { background-position: 0 50%, 50% 50%, 100% 50%; }
+    }
+    .section-content { display: none; }
+    .section-content.loaded { display: block; }
+
     body {
       font-family: 'Space Grotesk', sans-serif;
       background-color: var(--bg);
@@ -2310,6 +2337,43 @@
       }
     }
 
+    /* Subscription box in Sites Web */
+    .site-subscription-box {
+      margin-top: 20px;
+      padding: 16px 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--accent-soft);
+    }
+    .site-sub-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .site-sub-select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .site-sub-select:focus { outline: none; border-color: var(--accent); }
+    .site-sub-price {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
     .form-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -3537,6 +3601,8 @@
       <div class="content">
         <!-- Dashboard -->
         <section class="section-page active" id="section-dashboard">
+          <div class="section-loader" id="loader-dashboard"><div class="loader"></div></div>
+          <div class="section-content" id="content-dashboard">
           <div class="dashboard-greeting" id="dashboard-greeting"></div>
           <div class="dashboard-stats" id="dashboard-stats">
             <div class="stat-card">
@@ -3597,10 +3663,13 @@
               <div class="dashboard-history-list" id="dashboard-history-list"></div>
             </div>
           </div>
+          </div>
         </section>
 
         <!-- Clients -->
         <section class="section-page" id="section-clients">
+          <div class="section-loader" id="loader-clients"><div class="loader"></div></div>
+          <div class="section-content" id="content-clients">
           <div class="section-header">
             <div class="section-header-left">
               <h1>Clients</h1>
@@ -3633,10 +3702,13 @@
               </tbody>
             </table>
           </div>
+          </div>
         </section>
 
         <!-- Tâches & Planning -->
         <section class="section-page" id="section-taches">
+          <div class="section-loader" id="loader-taches"><div class="loader"></div></div>
+          <div class="section-content" id="content-taches">
           <div class="section-header">
             <div class="section-header-left">
               <h2 class="section-title">Planning Hebdomadaire</h2>
@@ -3716,10 +3788,13 @@
               </div>
             </div>
           </div>
+          </div>
         </section>
 
         <!-- Projets & Services -->
         <section class="section-page" id="section-projets">
+          <div class="section-loader" id="loader-projets"><div class="loader"></div></div>
+          <div class="section-content" id="content-projets">
           <!-- Liste des projets -->
           <div id="projets-list-view">
             <div class="section-header">
@@ -3838,11 +3913,14 @@
               </div>
             </div>
           </div>
+          </div>
         </section>
 
 
         <!-- Sites Web -->
         <section class="section-page" id="section-sitesweb">
+          <div class="section-loader" id="loader-sitesweb"><div class="loader"></div></div>
+          <div class="section-content" id="content-sitesweb">
           <!-- Liste des sites -->
           <div id="sites-list-view">
             <div class="section-header">
@@ -3896,6 +3974,13 @@
               <div class="detail-section">
                 <div class="detail-section-title">Informations générales</div>
                 <div class="detail-info-grid" id="site-page-info"></div>
+                <div class="site-subscription-box" id="site-subscription-box">
+                  <div class="site-sub-title"><i class="fa-solid fa-repeat"></i> Abonnement mensuel</div>
+                  <select class="site-sub-select" id="site-sub-select">
+                    <option value="">Aucun abonnement</option>
+                  </select>
+                  <div class="site-sub-price" id="site-sub-price"></div>
+                </div>
               </div>
 
               <div class="detail-section">
@@ -3923,10 +4008,13 @@
               </div>
             </div>
           </div>
+          </div>
         </section>
 
         <!-- Finances -->
         <section class="section-page" id="section-finances">
+          <div class="section-loader" id="loader-finances"><div class="loader"></div></div>
+          <div class="section-content" id="content-finances">
           <div class="section-header">
             <div class="section-header-left">
               <h1>Finances</h1>
@@ -3939,6 +4027,7 @@
             <button class="finances-tab" data-tab="transactions">Transactions</button>
             <button class="finances-tab" data-tab="factures">Factures</button>
             <button class="finances-tab" data-tab="categories">Catégories</button>
+            <button class="finances-tab" data-tab="abonnements" id="fin-tab-abonnements" style="display:none;">Abonnements</button>
           </div>
 
           <!-- Tableau de bord -->
@@ -4055,6 +4144,31 @@
               <p class="finances-empty">Chargement...</p>
             </div>
           </div>
+
+          <!-- Gestion Abonnements (Manager only) -->
+          <div class="finances-pane" id="finances-pane-abonnements">
+            <div class="section-header" style="margin-bottom:16px;">
+              <div class="section-header-left">
+                <h2 style="font-size:1.1rem;font-weight:600;">Gestion des abonnements</h2>
+              </div>
+              <button class="btn-create" id="btn-add-abonnement"><i class="fa-solid fa-plus"></i> Nouvel abonnement</button>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table" id="abo-table">
+                <thead>
+                  <tr>
+                    <th>Nom</th>
+                    <th>Prix mensuel</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="abo-tbody">
+                  <tr class="empty-row"><td colspan="3">Aucun abonnement défini.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          </div>
         </section>
 
         <!-- Modal correction transaction -->
@@ -4088,6 +4202,8 @@
 
         <!-- Simulations -->
         <section class="section-page" id="section-simulations">
+          <div class="section-loader" id="loader-simulations"><div class="loader"></div></div>
+          <div class="section-content" id="content-simulations">
           <div class="section-header">
             <div class="section-header-left">
               <h1>Simulations</h1>
@@ -4209,10 +4325,13 @@
               <i class="fa-solid fa-arrow-up-right-from-square"></i> Générer le devis
             </a>
           </div>
+          </div>
         </section>
 
         <!-- Équipe -->
         <section class="section-page" id="section-equipe">
+          <div class="section-loader" id="loader-equipe"><div class="loader"></div></div>
+          <div class="section-content" id="content-equipe">
           <div class="section-header">
             <div class="section-header-left">
               <h1>Équipe</h1>
@@ -4240,6 +4359,7 @@
                 <tr><td colspan="5" class="empty">Chargement...</td></tr>
               </tbody>
             </table>
+          </div>
           </div>
         </section>
 
