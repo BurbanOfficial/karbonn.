@@ -1056,6 +1056,8 @@ function openSitePage(site, loadHistory = true) {
   if (loadHistory) loadSiteHistory(site.id);
   renderSiteRenewals(site);
   renderSiteSubscriptionSelector(site);
+  loadSiteServices(site.id);
+  initCurrencyConverter();
 }
 
 function renderSiteRenewals(site) {
@@ -4964,6 +4966,192 @@ function renderSiteSubscriptionSelector(site) {
       showToast('Erreur mise à jour abonnement.', 'error');
     }
   });
+}
+
+// ═══════════════════════════════════════════
+// SITE SERVICES (CRUD)
+// ═══════════════════════════════════════════
+
+let _siteServices = [];
+
+async function loadSiteServices(siteId) {
+  const tbody = document.getElementById('site-services-tbody');
+  if (!tbody) return;
+  try {
+    const snap = await db.collection('sitesWeb').doc(siteId).collection('services').orderBy('createdAt', 'desc').get();
+    _siteServices = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderSiteServices(siteId);
+  } catch (err) {
+    console.error('[Services] Load error:', err);
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Erreur de chargement.</td></tr>';
+  }
+
+  // Show services section and currency banner for managers
+  const svcSection = document.getElementById('site-services-section');
+  const banner = document.getElementById('currency-banner');
+  if (svcSection) svcSection.style.display = '';
+  if (banner && currentUserRole === 'Manager') banner.style.display = '';
+
+  // Add service button
+  const addBtn = document.getElementById('btn-add-site-service');
+  if (addBtn && currentUserRole === 'Manager') {
+    addBtn.style.display = '';
+    const newBtn = addBtn.cloneNode(true);
+    addBtn.parentNode.replaceChild(newBtn, addBtn);
+    newBtn.addEventListener('click', () => addSiteService(siteId));
+  } else if (addBtn) {
+    addBtn.style.display = 'none';
+  }
+}
+
+function renderSiteServices(siteId) {
+  const tbody = document.getElementById('site-services-tbody');
+  if (!tbody) return;
+  if (_siteServices.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Aucun service défini.</td></tr>';
+    return;
+  }
+  const isManager = currentUserRole === 'Manager';
+  tbody.innerHTML = _siteServices.map(svc => {
+    const startDate = svc.startDate ? new Date(svc.startDate).toLocaleDateString('fr-FR') : '—';
+    const endDate = svc.endDate ? new Date(svc.endDate).toLocaleDateString('fr-FR') : '—';
+    const price = svc.priceMonthly != null ? fmtEUR(svc.priceMonthly) : '—';
+    return `<tr>
+      <td>${escapeHTML(svc.description || '—')}</td>
+      <td>${price}/mois</td>
+      <td>${startDate}</td>
+      <td>${endDate}</td>
+      <td>
+        ${isManager ? `<div class="svc-actions">
+          <button onclick="editSiteService('${siteId}','${svc.id}')" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
+          <button class="svc-delete" onclick="deleteSiteService('${siteId}','${svc.id}')" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+        </div>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function addSiteService(siteId) {
+  const description = prompt('Description du service :');
+  if (!description) return;
+  const priceStr = prompt('Prix mensuel (€) :');
+  const priceMonthly = parseFloat(priceStr);
+  if (isNaN(priceMonthly) || priceMonthly < 0) { showToast('Prix invalide.', 'error'); return; }
+  const startDate = prompt('Date de début (AAAA-MM-JJ) :', new Date().toISOString().split('T')[0]);
+  if (!startDate) return;
+  const endDate = prompt('Date d\'échéance (AAAA-MM-JJ) :');
+
+  try {
+    const priceCents = Math.round(priceMonthly * 100);
+    await db.collection('sitesWeb').doc(siteId).collection('services').add({
+      description,
+      priceMonthly,
+      priceCents,
+      startDate,
+      endDate: endDate || null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    showToast('Service ajouté.', 'success');
+    await loadSiteServices(siteId);
+  } catch (err) {
+    console.error('[Services] Add error:', err);
+    showToast('Erreur lors de l\'ajout du service.', 'error');
+  }
+}
+
+async function editSiteService(siteId, serviceId) {
+  const svc = _siteServices.find(s => s.id === serviceId);
+  if (!svc) return;
+  const description = prompt('Description :', svc.description || '');
+  if (description === null) return;
+  const priceStr = prompt('Prix mensuel (€) :', svc.priceMonthly != null ? svc.priceMonthly : '');
+  const priceMonthly = parseFloat(priceStr);
+  if (isNaN(priceMonthly) || priceMonthly < 0) { showToast('Prix invalide.', 'error'); return; }
+  const startDate = prompt('Date de début (AAAA-MM-JJ) :', svc.startDate || '');
+  if (startDate === null) return;
+  const endDate = prompt('Date d\'échéance (AAAA-MM-JJ) :', svc.endDate || '');
+
+  try {
+    const priceCents = Math.round(priceMonthly * 100);
+    await db.collection('sitesWeb').doc(siteId).collection('services').doc(serviceId).update({
+      description,
+      priceMonthly,
+      priceCents,
+      startDate: startDate || null,
+      endDate: endDate || null,
+    });
+    showToast('Service mis à jour.', 'success');
+    await loadSiteServices(siteId);
+  } catch (err) {
+    console.error('[Services] Edit error:', err);
+    showToast('Erreur lors de la modification.', 'error');
+  }
+}
+
+async function deleteSiteService(siteId, serviceId) {
+  if (!confirm('Supprimer ce service ?')) return;
+  try {
+    await db.collection('sitesWeb').doc(siteId).collection('services').doc(serviceId).delete();
+    showToast('Service supprimé.', 'success');
+    await loadSiteServices(siteId);
+  } catch (err) {
+    console.error('[Services] Delete error:', err);
+    showToast('Erreur lors de la suppression.', 'error');
+  }
+}
+
+// ═══════════════════════════════════════════
+// CURRENCY CONVERTER (real-time ECB rates)
+// ═══════════════════════════════════════════
+
+let _exchangeRates = null;
+
+async function fetchExchangeRates() {
+  if (_exchangeRates) return _exchangeRates;
+  try {
+    const res = await fetch('https://api.exchangerate.host/latest?base=EUR');
+    const data = await res.json();
+    if (data.success !== false && data.rates) {
+      _exchangeRates = data.rates;
+      return _exchangeRates;
+    }
+  } catch (e) { console.warn('[Currency] exchangerate.host failed, trying fallback'); }
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/EUR');
+    const data = await res.json();
+    if (data.rates) {
+      _exchangeRates = data.rates;
+      return _exchangeRates;
+    }
+  } catch (e) { console.error('[Currency] All exchange rate APIs failed:', e); }
+  return null;
+}
+
+function initCurrencyConverter() {
+  const amountInput = document.getElementById('currency-amount');
+  const fromSelect = document.getElementById('currency-from');
+  const resultEl = document.getElementById('currency-result');
+  if (!amountInput || !fromSelect || !resultEl) return;
+
+  async function convert() {
+    const amount = parseFloat(amountInput.value);
+    if (isNaN(amount) || amount <= 0) { resultEl.textContent = '— €'; return; }
+    const rates = await fetchExchangeRates();
+    if (!rates) { resultEl.textContent = 'Erreur API'; return; }
+    const from = fromSelect.value;
+    const rate = rates[from];
+    if (!rate) { resultEl.textContent = '?'; return; }
+    const eur = amount / rate;
+    resultEl.textContent = eur.toFixed(2) + ' €';
+  }
+
+  const newAmount = amountInput.cloneNode(true);
+  amountInput.parentNode.replaceChild(newAmount, amountInput);
+  const newFrom = fromSelect.cloneNode(true);
+  fromSelect.parentNode.replaceChild(newFrom, fromSelect);
+
+  newAmount.addEventListener('input', convert);
+  newFrom.addEventListener('change', convert);
 }
 
 // ═══════════════════════════════════════════

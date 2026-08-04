@@ -9,7 +9,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <script src="https://js.stripe.com/v3/"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
@@ -1379,6 +1378,109 @@
       font-size: 0.9rem;
     }
 
+    /* Abonnements section */
+    .abo-section { margin-bottom: 32px; }
+    .abo-section h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .abo-list { display: flex; flex-direction: column; gap: 12px; }
+    .abo-empty { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+    .abo-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      background: var(--panel);
+    }
+    .abo-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .abo-card-title { font-weight: 700; font-size: 0.9rem; }
+    .abo-card-status {
+      font-size: 0.72rem;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .abo-status-active { background: rgba(16,185,129,0.1); color: #059669; }
+    .abo-status-past_due { background: rgba(239,68,68,0.1); color: #dc2626; }
+    .abo-status-canceled { background: rgba(100,116,139,0.1); color: #64748b; }
+    .abo-card-items { font-size: 0.82rem; color: var(--muted); }
+    .abo-card-item { padding: 4px 0; display: flex; justify-content: space-between; }
+    .abo-invoices-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    .abo-invoices-table th {
+      text-align: left;
+      padding: 10px 12px;
+      font-weight: 700;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      border-bottom: 2px solid var(--border);
+    }
+    .abo-invoices-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .abo-invoice-status {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+    .abo-inv-paid { background: rgba(16,185,129,0.1); color: #059669; }
+    .abo-inv-open { background: rgba(234,179,8,0.1); color: #b45309; }
+    .abo-inv-failed { background: rgba(239,68,68,0.1); color: #dc2626; }
+    .abo-inv-link {
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .abo-inv-link:hover { text-decoration: underline; }
+
+    /* Site detail services table (client view) */
+    .client-services-section { margin-top: 24px; }
+    .client-services-section h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .client-services-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    .client-services-table th {
+      text-align: left;
+      padding: 8px 12px;
+      font-weight: 700;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      border-bottom: 2px solid var(--border);
+    }
+    .client-services-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
     @media (max-width: 900px) {
       .renewal-layout {
         grid-template-columns: 1fr;
@@ -1636,6 +1738,9 @@
         <a href="#" class="nav-item" data-label="Mes factures &amp; Devis">
           <i class="fa-solid fa-file-invoice-dollar"></i>
         </a>
+        <a href="#" class="nav-item" data-label="Mes abonnements">
+          <i class="fa-solid fa-repeat"></i>
+        </a>
         <a href="#" class="nav-item" data-label="Support">
           <i class="fa-solid fa-headset"></i>
         </a>
@@ -1749,21 +1854,40 @@
           </div>
         </section>
 
-        <!-- Renouvellement d'un domaine -->
-        <section class="section-page" id="section-renouveler">
+        <!-- Mes abonnements -->
+        <section class="section-page" id="section-abonnements">
           <div class="section-header">
-            <button class="btn-back" id="renewal-back"><i class="fa-solid fa-arrow-left"></i> Retour</button>
-            <h1 id="renewal-title">Renouveler mon domaine</h1>
+            <h1>Mes abonnements</h1>
           </div>
-          <div id="renewal-content">
-            <!-- Filled by JS -->
+          <div id="abonnements-content">
+            <div class="abo-section">
+              <h2><i class="fa-solid fa-repeat"></i> Abonnements actifs</h2>
+              <div id="abo-subscriptions-list" class="abo-list">
+                <p class="abo-empty">Aucun abonnement actif.</p>
+              </div>
+            </div>
+            <div class="abo-section">
+              <h2><i class="fa-solid fa-file-invoice"></i> Historique des factures</h2>
+              <table class="abo-invoices-table">
+                <thead>
+                  <tr>
+                    <th>N°</th>
+                    <th>Date</th>
+                    <th>Montant</th>
+                    <th>Statut</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="abo-invoices-tbody">
+                  <tr><td colspan="5" class="abo-empty">Aucune facture.</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       </div>
     </main>
   </div>
-
-  <meta id="stripe-pub-key" data-key="pk_live_51Trn3T3bEnjxdETqSV2lBIrj9V5zPY6fVVF7TQPMbE5xKskA8sxpEGd3hL7JZf7eAal2aeBarOnYX48EXtwzXxdK00zCCpuSgV">
   <script src="espace-client.js"></script>
 </body>
 </html>
