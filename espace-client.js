@@ -109,7 +109,7 @@ async function refreshSiteHistory(site) {
   if (!currentClient || !currentClient.id) return;
   console.log('[Client] Refreshing site history for site:', site.id);
   try {
-    const res = await fetch(`${API_BASE_URL}/api/public/client/${currentClient.id}/sites`);
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${currentClient.clientId}/sites`);
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     console.log('[Client] Public API returned', (data.sites || []).length, 'sites');
@@ -400,18 +400,67 @@ function renderTeamNotes(notes) {
 
 // ── Abonnements & Factures Stripe Billing ──
 
+let stripeInstance = null;
+
+function getStripePublicKey() {
+  const el = document.getElementById('stripe-pub-key');
+  return el ? (el.dataset.key || '') : '';
+}
+
+function getStripe() {
+  if (!stripeInstance) {
+    const key = getStripePublicKey();
+    if (key && key.startsWith('pk_')) stripeInstance = Stripe(key);
+  }
+  return stripeInstance;
+}
+
 async function loadClientAbonnements() {
   if (!currentClient || !currentClient.id) return;
 
-  // Load subscriptions
+  // Load payment methods, subscriptions, invoices in parallel
   const subsList = document.getElementById('abo-subscriptions-list');
   const invTbody = document.getElementById('abo-invoices-tbody');
+  const pmContainer = document.getElementById('abo-payment-methods');
 
   try {
-    const [subsRes, invRes] = await Promise.all([
+    const [pmRes, subsRes, invRes] = await Promise.all([
+      fetch(`${API_BASE_URL}/api/public/client/${currentClient.id}/payment-methods`),
       fetch(`${API_BASE_URL}/api/public/client/${currentClient.id}/subscriptions`),
       fetch(`${API_BASE_URL}/api/public/client/${currentClient.id}/invoices`)
     ]);
+
+    // Render payment methods
+    if (pmRes.ok && pmContainer) {
+      const pmData = await pmRes.json();
+      const methods = pmData.paymentMethods || [];
+      if (methods.length === 0) {
+        pmContainer.innerHTML = `
+          <div class="abo-no-payment">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            Aucun moyen de paiement enregistré. Ajoutez une carte bancaire pour activer les prélèvements automatiques.
+          </div>
+          <button class="abo-add-card-btn" id="btn-show-add-card">
+            <i class="fa-solid fa-plus"></i> Ajouter une carte bancaire
+          </button>`;
+        document.getElementById('btn-show-add-card')?.addEventListener('click', showSetupCardForm);
+      } else {
+        const brandIcons = { visa: 'fa-brands fa-cc-visa', mastercard: 'fa-brands fa-cc-mastercard', amex: 'fa-brands fa-cc-amex' };
+        pmContainer.innerHTML = methods.map(pm => {
+          const icon = brandIcons[pm.brand] || 'fa-solid fa-credit-card';
+          return `<div class="abo-payment-card">
+            <i class="${icon}"></i>
+            <div>
+              <div class="card-info">•••• •••• •••• ${pm.last4}</div>
+              <div class="card-exp">Expire ${String(pm.exp_month).padStart(2, '0')}/${pm.exp_year}</div>
+            </div>
+          </div>`;
+        }).join('') + `<button class="abo-add-card-btn" id="btn-show-add-card" style="margin-top:8px;">
+          <i class="fa-solid fa-plus"></i> Ajouter une autre carte
+        </button>`;
+        document.getElementById('btn-show-add-card')?.addEventListener('click', showSetupCardForm);
+      }
+    }
 
     // Render subscriptions
     if (subsRes.ok) {
@@ -472,6 +521,71 @@ async function loadClientAbonnements() {
     console.error('[Client] Error loading abonnements:', err);
     if (subsList) subsList.innerHTML = '<p class="abo-empty">Erreur de chargement.</p>';
     if (invTbody) invTbody.innerHTML = '<tr><td colspan="5" class="abo-empty">Erreur de chargement.</td></tr>';
+  }
+}
+
+async function showSetupCardForm() {
+  const container = document.getElementById('setup-card-container');
+  const submitBtn = document.getElementById('setup-card-submit');
+  const errorEl = document.getElementById('setup-card-error');
+  if (!container || !submitBtn) return;
+
+  container.style.display = 'block';
+  submitBtn.disabled = true;
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+
+  const stripe = getStripe();
+  if (!stripe) {
+    if (errorEl) { errorEl.textContent = 'Stripe non disponible.'; errorEl.style.display = ''; }
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${currentClient.id}/create-setup-intent`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    const { clientSecret } = await res.json();
+
+    const elements = stripe.elements({ clientSecret, appearance: { theme: 'stripe' } });
+    const paymentElement = elements.create('payment');
+    const mountEl = document.getElementById('setup-card-element');
+    mountEl.innerHTML = '';
+    paymentElement.mount(mountEl);
+
+    paymentElement.on('ready', () => { submitBtn.disabled = false; });
+
+    // Remove old listener
+    const newBtn = submitBtn.cloneNode(true);
+    submitBtn.parentNode.replaceChild(newBtn, submitBtn);
+    newBtn.disabled = false;
+
+    newBtn.addEventListener('click', async () => {
+      newBtn.disabled = true;
+      newBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Enregistrement...';
+      if (errorEl) errorEl.style.display = 'none';
+
+      const { error } = await stripe.confirmSetup({
+        elements,
+        confirmParams: { return_url: window.location.href },
+        redirect: 'if_required',
+      });
+
+      if (error) {
+        if (errorEl) { errorEl.textContent = error.message; errorEl.style.display = ''; }
+        newBtn.disabled = false;
+        newBtn.innerHTML = '<i class="fa-solid fa-lock"></i> Enregistrer la carte';
+        return;
+      }
+
+      // Success — set as default payment method then reload
+      try {
+        await fetch(`${API_BASE_URL}/api/public/client/${currentClient.id}/set-default-payment-method`, { method: 'POST' });
+      } catch (e) { console.warn('[Stripe] set-default-pm failed:', e); }
+      container.style.display = 'none';
+      await loadClientAbonnements();
+    });
+  } catch (err) {
+    console.error('[Stripe] Setup card error:', err);
+    if (errorEl) { errorEl.textContent = 'Erreur : ' + err.message; errorEl.style.display = ''; }
   }
 }
 

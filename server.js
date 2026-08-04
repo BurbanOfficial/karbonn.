@@ -479,6 +479,67 @@ app.post('/api/public/client/:clientDocId/ensure-stripe-customer', async (req, r
   }
 });
 
+// Public: create a Stripe SetupIntent so the client can add a payment method
+app.post('/api/public/client/:clientDocId/create-setup-intent', async (req, res) => {
+  try {
+    const customerId = await ensureStripeCustomer(req.params.clientDocId);
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      usage: 'off_session',
+    });
+    res.json({ clientSecret: setupIntent.client_secret });
+  } catch (err) {
+    console.error('[Stripe Billing] create-setup-intent error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: set a payment method as default for invoices
+app.post('/api/public/client/:clientDocId/set-default-payment-method', async (req, res) => {
+  try {
+    const clientDoc = await db.collection('clients').doc(req.params.clientDocId).get();
+    if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+    const stripeCustomerId = clientDoc.data().stripeCustomerId;
+    if (!stripeCustomerId) return res.status(400).json({ error: 'No Stripe customer' });
+
+    // Get the latest payment method
+    const methods = await stripe.paymentMethods.list({ customer: stripeCustomerId, type: 'card', limit: 1 });
+    if (methods.data.length === 0) return res.status(400).json({ error: 'No payment method found' });
+
+    await stripe.customers.update(stripeCustomerId, {
+      invoice_settings: { default_payment_method: methods.data[0].id },
+    });
+    console.log('[Stripe Billing] Set default PM:', methods.data[0].id, 'for customer:', stripeCustomerId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Stripe Billing] set-default-payment-method error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: check if client has a payment method attached
+app.get('/api/public/client/:clientDocId/payment-methods', async (req, res) => {
+  try {
+    const clientDoc = await db.collection('clients').doc(req.params.clientDocId).get();
+    if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+    const stripeCustomerId = clientDoc.data().stripeCustomerId;
+    if (!stripeCustomerId) return res.json({ paymentMethods: [] });
+    const methods = await stripe.paymentMethods.list({ customer: stripeCustomerId, type: 'card' });
+    const result = methods.data.map(pm => ({
+      id: pm.id,
+      brand: pm.card?.brand,
+      last4: pm.card?.last4,
+      exp_month: pm.card?.exp_month,
+      exp_year: pm.card?.exp_year,
+    }));
+    res.json({ paymentMethods: result });
+  } catch (err) {
+    console.error('[Stripe Billing] payment-methods error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Public: list invoices for a Stripe customer
 app.get('/api/public/client/:clientDocId/invoices', async (req, res) => {
   try {
@@ -673,6 +734,14 @@ async function processBillingSubscriptions() {
       try {
         const customerId = await ensureStripeCustomer(site.clientId);
 
+        // Check customer has a payment method
+        const paymentMethods = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
+        if (paymentMethods.data.length === 0) {
+          console.log('[Billing] Skipping site:', site.id, '- customer has no payment method');
+          continue;
+        }
+        const defaultPm = paymentMethods.data[0].id;
+
         // Get domain price
         const domainCents = getDomainAnnualPriceCents(site.domain);
         const domainPriceId = await getOrCreateStripePrice(
@@ -708,6 +777,7 @@ async function processBillingSubscriptions() {
           }
           await stripe.subscriptions.update(site.stripeSubscriptionId, {
             items: subscriptionItems,
+            default_payment_method: defaultPm,
           });
           console.log('[Billing] Updated subscription:', site.stripeSubscriptionId, 'for site:', site.id);
         } else {
@@ -715,6 +785,7 @@ async function processBillingSubscriptions() {
             customer: customerId,
             items: subscriptionItems,
             collection_method: 'charge_automatically',
+            default_payment_method: defaultPm,
             metadata: { siteId: site.id, domain: site.domain || '' },
           });
           await db.collection('sitesWeb').doc(site.id).update({

@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://js.stripe.com/v3/"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
@@ -1451,6 +1452,66 @@
     }
     .abo-inv-link:hover { text-decoration: underline; }
 
+    /* Payment method section */
+    .abo-payment-section { margin-bottom: 32px; }
+    .abo-payment-section h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .abo-payment-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      margin-bottom: 8px;
+    }
+    .abo-payment-card i { font-size: 1.3rem; color: var(--muted); }
+    .abo-payment-card .card-info { font-size: 0.85rem; font-weight: 600; }
+    .abo-payment-card .card-exp { font-size: 0.75rem; color: var(--muted); }
+    .abo-no-payment {
+      padding: 20px;
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+    }
+    .abo-no-payment i { font-size: 1.5rem; margin-bottom: 8px; display: block; color: #dc2626; }
+    .abo-add-card-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .abo-add-card-btn:hover { opacity: 0.9; }
+    .abo-add-card-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #setup-card-container {
+      margin-top: 16px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      display: none;
+    }
+    #setup-card-element { min-height: 44px; margin-bottom: 12px; }
+    .setup-card-error { color: #dc2626; font-size: 0.82rem; margin-top: 8px; display: none; }
+
     /* Site detail services table (client view) */
     .client-services-section { margin-top: 24px; }
     .client-services-section h2 {
@@ -1860,6 +1921,22 @@
             <h1>Mes abonnements</h1>
           </div>
           <div id="abonnements-content">
+            <div class="abo-payment-section">
+              <h2><i class="fa-solid fa-credit-card"></i> Moyen de paiement</h2>
+              <div id="abo-payment-methods">
+                <div class="abo-no-payment">
+                  <i class="fa-solid fa-credit-card"></i>
+                  Chargement...
+                </div>
+              </div>
+              <div id="setup-card-container">
+                <div id="setup-card-element"></div>
+                <button class="abo-add-card-btn" id="setup-card-submit" disabled>
+                  <i class="fa-solid fa-lock"></i> Enregistrer la carte
+                </button>
+                <p class="setup-card-error" id="setup-card-error"></p>
+              </div>
+            </div>
             <div class="abo-section">
               <h2><i class="fa-solid fa-repeat"></i> Abonnements actifs</h2>
               <div id="abo-subscriptions-list" class="abo-list">
@@ -1888,6 +1965,7 @@
       </div>
     </main>
   </div>
+  <meta id="stripe-pub-key" data-key="pk_live_51Trn3T3bEnjxdETqSV2lBIrj9V5zPY6fVVF7TQPMbE5xKskA8sxpEGd3hL7JZf7eAal2aeBarOnYX48EXtwzXxdK00zCCpuSgV">
   <script src="espace-client.js"></script>
 </body>
 </html>
