@@ -1379,24 +1379,167 @@
       font-size: 0.9rem;
     }
 
-    /* Abonnements section */
-    .abo-section { margin-bottom: 32px; }
-    .abo-section h2 {
+    /* ─── Abonnements page ─── */
+    #abonnements-content {
+      display: grid;
+      gap: 28px;
+    }
+    .abo-section { margin-bottom: 0; }
+    .abo-section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .abo-section-header i {
       font-size: 1rem;
+      color: var(--primary);
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(67,97,238,0.08);
+      border-radius: 8px;
+    }
+    .abo-section-header h2 {
+      font-size: 0.95rem;
       font-weight: 700;
-      margin-bottom: 16px;
+      margin: 0;
+    }
+    .abo-list { display: flex; flex-direction: column; gap: 10px; }
+    .abo-empty { color: var(--muted); font-size: 0.85rem; font-style: italic; padding: 12px 0; }
+
+    /* Payment method cards */
+    .abo-payment-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+      transition: box-shadow 0.15s;
+    }
+    .abo-payment-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .abo-payment-card .card-icon {
+      font-size: 1.6rem;
+      color: var(--muted);
+      width: 40px;
+      text-align: center;
+    }
+    .abo-payment-card .card-details { flex: 1; }
+    .abo-payment-card .card-info { font-size: 0.88rem; font-weight: 600; letter-spacing: 0.03em; }
+    .abo-payment-card .card-exp { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+    .abo-payment-card .card-default {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #059669;
+      background: rgba(16,185,129,0.1);
+      padding: 2px 8px;
+      border-radius: 6px;
+      margin-left: 8px;
+    }
+    .abo-card-delete {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.85rem;
+      padding: 6px 8px;
+      border-radius: 6px;
+      transition: all 0.15s;
+    }
+    .abo-card-delete:hover { background: rgba(239,68,68,0.08); color: #dc2626; }
+
+    .abo-no-payment {
+      padding: 24px;
+      border: 2px dashed var(--border);
+      border-radius: 14px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .abo-no-payment i { font-size: 1.8rem; margin-bottom: 10px; display: block; color: var(--muted); opacity: 0.5; }
+    .abo-add-card-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 12px;
+    }
+    .abo-add-card-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .abo-add-card-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* Setup card form */
+    #setup-card-container {
+      margin-top: 14px;
+      padding: 22px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--panel);
+      display: none;
+    }
+    .setup-card-title {
+      font-size: 0.88rem;
+      font-weight: 700;
+      margin-bottom: 4px;
       display: flex;
       align-items: center;
       gap: 8px;
     }
-    .abo-list { display: flex; flex-direction: column; gap: 12px; }
-    .abo-empty { color: var(--muted); font-size: 0.85rem; font-style: italic; }
+    .setup-card-desc {
+      font-size: 0.76rem;
+      color: var(--muted);
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+    #setup-card-element {
+      min-height: 44px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      margin-bottom: 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    #setup-card-element.StripeElement--focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(67,97,238,0.08);
+    }
+    .setup-card-footer {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .setup-card-secure {
+      font-size: 0.7rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .setup-card-error { color: #dc2626; font-size: 0.8rem; margin-top: 10px; display: none; }
+
+    /* Subscription cards */
     .abo-card {
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 16px 20px;
-      background: var(--panel);
+      background: var(--bg);
+      transition: box-shadow 0.15s;
     }
+    .abo-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
     .abo-card-header {
       display: flex;
       justify-content: space-between;
@@ -1405,17 +1548,26 @@
     }
     .abo-card-title { font-weight: 700; font-size: 0.9rem; }
     .abo-card-status {
-      font-size: 0.72rem;
+      font-size: 0.68rem;
       padding: 3px 10px;
       border-radius: 20px;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
     .abo-status-active { background: rgba(16,185,129,0.1); color: #059669; }
     .abo-status-past_due { background: rgba(239,68,68,0.1); color: #dc2626; }
     .abo-status-canceled { background: rgba(100,116,139,0.1); color: #64748b; }
-    .abo-card-items { font-size: 0.82rem; color: var(--muted); }
-    .abo-card-item { padding: 4px 0; display: flex; justify-content: space-between; }
+    .abo-card-items { font-size: 0.82rem; color: var(--text); }
+    .abo-card-item {
+      padding: 5px 0;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .abo-card-item:last-child { border-bottom: none; }
+
+    /* Invoices table */
     .abo-invoices-table {
       width: 100%;
       border-collapse: collapse;
@@ -1425,7 +1577,7 @@
       text-align: left;
       padding: 10px 12px;
       font-weight: 700;
-      font-size: 0.72rem;
+      font-size: 0.7rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--muted);
@@ -1436,7 +1588,7 @@
       border-bottom: 1px solid var(--border);
     }
     .abo-invoice-status {
-      font-size: 0.72rem;
+      font-size: 0.7rem;
       padding: 2px 8px;
       border-radius: 12px;
       font-weight: 600;
@@ -1447,109 +1599,10 @@
     .abo-inv-link {
       color: var(--primary);
       text-decoration: none;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       font-weight: 600;
     }
     .abo-inv-link:hover { text-decoration: underline; }
-
-    /* Payment method section */
-    .abo-payment-section { margin-bottom: 32px; }
-    .abo-payment-section h2 {
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .abo-payment-card {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--panel);
-      margin-bottom: 8px;
-    }
-    .abo-payment-card i { font-size: 1.3rem; color: var(--muted); }
-    .abo-payment-card .card-info { font-size: 0.85rem; font-weight: 600; }
-    .abo-payment-card .card-exp { font-size: 0.75rem; color: var(--muted); }
-    .abo-no-payment {
-      padding: 20px;
-      border: 2px dashed var(--border);
-      border-radius: 12px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 0.85rem;
-      margin-bottom: 12px;
-    }
-    .abo-no-payment i { font-size: 1.5rem; margin-bottom: 8px; display: block; color: #dc2626; }
-    .abo-add-card-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 20px;
-      background: var(--primary);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s;
-    }
-    .abo-add-card-btn:hover { opacity: 0.9; }
-    .abo-add-card-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    #setup-card-container {
-      margin-top: 16px;
-      padding: 24px;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: var(--panel);
-      display: none;
-    }
-    .setup-card-title {
-      font-size: 0.9rem;
-      font-weight: 700;
-      margin-bottom: 4px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .setup-card-desc {
-      font-size: 0.78rem;
-      color: var(--muted);
-      margin-bottom: 16px;
-      line-height: 1.5;
-    }
-    #setup-card-element {
-      min-height: 44px;
-      padding: 14px 16px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--bg);
-      margin-bottom: 16px;
-      transition: border-color 0.2s;
-    }
-    #setup-card-element:focus-within,
-    #setup-card-element.StripeElement--focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(67,97,238,0.1);
-    }
-    .setup-card-footer {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .setup-card-secure {
-      font-size: 0.72rem;
-      color: var(--muted);
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-    .setup-card-error { color: #dc2626; font-size: 0.82rem; margin-top: 10px; display: none; }
 
     /* Site detail services table (client view) */
     .client-services-section { margin-top: 24px; }
@@ -1960,35 +2013,46 @@
             <h1>Mes abonnements</h1>
           </div>
           <div id="abonnements-content">
-            <div class="abo-payment-section">
-              <h2><i class="fa-solid fa-credit-card"></i> Moyen de paiement</h2>
-              <div id="abo-payment-methods">
-                <div class="abo-no-payment">
-                  <i class="fa-solid fa-credit-card"></i>
-                  Chargement...
-                </div>
+            <!-- Moyen de paiement -->
+            <div class="abo-section">
+              <div class="abo-section-header">
+                <i class="fa-solid fa-credit-card"></i>
+                <h2>Moyen de paiement</h2>
+              </div>
+              <div id="abo-payment-methods" class="abo-list">
+                <p class="abo-empty">Chargement...</p>
               </div>
               <div id="setup-card-container">
-                <div class="setup-card-title"><i class="fa-solid fa-shield-halved"></i> Ajouter une carte bancaire</div>
-                <div class="setup-card-desc">Vos informations de paiement sont sécurisées et chiffrées par Stripe. Aucune donnée bancaire n'est stockée sur nos serveurs.</div>
+                <div class="setup-card-title"><i class="fa-solid fa-shield-halved"></i> Nouvelle carte</div>
+                <div class="setup-card-desc">Vos données bancaires sont chiffrées par Stripe. Rien n'est stocké sur nos serveurs.</div>
                 <div id="setup-card-element"></div>
                 <div class="setup-card-footer">
                   <button class="abo-add-card-btn" id="setup-card-submit" disabled>
-                    <i class="fa-solid fa-lock"></i> Enregistrer la carte
+                    <i class="fa-solid fa-lock"></i> Enregistrer
                   </button>
-                  <span class="setup-card-secure"><i class="fa-solid fa-lock"></i> Paiement sécurisé SSL</span>
+                  <span class="setup-card-secure"><i class="fa-solid fa-lock"></i> SSL</span>
                 </div>
                 <p class="setup-card-error" id="setup-card-error"></p>
               </div>
             </div>
+
+            <!-- Abonnements actifs -->
             <div class="abo-section">
-              <h2><i class="fa-solid fa-repeat"></i> Abonnements actifs</h2>
+              <div class="abo-section-header">
+                <i class="fa-solid fa-repeat"></i>
+                <h2>Abonnements actifs</h2>
+              </div>
               <div id="abo-subscriptions-list" class="abo-list">
                 <p class="abo-empty">Aucun abonnement actif.</p>
               </div>
             </div>
+
+            <!-- Factures -->
             <div class="abo-section">
-              <h2><i class="fa-solid fa-file-invoice"></i> Historique des factures</h2>
+              <div class="abo-section-header">
+                <i class="fa-solid fa-file-invoice"></i>
+                <h2>Historique des factures</h2>
+              </div>
               <table class="abo-invoices-table">
                 <thead>
                   <tr>

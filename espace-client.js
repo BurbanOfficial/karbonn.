@@ -437,28 +437,37 @@ async function loadClientAbonnements() {
       if (methods.length === 0) {
         pmContainer.innerHTML = `
           <div class="abo-no-payment">
-            <i class="fa-solid fa-triangle-exclamation"></i>
-            Aucun moyen de paiement enregistré. Ajoutez une carte bancaire pour activer les prélèvements automatiques.
+            <i class="fa-solid fa-credit-card"></i>
+            Aucun moyen de paiement enregistré.<br>Ajoutez une carte pour activer les prélèvements automatiques.
           </div>
           <button class="abo-add-card-btn" id="btn-show-add-card">
-            <i class="fa-solid fa-plus"></i> Ajouter une carte bancaire
+            <i class="fa-solid fa-plus"></i> Ajouter une carte
           </button>`;
         document.getElementById('btn-show-add-card')?.addEventListener('click', showSetupCardForm);
       } else {
         const brandIcons = { visa: 'fa-brands fa-cc-visa', mastercard: 'fa-brands fa-cc-mastercard', amex: 'fa-brands fa-cc-amex' };
-        pmContainer.innerHTML = methods.map(pm => {
+        pmContainer.innerHTML = methods.map((pm, idx) => {
           const icon = brandIcons[pm.brand] || 'fa-solid fa-credit-card';
+          const isDefault = idx === 0;
+          const deleteBtn = methods.length > 1
+            ? `<button class="abo-card-delete" data-pm-id="${pm.id}" title="Supprimer"><i class="fa-solid fa-trash-can"></i></button>`
+            : '';
           return `<div class="abo-payment-card">
-            <i class="${icon}"></i>
-            <div>
-              <div class="card-info">•••• •••• •••• ${pm.last4}</div>
+            <span class="card-icon"><i class="${icon}"></i></span>
+            <div class="card-details">
+              <div class="card-info">•••• •••• •••• ${pm.last4}${isDefault ? '<span class="card-default">Par défaut</span>' : ''}</div>
               <div class="card-exp">Expire ${String(pm.exp_month).padStart(2, '0')}/${pm.exp_year}</div>
             </div>
+            ${deleteBtn}
           </div>`;
-        }).join('') + `<button class="abo-add-card-btn" id="btn-show-add-card" style="margin-top:8px;">
-          <i class="fa-solid fa-plus"></i> Ajouter une autre carte
+        }).join('') + `<button class="abo-add-card-btn" id="btn-show-add-card">
+          <i class="fa-solid fa-plus"></i> Ajouter une carte
         </button>`;
         document.getElementById('btn-show-add-card')?.addEventListener('click', showSetupCardForm);
+        // Attach delete listeners
+        pmContainer.querySelectorAll('.abo-card-delete').forEach(btn => {
+          btn.addEventListener('click', () => deletePaymentMethod(btn.dataset.pmId));
+        });
       }
     }
 
@@ -521,6 +530,22 @@ async function loadClientAbonnements() {
     console.error('[Client] Error loading abonnements:', err);
     if (subsList) subsList.innerHTML = '<p class="abo-empty">Erreur de chargement.</p>';
     if (invTbody) invTbody.innerHTML = '<tr><td colspan="5" class="abo-empty">Erreur de chargement.</td></tr>';
+  }
+}
+
+async function deletePaymentMethod(pmId) {
+  if (!confirm('Supprimer cette carte ?')) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${currentClient.id}/payment-methods/${pmId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Erreur lors de la suppression.');
+      return;
+    }
+    await loadClientAbonnements();
+  } catch (err) {
+    console.error('[Stripe] Delete PM error:', err);
+    alert('Erreur réseau.');
   }
 }
 

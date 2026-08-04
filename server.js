@@ -517,6 +517,31 @@ app.post('/api/public/client/:clientDocId/set-default-payment-method', async (re
   }
 });
 
+// Public: detach (delete) a payment method from a customer
+app.delete('/api/public/client/:clientDocId/payment-methods/:pmId', async (req, res) => {
+  try {
+    const clientDoc = await db.collection('clients').doc(req.params.clientDocId).get();
+    if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+    const stripeCustomerId = clientDoc.data().stripeCustomerId;
+    if (!stripeCustomerId) return res.status(400).json({ error: 'No Stripe customer' });
+
+    // Verify PM belongs to this customer
+    const pm = await stripe.paymentMethods.retrieve(req.params.pmId);
+    if (pm.customer !== stripeCustomerId) return res.status(403).json({ error: 'Not your payment method' });
+
+    // Don't allow deleting last payment method
+    const methods = await stripe.paymentMethods.list({ customer: stripeCustomerId, type: 'card' });
+    if (methods.data.length <= 1) return res.status(400).json({ error: 'Vous devez conserver au moins un moyen de paiement.' });
+
+    await stripe.paymentMethods.detach(req.params.pmId);
+    console.log('[Stripe Billing] Detached PM:', req.params.pmId, 'from customer:', stripeCustomerId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Stripe Billing] delete payment-method error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Public: check if client has a payment method attached
 app.get('/api/public/client/:clientDocId/payment-methods', async (req, res) => {
   try {
@@ -712,90 +737,135 @@ async function handleInvoicePaymentFailed(invoice) {
   }
 }
 
-// Daily check: create/update subscriptions for sites with upcoming deadlines
+// Daily check: create/manage subscriptions for sites
+// Two independent subscriptions per site:
+//   1. Domain (annual) — triggered J-10 before expirationDate
+//   2. Services (monthly) — triggered when active services exist without a sub
 async function processBillingSubscriptions() {
   console.log('[Billing] Running daily subscription check');
   try {
     const sitesSnap = await db.collection('sitesWeb').get();
     const now = new Date();
 
-    for (const doc of sitesSnap.docs) {
-      const site = { id: doc.id, ...doc.data() };
-      if (!site.clientId || !site.expirationDate) continue;
-
-      const exp = new Date(site.expirationDate);
-      const daysUntilExp = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
-
-      // Process 10 days before expiration
-      if (daysUntilExp > 10 || daysUntilExp < 0) continue;
-      if (site.stripeBillingProcessed) continue;
+    for (const siteDoc of sitesSnap.docs) {
+      const site = { id: siteDoc.id, ...siteDoc.data() };
+      if (!site.clientId) continue;
 
       try {
         const customerId = await ensureStripeCustomer(site.clientId);
 
         // Check customer has a payment method
         const paymentMethods = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
-        if (paymentMethods.data.length === 0) {
-          console.log('[Billing] Skipping site:', site.id, '- customer has no payment method');
-          continue;
-        }
+        if (paymentMethods.data.length === 0) continue;
         const defaultPm = paymentMethods.data[0].id;
 
-        // Get domain price
-        const domainCents = getDomainAnnualPriceCents(site.domain);
-        const domainPriceId = await getOrCreateStripePrice(
-          `Nom de domaine – ${site.domain || 'domaine'}`,
-          domainCents,
-          'year'
-        );
+        // ─── 1. DOMAIN SUBSCRIPTION (annual) ───
+        if (site.expirationDate && !site.stripeDomainSubProcessed) {
+          const exp = new Date(site.expirationDate);
+          const daysUntilExp = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
 
-        // Get active services for this site
-        const servicesSnap = await db.collection('sitesWeb').doc(site.id).collection('services').get();
-        const subscriptionItems = [{ price: domainPriceId }];
-
-        for (const svcDoc of servicesSnap.docs) {
-          const svc = svcDoc.data();
-          if (!svc.priceCents || svc.priceCents <= 0) continue;
-          // Only include services that are still active (not past their end date)
-          if (svc.endDate && new Date(svc.endDate) < now) continue;
-          const svcPriceId = await getOrCreateStripePrice(
-            svc.description || 'Service',
-            svc.priceCents,
-            'month'
-          );
-          subscriptionItems.push({ price: svcPriceId });
-        }
-
-        // Create or update subscription
-        if (site.stripeSubscriptionId) {
-          // Update existing subscription items
-          const sub = await stripe.subscriptions.retrieve(site.stripeSubscriptionId);
-          // Remove old items and add new ones
-          for (const item of sub.items.data) {
-            await stripe.subscriptionItems.del(item.id);
+          if (daysUntilExp >= 0 && daysUntilExp <= 10) {
+            if (!site.stripeDomainSubId) {
+              const domainCents = getDomainAnnualPriceCents(site.domain);
+              const domainPriceId = await getOrCreateStripePrice(
+                `Nom de domaine – ${site.domain || 'domaine'}`,
+                domainCents,
+                'year'
+              );
+              const subscription = await stripe.subscriptions.create({
+                customer: customerId,
+                items: [{ price: domainPriceId }],
+                collection_method: 'charge_automatically',
+                default_payment_method: defaultPm,
+                metadata: { siteId: site.id, type: 'domain', domain: site.domain || '' },
+              });
+              await db.collection('sitesWeb').doc(site.id).update({
+                stripeDomainSubId: subscription.id,
+                stripeDomainSubProcessed: true,
+              });
+              console.log('[Billing] Created domain sub:', subscription.id, 'for', site.domain);
+            } else {
+              await db.collection('sitesWeb').doc(site.id).update({ stripeDomainSubProcessed: true });
+              console.log('[Billing] Domain sub already exists for', site.domain);
+            }
           }
-          await stripe.subscriptions.update(site.stripeSubscriptionId, {
-            items: subscriptionItems,
-            default_payment_method: defaultPm,
-          });
-          console.log('[Billing] Updated subscription:', site.stripeSubscriptionId, 'for site:', site.id);
-        } else {
-          const subscription = await stripe.subscriptions.create({
-            customer: customerId,
-            items: subscriptionItems,
-            collection_method: 'charge_automatically',
-            default_payment_method: defaultPm,
-            metadata: { siteId: site.id, domain: site.domain || '' },
-          });
-          await db.collection('sitesWeb').doc(site.id).update({
-            stripeSubscriptionId: subscription.id,
-          });
-          console.log('[Billing] Created subscription:', subscription.id, 'for site:', site.id);
         }
 
-        await db.collection('sitesWeb').doc(site.id).update({
-          stripeBillingProcessed: true,
-        });
+        // ─── 2. SERVICES SUBSCRIPTION (monthly) ───
+        const servicesSnap = await db.collection('sitesWeb').doc(site.id).collection('services').get();
+        const activeServices = [];
+        for (const svcDoc of servicesSnap.docs) {
+          const svc = { id: svcDoc.id, ...svcDoc.data() };
+          if (!svc.priceCents || svc.priceCents <= 0) continue;
+          if (svc.endDate && new Date(svc.endDate) < now) continue;
+          activeServices.push(svc);
+        }
+
+        if (activeServices.length > 0) {
+          // Build target items
+          const serviceItems = [];
+          for (const svc of activeServices) {
+            const svcPriceId = await getOrCreateStripePrice(
+              svc.description || 'Service',
+              svc.priceCents,
+              'month'
+            );
+            serviceItems.push({ price: svcPriceId });
+          }
+
+          if (site.stripeServicesSubId) {
+            // Sync items on existing subscription
+            try {
+              const sub = await stripe.subscriptions.retrieve(site.stripeServicesSubId);
+              if (sub.status === 'canceled') throw { code: 'resource_missing' };
+
+              // Build current price IDs
+              const currentPriceIds = sub.items.data.map(i => i.price.id);
+              const targetPriceIds = serviceItems.map(i => i.price);
+
+              // Only update if items differ
+              if (JSON.stringify(currentPriceIds.sort()) !== JSON.stringify(targetPriceIds.sort())) {
+                for (const item of sub.items.data) {
+                  await stripe.subscriptionItems.del(item.id, { proration_behavior: 'create_prorations' });
+                }
+                for (const si of serviceItems) {
+                  await stripe.subscriptionItems.create({
+                    subscription: site.stripeServicesSubId,
+                    price: si.price,
+                    proration_behavior: 'create_prorations',
+                  });
+                }
+                console.log('[Billing] Updated services sub:', site.stripeServicesSubId);
+              }
+              await stripe.subscriptions.update(site.stripeServicesSubId, { default_payment_method: defaultPm });
+            } catch (subErr) {
+              if (subErr.code === 'resource_missing' || subErr.statusCode === 404) {
+                const subscription = await stripe.subscriptions.create({
+                  customer: customerId,
+                  items: serviceItems,
+                  collection_method: 'charge_automatically',
+                  default_payment_method: defaultPm,
+                  metadata: { siteId: site.id, type: 'services', domain: site.domain || '' },
+                });
+                await db.collection('sitesWeb').doc(site.id).update({ stripeServicesSubId: subscription.id });
+                console.log('[Billing] Re-created services sub:', subscription.id);
+              } else {
+                throw subErr;
+              }
+            }
+          } else {
+            // Create new services subscription
+            const subscription = await stripe.subscriptions.create({
+              customer: customerId,
+              items: serviceItems,
+              collection_method: 'charge_automatically',
+              default_payment_method: defaultPm,
+              metadata: { siteId: site.id, type: 'services', domain: site.domain || '' },
+            });
+            await db.collection('sitesWeb').doc(site.id).update({ stripeServicesSubId: subscription.id });
+            console.log('[Billing] Created services sub:', subscription.id, 'for', site.domain);
+          }
+        }
       } catch (err) {
         console.error('[Billing] Error processing site:', site.id, err.message);
       }
