@@ -545,13 +545,24 @@ async function showSetupCardForm() {
     if (!res.ok) throw new Error(await res.text());
     const { clientSecret } = await res.json();
 
-    const elements = stripe.elements({ clientSecret, appearance: { theme: 'stripe' } });
-    const paymentElement = elements.create('payment');
+    // Use Card Element (simpler, no sessions API needed)
+    const elements = stripe.elements();
+    const cardElement = elements.create('card', {
+      style: {
+        base: {
+          fontSize: '15px',
+          fontFamily: "'Space Grotesk', sans-serif",
+          color: '#111',
+          '::placeholder': { color: '#aab7c4' },
+        },
+        invalid: { color: '#dc2626' },
+      },
+    });
     const mountEl = document.getElementById('setup-card-element');
     mountEl.innerHTML = '';
-    paymentElement.mount(mountEl);
+    cardElement.mount(mountEl);
 
-    paymentElement.on('ready', () => { submitBtn.disabled = false; });
+    cardElement.on('ready', () => { submitBtn.disabled = false; });
 
     // Remove old listener
     const newBtn = submitBtn.cloneNode(true);
@@ -563,10 +574,8 @@ async function showSetupCardForm() {
       newBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Enregistrement...';
       if (errorEl) errorEl.style.display = 'none';
 
-      const { error } = await stripe.confirmSetup({
-        elements,
-        confirmParams: { return_url: window.location.href },
-        redirect: 'if_required',
+      const { error, setupIntent } = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: { card: cardElement },
       });
 
       if (error) {

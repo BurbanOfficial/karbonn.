@@ -485,7 +485,7 @@ app.post('/api/public/client/:clientDocId/create-setup-intent', async (req, res)
     const customerId = await ensureStripeCustomer(req.params.clientDocId);
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
-      automatic_payment_methods: { enabled: true },
+      payment_method_types: ['card'],
     });
     res.json({ clientSecret: setupIntent.client_secret });
   } catch (err) {
