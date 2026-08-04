@@ -1103,9 +1103,9 @@ function categorizeTransaction(tx, clients) {
     return { category: 'clients', clientId: client?.id || null, clientName: client?.fullName || null };
   }
   for (const cat of FINANCE_CATEGORIES) {
-    if (cat.keywords.some(k => text.includes(normalizeText(k)))) return { category: cat.key };
+    if (cat.keywords.some(k => text.includes(normalizeText(k)))) return { category: cat.key, clientId: null, clientName: null };
   }
-  return { category: 'divers' };
+  return { category: 'divers', clientId: null, clientName: null };
 }
 
 async function loadBunqStore() {
