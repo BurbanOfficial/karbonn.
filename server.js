@@ -61,11 +61,7 @@ async function sendEmail({ to, subject, text, html }) {
   return result;
 }
 
-// Parse JSON for all routes except Stripe webhook (needs raw body for signature verification)
-app.use((req, res, next) => {
-  if (req.originalUrl === '/api/stripe/webhook') return next();
-  express.json()(req, res, next);
-});
+app.use(express.json());
 
 const allowedOriginsCors = cors({
   origin: (origin, callback) => {
@@ -151,20 +147,6 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
           updatedAt: item.updatedAt ? item.updatedAt.toDate().toISOString() : null
         });
       });
-      // Fetch services for this site
-      const servicesSnap = await db.collection('sitesWeb').doc(doc.id).collection('services').orderBy('createdAt', 'desc').get();
-      const services = [];
-      servicesSnap.forEach(s => {
-        const svc = s.data();
-        services.push({
-          id: s.id,
-          description: svc.description || '',
-          priceMonthly: svc.priceMonthly || 0,
-          startDate: svc.startDate || null,
-          endDate: svc.endDate || null,
-        });
-      });
-
       sites.push({
         id: doc.id,
         domain: data.domain,
@@ -177,8 +159,7 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
         createdAt: data.createdAt,
         renewals: data.renewals || [],
         lastRenewalAt: data.lastRenewalAt ? (data.lastRenewalAt.toDate ? data.lastRenewalAt.toDate().toISOString() : data.lastRenewalAt) : null,
-        history,
-        services
+        history
       });
     }
     console.log('[Public API] Returning', sites.length, 'sites for clientId:', clientId);
@@ -408,474 +389,99 @@ app.delete('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {
   }
 });
 
-// ---- Stripe Billing ----
-const DOMAIN_PRICES_ANNUAL_CENTS = {
-  '.com': 1619,  // 13.49€ HT × 1.20 TVA = 16.19€ TTC
-  '.fr':  935,   // 7.79€ HT × 1.20 TVA = 9.35€ TTC
-};
-const DEFAULT_DOMAIN_ANNUAL_CENTS = 1200; // 10€ HT × 1.20 = 12€ TTC
+// Stripe renewal: create a PaymentIntent for domain renewal
+const RENEWAL_PRICES = { 1: 1500, 2: 2800, 5: 6000 }; // in euro cents
 
-function getDomainAnnualPriceCents(domain) {
-  if (!domain) return DEFAULT_DOMAIN_ANNUAL_CENTS;
-  const parts = domain.split('.');
-  const ext = parts.length >= 2 ? '.' + parts[parts.length - 1].toLowerCase() : '';
-  return DOMAIN_PRICES_ANNUAL_CENTS[ext] || DEFAULT_DOMAIN_ANNUAL_CENTS;
-}
-
-// Ensure a Stripe Customer exists for a client
-async function ensureStripeCustomer(clientDocId) {
-  const clientDoc = await db.collection('clients').doc(clientDocId).get();
-  if (!clientDoc.exists) throw new Error('Client not found');
-  const client = clientDoc.data();
-
-  if (client.stripeCustomerId) {
-    return client.stripeCustomerId;
+app.post('/api/public/sites/:siteId/create-payment-intent', async (req, res) => {
+  console.log('[Stripe] create-payment-intent for site:', req.params.siteId);
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(500).json({ error: 'Stripe not configured' });
   }
-
-  const name = [client.prenom, client.nom].filter(Boolean).join(' ') || client.entreprise || client.raisonSociale || 'Client';
-  const customerData = { name, metadata: { firestoreClientId: clientDocId } };
-  if (client.email) customerData.email = client.email;
-
-  const customer = await stripe.customers.create(customerData);
-  await db.collection('clients').doc(clientDocId).update({ stripeCustomerId: customer.id });
-  console.log('[Stripe Billing] Created customer:', customer.id, 'for client:', clientDocId);
-  return customer.id;
-}
-
-// Get or create a Stripe Price for a recurring item
-async function getOrCreateStripePrice(name, unitAmountCents, interval) {
-  // Search for existing product by name
-  const products = await stripe.products.search({ query: `name:"${name}"`, limit: 1 });
-  let product;
-  if (products.data.length > 0) {
-    product = products.data[0];
-    // Check if a matching price exists
-    const prices = await stripe.prices.list({ product: product.id, active: true, limit: 10 });
-    const match = prices.data.find(p =>
-      p.unit_amount === unitAmountCents && p.recurring?.interval === interval && p.currency === 'eur'
-    );
-    if (match) return match.id;
-  } else {
-    product = await stripe.products.create({ name });
-  }
-  const price = await stripe.prices.create({
-    product: product.id,
-    unit_amount: unitAmountCents,
-    currency: 'eur',
-    recurring: { interval },
-  });
-  console.log('[Stripe Billing] Created price:', price.id, '| amount:', unitAmountCents, '| interval:', interval);
-  return price.id;
-}
-
-// Public: auto-create Stripe customer on client login
-app.post('/api/public/client/:clientDocId/ensure-stripe-customer', async (req, res) => {
   try {
-    const customerId = await ensureStripeCustomer(req.params.clientDocId);
-    res.json({ stripeCustomerId: customerId });
-  } catch (err) {
-    console.error('[Stripe Billing] ensure-stripe-customer error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Public: create a Stripe SetupIntent so the client can add a payment method
-app.post('/api/public/client/:clientDocId/create-setup-intent', async (req, res) => {
-  try {
-    const customerId = await ensureStripeCustomer(req.params.clientDocId);
-    const setupIntent = await stripe.setupIntents.create({
-      customer: customerId,
-      payment_method_types: ['card'],
-    });
-    res.json({ clientSecret: setupIntent.client_secret });
-  } catch (err) {
-    console.error('[Stripe Billing] create-setup-intent error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Public: set a payment method as default for invoices
-app.post('/api/public/client/:clientDocId/set-default-payment-method', async (req, res) => {
-  try {
-    const clientDoc = await db.collection('clients').doc(req.params.clientDocId).get();
-    if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
-    const stripeCustomerId = clientDoc.data().stripeCustomerId;
-    if (!stripeCustomerId) return res.status(400).json({ error: 'No Stripe customer' });
-
-    // Get the latest payment method
-    const methods = await stripe.paymentMethods.list({ customer: stripeCustomerId, type: 'card', limit: 1 });
-    if (methods.data.length === 0) return res.status(400).json({ error: 'No payment method found' });
-
-    await stripe.customers.update(stripeCustomerId, {
-      invoice_settings: { default_payment_method: methods.data[0].id },
-    });
-    console.log('[Stripe Billing] Set default PM:', methods.data[0].id, 'for customer:', stripeCustomerId);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[Stripe Billing] set-default-payment-method error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Public: detach (delete) a payment method from a customer
-app.delete('/api/public/client/:clientDocId/payment-methods/:pmId', async (req, res) => {
-  try {
-    const clientDoc = await db.collection('clients').doc(req.params.clientDocId).get();
-    if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
-    const stripeCustomerId = clientDoc.data().stripeCustomerId;
-    if (!stripeCustomerId) return res.status(400).json({ error: 'No Stripe customer' });
-
-    // Verify PM belongs to this customer
-    const pm = await stripe.paymentMethods.retrieve(req.params.pmId);
-    if (pm.customer !== stripeCustomerId) return res.status(403).json({ error: 'Not your payment method' });
-
-    // Don't allow deleting last payment method
-    const methods = await stripe.paymentMethods.list({ customer: stripeCustomerId, type: 'card' });
-    if (methods.data.length <= 1) return res.status(400).json({ error: 'Vous devez conserver au moins un moyen de paiement.' });
-
-    await stripe.paymentMethods.detach(req.params.pmId);
-    console.log('[Stripe Billing] Detached PM:', req.params.pmId, 'from customer:', stripeCustomerId);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[Stripe Billing] delete payment-method error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Public: check if client has a payment method attached
-app.get('/api/public/client/:clientDocId/payment-methods', async (req, res) => {
-  try {
-    const clientDoc = await db.collection('clients').doc(req.params.clientDocId).get();
-    if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
-    const stripeCustomerId = clientDoc.data().stripeCustomerId;
-    if (!stripeCustomerId) return res.json({ paymentMethods: [] });
-    const methods = await stripe.paymentMethods.list({ customer: stripeCustomerId, type: 'card' });
-    const result = methods.data.map(pm => ({
-      id: pm.id,
-      brand: pm.card?.brand,
-      last4: pm.card?.last4,
-      exp_month: pm.card?.exp_month,
-      exp_year: pm.card?.exp_year,
-    }));
-    res.json({ paymentMethods: result });
-  } catch (err) {
-    console.error('[Stripe Billing] payment-methods error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Public: list invoices for a Stripe customer
-app.get('/api/public/client/:clientDocId/invoices', async (req, res) => {
-  try {
-    const clientDoc = await db.collection('clients').doc(req.params.clientDocId).get();
-    if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
-    const stripeCustomerId = clientDoc.data().stripeCustomerId;
-    if (!stripeCustomerId) return res.json({ invoices: [] });
-    const invoices = await stripe.invoices.list({ customer: stripeCustomerId, limit: 50 });
-    const result = invoices.data.map(inv => ({
-      id: inv.id,
-      number: inv.number,
-      status: inv.status,
-      amount_due: inv.amount_due,
-      amount_paid: inv.amount_paid,
-      currency: inv.currency,
-      created: inv.created,
-      due_date: inv.due_date,
-      hosted_invoice_url: inv.hosted_invoice_url,
-      invoice_pdf: inv.invoice_pdf,
-      description: inv.description || (inv.lines?.data?.[0]?.description || ''),
-    }));
-    res.json({ invoices: result });
-  } catch (err) {
-    console.error('[Stripe Billing] list invoices error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Public: list active subscriptions for a client
-app.get('/api/public/client/:clientDocId/subscriptions', async (req, res) => {
-  try {
-    const clientDoc = await db.collection('clients').doc(req.params.clientDocId).get();
-    if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
-    const stripeCustomerId = clientDoc.data().stripeCustomerId;
-    if (!stripeCustomerId) return res.json({ subscriptions: [] });
-    const subs = await stripe.subscriptions.list({ customer: stripeCustomerId, limit: 20 });
-    const result = subs.data.map(sub => ({
-      id: sub.id,
-      status: sub.status,
-      current_period_start: sub.current_period_start,
-      current_period_end: sub.current_period_end,
-      items: sub.items.data.map(item => ({
-        id: item.id,
-        description: item.price?.product?.name || item.price?.nickname || '',
-        amount: item.price?.unit_amount,
-        interval: item.price?.recurring?.interval,
-      })),
-    }));
-    res.json({ subscriptions: result });
-  } catch (err) {
-    console.error('[Stripe Billing] list subscriptions error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Stripe Webhook for invoice events
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  let event;
-  try {
-    if (webhookSecret) {
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } else {
-      event = JSON.parse(req.body);
+    const { siteId } = req.params;
+    const { years, amount: requestedAmount } = req.body || {};
+    const yearsInt = parseInt(years, 10);
+    if (![1, 2, 5].includes(yearsInt)) {
+      return res.status(400).json({ error: 'Invalid duration. Choose 1, 2 or 5 years.' });
     }
-  } catch (err) {
-    console.error('[Stripe Webhook] Signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+    const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+    if (!siteDoc.exists) return res.status(404).json({ error: 'Site not found' });
 
-  console.log('[Stripe Webhook] Event received:', event.type);
-
-  if (event.type === 'invoice.payment_succeeded') {
-    const invoice = event.data.object;
-    await handleInvoicePaymentSucceeded(invoice);
-  } else if (event.type === 'invoice.payment_failed') {
-    const invoice = event.data.object;
-    await handleInvoicePaymentFailed(invoice);
-  }
-
-  res.json({ received: true });
-});
-
-async function handleInvoicePaymentSucceeded(invoice) {
-  const customerId = invoice.customer;
-  console.log('[Stripe Webhook] Payment succeeded for customer:', customerId, '| amount:', invoice.amount_paid);
-
-  try {
-    // Find client by stripeCustomerId
-    const clientSnap = await db.collection('clients').where('stripeCustomerId', '==', customerId).limit(1).get();
-    if (clientSnap.empty) {
-      console.warn('[Stripe Webhook] No client found for Stripe customer:', customerId);
-      return;
-    }
-    const clientDoc = clientSnap.docs[0];
-    const client = clientDoc.data();
-    const clientEmail = client.email;
-    const clientName = [client.prenom, client.nom].filter(Boolean).join(' ') || client.entreprise || 'Client';
-
-    if (!clientEmail) {
-      console.warn('[Stripe Webhook] No email for client:', clientDoc.id);
-      return;
-    }
-
-    const amountStr = (invoice.amount_paid / 100).toFixed(2) + ' €';
-    const lines = invoice.lines?.data?.map(l => l.description || '—') || [];
-    const html = buildRenewalEmailHtml({
-      title: 'Paiement effectué',
-      intro: `${clientName}, votre prélèvement de ${amountStr} a bien été effectué.`,
-      lines: ['Détail :', ...lines, '', `Montant total : ${amountStr}`],
-      buttonText: 'Voir mes factures',
-      buttonHref: 'https://karbonn.fr/espace-client',
-    });
-    const text = `Paiement effectué\n\n${clientName}, votre prélèvement de ${amountStr} a bien été effectué.\n\nDétail :\n${lines.join('\n')}\n\nMontant total : ${amountStr}`;
-
-    await sendEmail({ to: [clientEmail], subject: `[Karbonn] Paiement effectué – ${amountStr}`, text, html });
-    console.log('[Stripe Webhook] Payment success email sent to:', clientEmail);
-  } catch (err) {
-    console.error('[Stripe Webhook] Error handling payment succeeded:', err);
-  }
-}
-
-async function handleInvoicePaymentFailed(invoice) {
-  const customerId = invoice.customer;
-  console.log('[Stripe Webhook] Payment FAILED for customer:', customerId, '| amount:', invoice.amount_due);
-
-  try {
-    const clientSnap = await db.collection('clients').where('stripeCustomerId', '==', customerId).limit(1).get();
-    if (clientSnap.empty) {
-      console.warn('[Stripe Webhook] No client found for Stripe customer:', customerId);
-      return;
-    }
-    const clientDoc = clientSnap.docs[0];
-    const client = clientDoc.data();
-    const clientEmail = client.email;
-    const clientName = [client.prenom, client.nom].filter(Boolean).join(' ') || client.entreprise || 'Client';
-    const amountStr = (invoice.amount_due / 100).toFixed(2) + ' €';
-    const lines = invoice.lines?.data?.map(l => l.description || '—') || [];
-
-    // Email to client
-    if (clientEmail) {
-      const html = buildRenewalEmailHtml({
-        title: 'Échec de prélèvement',
-        intro: `${clientName}, nous n'avons pas pu effectuer le prélèvement de ${amountStr}.`,
-        lines: ['Détail :', ...lines, '', 'Veuillez mettre à jour votre moyen de paiement ou contacter notre équipe.'],
-        buttonText: 'Contacter Karbonn',
-        buttonHref: 'mailto:hello@karbonn.fr',
-      });
-      const text = `Échec de prélèvement\n\n${clientName}, nous n'avons pas pu effectuer le prélèvement de ${amountStr}.\n\nDétail :\n${lines.join('\n')}\n\nVeuillez mettre à jour votre moyen de paiement ou contacter notre équipe.`;
-      await sendEmail({ to: [clientEmail], subject: `[Karbonn] Échec de prélèvement – ${amountStr}`, text, html });
-      console.log('[Stripe Webhook] Payment failed email sent to client:', clientEmail);
-    }
-
-    // Email to managers
-    const managerEmails = await getManagerEmails();
-    if (managerEmails.length > 0) {
-      const mgrHtml = buildRenewalEmailHtml({
-        title: 'Échec de prélèvement client',
-        intro: `Le prélèvement de ${amountStr} pour ${clientName} a échoué.`,
-        lines: [`Client : ${clientName}`, clientEmail ? `Email : ${clientEmail}` : '', `Montant : ${amountStr}`, '', 'Détail :', ...lines],
-        buttonText: 'Voir dans l\'intranet',
-        buttonHref: 'https://karbonn.fr/intranet',
-      });
-      const mgrText = `Échec de prélèvement\n\nClient : ${clientName}\nMontant : ${amountStr}\n\nDétail :\n${lines.join('\n')}`;
-      await sendEmail({ to: managerEmails, subject: `[Karbonn] ⚠ Échec prélèvement – ${clientName}`, text: mgrText, html: mgrHtml });
-      console.log('[Stripe Webhook] Payment failed email sent to managers:', managerEmails.length);
-    }
-  } catch (err) {
-    console.error('[Stripe Webhook] Error handling payment failed:', err);
-  }
-}
-
-// Daily check: create/manage subscriptions for sites
-// Two independent subscriptions per site:
-//   1. Domain (annual) — triggered J-10 before expirationDate
-//   2. Services (monthly) — triggered when active services exist without a sub
-async function processBillingSubscriptions() {
-  console.log('[Billing] Running daily subscription check');
-  try {
-    const sitesSnap = await db.collection('sitesWeb').get();
-    const now = new Date();
-
-    for (const siteDoc of sitesSnap.docs) {
-      const site = { id: siteDoc.id, ...siteDoc.data() };
-      if (!site.clientId) continue;
-
-      try {
-        const customerId = await ensureStripeCustomer(site.clientId);
-
-        // Check customer has a payment method
-        const paymentMethods = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 });
-        if (paymentMethods.data.length === 0) continue;
-        const defaultPm = paymentMethods.data[0].id;
-
-        // ─── 1. DOMAIN SUBSCRIPTION (annual) ───
-        if (site.expirationDate && !site.stripeDomainSubProcessed) {
-          const exp = new Date(site.expirationDate);
-          const daysUntilExp = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
-
-          if (daysUntilExp >= 0 && daysUntilExp <= 10) {
-            if (!site.stripeDomainSubId) {
-              const domainCents = getDomainAnnualPriceCents(site.domain);
-              const domainPriceId = await getOrCreateStripePrice(
-                `Nom de domaine – ${site.domain || 'domaine'}`,
-                domainCents,
-                'year'
-              );
-              const subscription = await stripe.subscriptions.create({
-                customer: customerId,
-                items: [{ price: domainPriceId }],
-                collection_method: 'charge_automatically',
-                default_payment_method: defaultPm,
-                metadata: { siteId: site.id, type: 'domain', domain: site.domain || '' },
-              });
-              await db.collection('sitesWeb').doc(site.id).update({
-                stripeDomainSubId: subscription.id,
-                stripeDomainSubProcessed: true,
-              });
-              console.log('[Billing] Created domain sub:', subscription.id, 'for', site.domain);
-            } else {
-              await db.collection('sitesWeb').doc(site.id).update({ stripeDomainSubProcessed: true });
-              console.log('[Billing] Domain sub already exists for', site.domain);
-            }
-          }
+    const amount = (requestedAmount && Number.isInteger(requestedAmount) && requestedAmount >= 100)
+      ? requestedAmount
+      : RENEWAL_PRICES[yearsInt];
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency: 'eur',
+      metadata: { siteId, years: String(yearsInt) },
+      payment_method_options: {
+        card: {
+          request_three_d_secure: 'any'
         }
-
-        // ─── 2. SERVICES SUBSCRIPTION (monthly) ───
-        const servicesSnap = await db.collection('sitesWeb').doc(site.id).collection('services').get();
-        const activeServices = [];
-        for (const svcDoc of servicesSnap.docs) {
-          const svc = { id: svcDoc.id, ...svcDoc.data() };
-          if (!svc.priceCents || svc.priceCents <= 0) continue;
-          if (svc.endDate && new Date(svc.endDate) < now) continue;
-          activeServices.push(svc);
-        }
-
-        if (activeServices.length > 0) {
-          // Build target items
-          const serviceItems = [];
-          for (const svc of activeServices) {
-            const svcPriceId = await getOrCreateStripePrice(
-              svc.description || 'Service',
-              svc.priceCents,
-              'month'
-            );
-            serviceItems.push({ price: svcPriceId });
-          }
-
-          if (site.stripeServicesSubId) {
-            // Sync items on existing subscription
-            try {
-              const sub = await stripe.subscriptions.retrieve(site.stripeServicesSubId);
-              if (sub.status === 'canceled') throw { code: 'resource_missing' };
-
-              // Build current price IDs
-              const currentPriceIds = sub.items.data.map(i => i.price.id);
-              const targetPriceIds = serviceItems.map(i => i.price);
-
-              // Only update if items differ
-              if (JSON.stringify(currentPriceIds.sort()) !== JSON.stringify(targetPriceIds.sort())) {
-                for (const item of sub.items.data) {
-                  await stripe.subscriptionItems.del(item.id, { proration_behavior: 'create_prorations' });
-                }
-                for (const si of serviceItems) {
-                  await stripe.subscriptionItems.create({
-                    subscription: site.stripeServicesSubId,
-                    price: si.price,
-                    proration_behavior: 'create_prorations',
-                  });
-                }
-                console.log('[Billing] Updated services sub:', site.stripeServicesSubId);
-              }
-              await stripe.subscriptions.update(site.stripeServicesSubId, { default_payment_method: defaultPm });
-            } catch (subErr) {
-              if (subErr.code === 'resource_missing' || subErr.statusCode === 404) {
-                const subscription = await stripe.subscriptions.create({
-                  customer: customerId,
-                  items: serviceItems,
-                  collection_method: 'charge_automatically',
-                  default_payment_method: defaultPm,
-                  metadata: { siteId: site.id, type: 'services', domain: site.domain || '' },
-                });
-                await db.collection('sitesWeb').doc(site.id).update({ stripeServicesSubId: subscription.id });
-                console.log('[Billing] Re-created services sub:', subscription.id);
-              } else {
-                throw subErr;
-              }
-            }
-          } else {
-            // Create new services subscription
-            const subscription = await stripe.subscriptions.create({
-              customer: customerId,
-              items: serviceItems,
-              collection_method: 'charge_automatically',
-              default_payment_method: defaultPm,
-              metadata: { siteId: site.id, type: 'services', domain: site.domain || '' },
-            });
-            await db.collection('sitesWeb').doc(site.id).update({ stripeServicesSubId: subscription.id });
-            console.log('[Billing] Created services sub:', subscription.id, 'for', site.domain);
-          }
-        }
-      } catch (err) {
-        console.error('[Billing] Error processing site:', site.id, err.message);
       }
-    }
+    });
+    console.log('[Stripe] PaymentIntent created:', paymentIntent.id, '| amount:', amount);
+    res.json({ clientSecret: paymentIntent.client_secret, amount, paymentIntentId: paymentIntent.id });
   } catch (err) {
-    console.error('[Billing] Error in processBillingSubscriptions:', err);
+    console.error('[Stripe] Error creating payment intent:', err);
+    res.status(500).json({ error: err.message });
   }
-}
+});
 
-// ---- Email utilities ----
+// Stripe renewal: confirm after successful payment and record in Firestore
+app.post('/api/public/sites/:siteId/confirm-renewal', async (req, res) => {
+  console.log('[Stripe] confirm-renewal for site:', req.params.siteId);
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(500).json({ error: 'Stripe not configured' });
+  }
+  try {
+    const { siteId } = req.params;
+    const { paymentIntentId, years, clientName, clientId } = req.body || {};
+    if (!paymentIntentId || !years || !clientId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(402).json({ error: 'Payment not completed', status: paymentIntent.status });
+    }
+
+    const yearsInt = parseInt(years, 10);
+    const amount = paymentIntent.amount;
+    const paidAt = new Date().toISOString();
+    const renewal = {
+      paymentIntentId,
+      years: yearsInt,
+      amount,
+      clientName: clientName || '',
+      clientId: clientId || '',
+      paidAt
+    };
+
+    const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+    const siteData = siteDoc.data() || {};
+
+    const currentExp = siteData.expirationDate ? new Date(siteData.expirationDate) : new Date();
+    const baseDate = currentExp > new Date() ? currentExp : new Date();
+    baseDate.setFullYear(baseDate.getFullYear() + yearsInt);
+    const newExpirationDate = baseDate.toISOString().split('T')[0];
+
+    await db.collection('sitesWeb').doc(siteId).update({
+      renewals: admin.firestore.FieldValue.arrayUnion(renewal),
+      lastRenewalAt: admin.firestore.FieldValue.serverTimestamp(),
+      expirationDate: newExpirationDate,
+      status: 'Actif',
+      reminderEmailsSent: []
+    });
+    console.log('[Stripe] Renewal recorded for site:', siteId, '| new expiration:', newExpirationDate);
+    res.json({ success: true, renewal: { ...renewal, newExpirationDate } });
+  } catch (err) {
+    console.error('[Stripe] Error confirming renewal:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- Renewal reminder emails ----
 function escapeHtml(str) {
   if (str == null) return '';
   return String(str)
@@ -977,6 +583,141 @@ async function getManagerEmails() {
   }
 }
 
+function daysUntil(dateString) {
+  if (!dateString) return null;
+  const exp = new Date(dateString);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  exp.setHours(23, 59, 59, 999);
+  return Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+}
+
+function reminderAlreadySent(site, type) {
+  const list = site.reminderEmailsSent || [];
+  return list.some(r => r.type === type);
+}
+
+async function markReminderSent(siteId, type) {
+  await db.collection('sitesWeb').doc(siteId).update({
+    reminderEmailsSent: admin.firestore.FieldValue.arrayUnion({ type, sentAt: new Date().toISOString() })
+  });
+}
+
+function isRecentlyRenewed(site, thresholdDays = 90) {
+  if (!site.lastRenewalAt || !site.expirationDate) return false;
+  const days = daysUntil(site.expirationDate);
+  return days !== null && days > thresholdDays;
+}
+
+async function sendReminderEmail(site, type, daysLeft) {
+  const domain = site.domain || '—';
+  const expirationDate = site.expirationDate ? new Date(site.expirationDate).toLocaleDateString('fr-FR') : '—';
+  const clientName = site.clientName || 'Client';
+  const isManagerEmail = type.startsWith('manager_') || type === 'expired';
+  const isExpired = type === 'expired';
+
+  let recipients = [];
+  if (isManagerEmail) {
+    recipients = await getManagerEmails();
+  } else {
+    const clientEmail = await getClientEmailById(site.clientId);
+    if (clientEmail) recipients = [clientEmail];
+  }
+
+  if (recipients.length === 0) {
+    console.log('[Reminders] No recipients for', type, '| site:', site.id);
+    return;
+  }
+
+  let subject, title, intro, lines, buttonText, buttonHref;
+  const clientHref = `https://karbonn.fr/espace-client`;
+  const intranetHref = `https://karbonn.fr/intranet`;
+
+  if (isExpired) {
+    subject = `[Karbonn] Domaine expiré – ${domain}`;
+    title = 'Domaine expiré';
+    intro = `${clientName}, votre nom de domaine ${domain} a expiré.`;
+    lines = [`Domaine : ${domain}`, `Date d'expiration : ${expirationDate}`, 'Renouvelez-le rapidement pour éviter la perte du domaine.'];
+    buttonText = 'Voir le site';
+    buttonHref = isManagerEmail ? intranetHref : clientHref;
+  } else if (isManagerEmail) {
+    subject = `[Karbonn] Relance renouvellement – ${domain}`;
+    title = 'Relance renouvellement';
+    intro = `Le domaine ${domain} de ${clientName} expire dans ${daysLeft} jour${daysLeft > 1 ? 's' : ''}.`;
+    lines = [`Domaine : ${domain}`, `Client : ${clientName}`, `Date d'expiration : ${expirationDate}`];
+    buttonText = 'Voir le site';
+    buttonHref = intranetHref;
+  } else {
+    subject = `[Karbonn] Votre domaine expire bientôt – ${domain}`;
+    title = 'Votre domaine expire bientôt';
+    intro = `${clientName}, renouvelez votre nom de domaine ${domain} avant qu'il ne soit trop tard.`;
+    lines = [`Domaine : ${domain}`, `Date d'expiration : ${expirationDate}`, `Il reste ${daysLeft} jour${daysLeft > 1 ? 's' : ''}.`];
+    buttonText = 'Renouveler mon domaine';
+    buttonHref = clientHref;
+  }
+
+  const html = buildRenewalEmailHtml({ title, intro, lines, buttonText, buttonHref });
+  const text = `${title}\n\n${intro}\n\n${lines.join('\n')}\n\n${buttonHref}`;
+
+  try {
+    await sendEmail({ to: recipients, subject, text, html });
+    console.log('[Reminders] Email sent:', type, '| recipients:', recipients.length, '| site:', site.id);
+    await markReminderSent(site.id, type);
+  } catch (err) {
+    console.error('[Reminders] Failed to send email:', type, err);
+  }
+}
+
+async function processRenewalReminders() {
+  console.log('[Reminders] Running daily renewal reminder check');
+  try {
+    const snap = await db.collection('sitesWeb').get();
+    const managerEmails = await getManagerEmails();
+
+    for (const doc of snap.docs) {
+      const site = { id: doc.id, ...doc.data() };
+      const daysLeft = daysUntil(site.expirationDate);
+      if (daysLeft === null) continue;
+
+      const status = site.status || 'En attente';
+      const expired = status === 'Expiré' || daysLeft < 0;
+
+      if (expired) {
+        if (!reminderAlreadySent(site, 'expired')) {
+          await sendReminderEmail(site, 'expired', 0);
+          if (managerEmails.length) await sendReminderEmail(site, 'expired_manager', 0);
+        }
+        continue;
+      }
+
+      // If recently renewed far enough, skip all reminders
+      if (isRecentlyRenewed(site, 90)) continue;
+
+      const thresholds = [
+        { days: 90, clientType: 'client_90' },
+        { days: 30, clientType: 'client_30' },
+        { days: 10, clientType: 'client_10' },
+        { days: 7,  clientType: 'client_7', managerType: 'manager_7' },
+        { days: 1,  clientType: 'client_1', managerType: 'manager_1' }
+      ];
+
+      for (const t of thresholds) {
+        if (daysLeft <= t.days && daysLeft > t.days - 1) {
+          // Client email
+          if (!reminderAlreadySent(site, t.clientType)) {
+            await sendReminderEmail(site, t.clientType, daysLeft);
+          }
+          // Manager escalation (J-7, J-1)
+          if (t.managerType && !reminderAlreadySent(site, t.managerType)) {
+            await sendReminderEmail(site, t.managerType, daysLeft);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Reminders] Error in processRenewalReminders:', err);
+  }
+}
 
 // Notification endpoint: authenticated, any role
 app.post('/notify/email', cors({ origin: true, credentials: true }), verifyAuth, async (req, res) => {
@@ -1000,12 +741,10 @@ app.post('/notify/email', cors({ origin: true, credentials: true }), verifyAuth,
 
 app.use('/api', (req, res, next) => {
   if (req.path === '/chat') return next();
-  if (req.path.startsWith('/stripe/webhook')) return next();
   if (req.method === 'OPTIONS') return next();
   verifyAuth(req, res, next);
 }, (req, res, next) => {
   if (req.path === '/chat') return next();
-  if (req.path.startsWith('/stripe/webhook')) return next();
   if (req.path.startsWith('/finances')) return next(); // Finances visible to all authenticated users
   requireManager(req, res, next);
 });
@@ -1870,9 +1609,9 @@ app.listen(PORT, () => {
   const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
   setInterval(() => fetch(`${SELF_URL}/health`).catch(() => {}), 30 * 1000);
 
-  // Daily Stripe Billing subscription check (J-10 before expiration)
-  setTimeout(() => { processBillingSubscriptions(); }, 60 * 1000);
-  setInterval(() => { processBillingSubscriptions(); }, 24 * 60 * 60 * 1000);
+  // Daily renewal reminder check
+  setTimeout(() => { processRenewalReminders(); }, 60 * 1000);
+  setInterval(() => { processRenewalReminders(); }, 24 * 60 * 60 * 1000);
 
   // Auto-sync Bunq transactions every 5 minutes
   if (bunq.isConfigured()) {

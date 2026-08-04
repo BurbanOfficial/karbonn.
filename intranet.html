@@ -2374,79 +2374,6 @@
       color: var(--accent);
     }
 
-    /* Site services table */
-    .site-services-section {
-      grid-column: 1 / -1;
-    }
-    .site-services-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.85rem;
-    }
-    .site-services-table th {
-      text-align: left;
-      padding: 10px 12px;
-      font-weight: 700;
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--muted);
-      border-bottom: 2px solid var(--border);
-    }
-    .site-services-table td {
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border);
-    }
-    .site-services-table .empty-row td { color: var(--muted); font-style: italic; }
-    .svc-actions { display: flex; gap: 6px; justify-content: flex-end; }
-    .svc-actions button {
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 6px;
-      transition: background 0.15s;
-      color: var(--muted);
-    }
-    .svc-actions button:hover { background: var(--bg-hover); color: var(--text); }
-    .svc-actions button.svc-delete:hover { color: #ef4444; }
-
-    /* Currency converter banner */
-    .currency-banner {
-      background: rgba(239,68,68,0.08);
-      border: 1px solid rgba(239,68,68,0.25);
-      border-radius: var(--radius-md);
-      padding: 12px 18px;
-      margin-bottom: 20px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      font-size: 0.82rem;
-      color: #dc2626;
-    }
-    .currency-banner i { font-size: 1.1rem; }
-    .currency-converter {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-left: auto;
-    }
-    .currency-converter input, .currency-converter select {
-      padding: 6px 10px;
-      border: 1px solid rgba(239,68,68,0.3);
-      border-radius: 6px;
-      font-size: 0.82rem;
-      background: white;
-      font-family: inherit;
-    }
-    .currency-converter input { width: 100px; }
-    .currency-converter select { width: 80px; }
-    .currency-converter .converted-result {
-      font-weight: 700;
-      color: #111;
-      min-width: 80px;
-    }
-
     .form-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -4071,48 +3998,6 @@
                 <div class="site-client-notes-list" id="site-client-notes">
                   <p class="empty-history">Aucune remarque client.</p>
                 </div>
-              </div>
-
-              <div class="detail-section site-services-section" id="site-services-section">
-                <div class="detail-section-title"><i class="fa-solid fa-cubes"></i> Services</div>
-                <div class="currency-banner" id="currency-banner" style="display:none;">
-                  <i class="fa-solid fa-triangle-exclamation"></i>
-                  <span>Attention au taux de change si le prix est dans une autre devise.</span>
-                  <div class="currency-converter">
-                    <input type="number" id="currency-amount" placeholder="Montant" step="0.01" min="0">
-                    <select id="currency-from">
-                      <option value="USD">USD</option>
-                      <option value="GBP">GBP</option>
-                      <option value="CHF">CHF</option>
-                      <option value="CAD">CAD</option>
-                      <option value="JPY">JPY</option>
-                      <option value="AUD">AUD</option>
-                      <option value="CNY">CNY</option>
-                      <option value="MAD">MAD</option>
-                      <option value="TRY">TRY</option>
-                      <option value="BRL">BRL</option>
-                    </select>
-                    <i class="fa-solid fa-arrow-right" style="color:#aaa;"></i>
-                    <span class="converted-result" id="currency-result">— €</span>
-                  </div>
-                </div>
-                <button class="btn-create" id="btn-add-site-service" style="margin-bottom:14px;">
-                  <i class="fa-solid fa-plus"></i> Ajouter un service
-                </button>
-                <table class="site-services-table">
-                  <thead>
-                    <tr>
-                      <th>Description</th>
-                      <th>Prix mensuel</th>
-                      <th>Date de début</th>
-                      <th>Date d'échéance</th>
-                      <th style="text-align:right;">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="site-services-tbody">
-                    <tr class="empty-row"><td colspan="5">Aucun service défini.</td></tr>
-                  </tbody>
-                </table>
               </div>
 
               <div class="detail-section site-renewals-section">
