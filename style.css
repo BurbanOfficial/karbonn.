@@ -15,6 +15,12 @@ body {
   overflow-x: hidden;
 }
 
+html.no-scroll,
+body.no-scroll {
+  overflow: hidden !important;
+  touch-action: none;
+}
+
 .top-nav-actions {
   position: absolute;
   top: 40px;
@@ -945,6 +951,43 @@ html, body {
 
 .footer-social-link i { font-size: 18px; }
 
+.footer-social-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.footer-legal-block {
+  margin-top: 48px;
+}
+
+.footer-legal-label {
+  font-family: "Source Code Pro", Sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.footer-legal-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.footer-legal-nav a {
+  font-family: "Space Grotesk", Sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.5);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.footer-legal-nav a:hover { color: #fff; }
+
 .footer-social-caption {
   font-family: "Source Code Pro", Sans-serif;
   font-size: 11px;
@@ -1098,6 +1141,122 @@ html, body {
   padding-bottom: 20px;
 }
 
+/* === Legal modals === */
+
+.legal-modal {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 2000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+}
+
+.legal-modal.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.legal-modal__inner {
+  min-height: 100vh;
+  padding: 120px 80px 100px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.legal-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 32px;
+  margin-bottom: 64px;
+  position: sticky;
+  top: 0;
+  background: #000;
+  padding: 24px 0;
+  z-index: 10;
+}
+
+.legal-modal__title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 48px;
+  font-weight: 500;
+  color: #fff;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.legal-modal__close {
+  font-family: "Source Code Pro", Sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  background: transparent;
+  border: 1.5px solid #fff;
+  padding: 12px 20px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: color 0.3s ease;
+  flex-shrink: 0;
+}
+
+.legal-modal__close::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -15%;
+  width: 0%;
+  height: 100%;
+  background: #fff;
+  transform: skewX(-12deg);
+  transform-origin: left center;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: -1;
+}
+
+.legal-modal__close:hover::before { width: 130%; }
+
+.legal-modal__close:hover { color: var(--accent); }
+
+.legal-modal__body {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  color: rgba(255,255,255,0.7);
+}
+
+.legal-modal__body h3 {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 500;
+  margin: 40px 0 16px;
+  letter-spacing: -0.01em;
+}
+
+.legal-modal__body h3:first-child { margin-top: 0; }
+
+.legal-modal__body p {
+  margin-bottom: 16px;
+}
+
+.legal-modal__body ul {
+  margin: 0 0 16px 20px;
+  list-style: disc;
+}
+
+.legal-modal__body li {
+  margin-bottom: 8px;
+}
+
+.legal-modal__body strong {
+  color: #fff;
+  font-weight: 500;
+}
+
 /* === Responsive === */
 
 .hero-stage {
@@ -1243,6 +1402,14 @@ html, body {
   .nav-brand {
     font-size: 72px;
     margin-right: 24px;
+  }
+
+  .legal-modal__inner {
+    padding: 100px 60px 80px;
+  }
+
+  .legal-modal__title {
+    font-size: 38px;
   }
 }
 
@@ -1424,6 +1591,23 @@ html, body {
     padding: 11px 20px;
     top: 22px;
     right: 20px;
+  }
+
+  .legal-modal__inner {
+    padding: 90px 24px 60px;
+  }
+
+  .legal-modal__title {
+    font-size: 28px;
+  }
+
+  .legal-modal__close {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  .legal-modal__body {
+    font-size: 15px;
   }
 }
 

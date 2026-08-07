@@ -377,6 +377,17 @@
             <a href="mailto:hello@karbonn.fr" class="footer-link">HELLO@KARBONN.FR</a>
           </div>
         </div>
+        <div class="footer-legal-block">
+          <div class="footer-index">_05</div>
+          <div class="footer-legal-label">Légalité</div>
+          <nav class="footer-legal-nav">
+            <a href="#" class="footer-legal-link" data-legal="mentions">Mentions légales</a>
+            <a href="#" class="footer-legal-link" data-legal="confidentialite">Politique de confidentialité</a>
+            <a href="#" class="footer-legal-link" data-legal="cookies">Politique de cookies</a>
+            <a href="#" class="footer-legal-link" data-legal="cgu">Conditions générales d'utilisation</a>
+            <a href="#" class="footer-legal-link" data-legal="cgv">Conditions Générales de Vente (CGV)</a>
+          </nav>
+        </div>
       </div>
 
       <div class="footer-col">
@@ -405,10 +416,20 @@
         <div class="footer-index">_04</div>
         <div class="footer-block">
           <div class="footer-social-label">Réseaux sociaux</div>
-          <a href="https://www.instagram.com/agence.karbonn/" class="footer-social-link">
-            <i class="fa-brands fa-instagram"></i>
-            <span>Instagram</span>
-          </a>
+          <div class="footer-social-links">
+            <a href="https://www.instagram.com/agence.karbonn/" class="footer-social-link" target="_blank" rel="noopener noreferrer">
+              <i class="fa-brands fa-instagram"></i>
+              <span>Instagram</span>
+            </a>
+            <a href="https://www.pinterest.com/agencekarbonn" class="footer-social-link" target="_blank" rel="noopener noreferrer">
+              <i class="fa-brands fa-pinterest"></i>
+              <span>Pinterest</span>
+            </a>
+            <a href="https://www.facebook.com/profile.php?id=61591696274168&mibextid=wwXIfr&rdid=WqkTE37xrT0UY4eQ&share_url=https%3A%2F%2Fwww.facebook.com%2Fshare%2F1DR2AMs7rs%2F%3Fmibextid%3DwwXIfr" class="footer-social-link" target="_blank" rel="noopener noreferrer">
+              <i class="fa-brands fa-facebook"></i>
+              <span>Facebook</span>
+            </a>
+          </div>
           <p class="footer-social-caption">Si nous nous sommes rencontré,<br>ce n'est pas un hasard.</p>
         </div>
       </div>
@@ -424,5 +445,15 @@
   <script src="script.js"></script>
   <div id="karbonn-chat"></div>
   <script src="chatbot.js"></script>
+  <!-- Legal modal -->
+  <div class="legal-modal" id="legalModal" aria-hidden="true">
+    <div class="legal-modal__inner">
+      <div class="legal-modal__header">
+        <h2 class="legal-modal__title" id="legalModalTitle"></h2>
+        <button class="legal-modal__close" id="legalModalClose">Fermer</button>
+      </div>
+      <div class="legal-modal__body" id="legalModalBody"></div>
+    </div>
+  </div>
 </body>
 </html>

@@ -307,15 +307,37 @@
     .login-left {
       flex: 1.1;
       position: relative;
-      background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.697) 0%, rgba(255, 255, 255, 0.421) 45%, rgba(0, 0, 0, 0.6) 100%),
-        url('https://agencepampa.fr/wp-content/uploads/2022/08/article-pampa-septembre.jpg') center/cover no-repeat;
+      background: linear-gradient(160deg, #eef0f3 0%, #e2e4e9 55%, #ece2e4 100%);
       color: var(--text);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       padding: 56px;
       overflow: hidden;
+    }
+
+    .login-left::before {
+      content: '';
+      position: absolute;
+      top: -120px;
+      right: -100px;
+      width: 420px;
+      height: 420px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.9), rgba(255,255,255,0) 70%);
+      filter: blur(10px);
+    }
+
+    .login-left::after {
+      content: '';
+      position: absolute;
+      bottom: -160px;
+      left: -80px;
+      width: 380px;
+      height: 380px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,113,227,0.12), rgba(0,113,227,0) 70%);
+      filter: blur(20px);
     }
 
     .login-left .brand {
@@ -527,12 +549,12 @@
     .login-step-back:hover { color: var(--text); }
 
     .login-first-notice {
-      background: var(--accent-soft);
-      border: 1px solid var(--accent-soft);
-      border-radius: var(--radius-sm);
+      background: rgba(99,102,241,0.07);
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 8px;
       padding: 10px 14px;
       font-size: 0.8rem;
-      color: var(--accent);
+      color: #6366f1;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -3690,43 +3712,25 @@
 <body>
   <div class="login-overlay" id="login-screen">
     <div class="login-left">
-      <a href="index.html" class="brand">
-        <img src="https://i.imgur.com/61Dv12I.png" alt="Karbonn.">
-        <span class="login-brand-text">Karbonn.</span>
-      </a>
-      <div class="welcome-block">
-        <div class="welcome">Bienvenue sur<br>votre intranet<span class="accent-dot">.</span></div>
-        <p class="welcome-sub">Accédez à vos projets, clients et outils internes depuis un seul espace centralisé.</p>
-      </div>
-      <div class="login-security-badge">
-        <i class="fa-solid fa-shield-halved"></i>
-        <div class="login-security-badge-text">
-          <strong>Sécurité &amp; confidentialité</strong>
-          <span>Vos données sont protégées</span>
-        </div>
-      </div>
+      <a href="index.html" class="brand login-brand-text">Karbonn.</a>
+      <p class="welcome">Bienvenue sur votre espace.</p>
     </div>
     <div class="login-right">
       <div class="login-card">
-        <h1>Connexion</h1>
-        <p class="login-card-sub">Accédez à votre espace Karbonn.</p>
+        <h1>Connexion à l'intranet</h1>
 
         <!-- Étape 1 : email -->
         <form id="login-form" autocomplete="off">
           <div class="form-group" id="login-step-email">
             <label for="login-email">Adresse email</label>
-            <div class="login-input-wrap">
-              <input type="email" id="login-email" name="email" placeholder="vous@karbonn.com" autocomplete="email" />
-            </div>
+            <input type="email" id="login-email" name="email" placeholder="vous@karbonn.com" autocomplete="email" />
           </div>
 
           <!-- Étape 2a : connexion normale -->
           <div class="form-group" id="login-step-password" style="display:none;">
             <div class="login-step-back" id="login-back-btn">← Modifier l'email</div>
             <label for="login-password">Mot de passe</label>
-            <div class="login-input-wrap">
-              <input type="password" id="login-password" name="password" placeholder="Votre mot de passe" autocomplete="current-password" />
-            </div>
+            <input type="password" id="login-password" name="password" placeholder="Votre mot de passe" autocomplete="current-password" />
           </div>
 
           <!-- Étape 2b : première connexion -->
@@ -3735,21 +3739,15 @@
             <div class="login-first-notice"><i class="fa-solid fa-circle-info"></i> Première connexion — choisissez votre mot de passe.</div>
             <div class="form-group" style="margin-top:14px;">
               <label for="login-newpassword">Nouveau mot de passe</label>
-              <div class="login-input-wrap">
-                <i class="fa-solid fa-lock"></i>
-                <input type="password" id="login-newpassword" placeholder="Au moins 8 caractères" autocomplete="new-password" />
-              </div>
+              <input type="password" id="login-newpassword" placeholder="Au moins 8 caractères" autocomplete="new-password" />
             </div>
             <div class="form-group">
               <label for="login-confirmpassword">Confirmer le mot de passe</label>
-              <div class="login-input-wrap">
-                <i class="fa-solid fa-lock"></i>
-                <input type="password" id="login-confirmpassword" placeholder="Répétez le mot de passe" autocomplete="new-password" />
-              </div>
+              <input type="password" id="login-confirmpassword" placeholder="Répétez le mot de passe" autocomplete="new-password" />
             </div>
           </div>
 
-          <button type="submit" id="login-submit-btn">Continuer <i class="fa-solid fa-arrow-right"></i></button>
+          <button type="submit" id="login-submit-btn">Continuer</button>
           <p class="error" id="login-error"></p>
         </form>
         <p class="hint">Uniquement connexion. Contactez un manager pour obtenir un accès.</p>
@@ -3835,7 +3833,7 @@
           </div>
           <div class="dashboard-hero">
             <div class="dashboard-hero-tag">Notre mission</div>
-            <div class="dashboard-hero-title">Créer des expériences digitales utiles, esthétiques et durables.</div>
+            <div class="dashboard-hero-title">Créer des expériences digitales utiles, belles et durables.</div>
           </div>
           <div class="dashboard-stats" id="dashboard-stats">
             <div class="stat-card">
