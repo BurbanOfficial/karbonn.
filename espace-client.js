@@ -431,13 +431,18 @@ function getStripePublicKey() {
   return el ? (el.dataset.key || '') : '';
 }
 
+function hasStripeSubscription(site) {
+  return (site.renewals || []).some(r => r.subscriptionId);
+}
+
 function shouldShowRenewalForm(site) {
+  if (hasStripeSubscription(site)) return false;
   if (!site.lastRenewalAt) return true;
   if (!site.expirationDate) return true;
   const exp = new Date(site.expirationDate);
   const now = new Date();
   const daysUntilExp = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
-  return daysUntilExp <= 90;
+  return daysUntilExp <= 15;
 }
 
 function openRenewal(site) {
@@ -511,13 +516,24 @@ function openRenewal(site) {
     const renewDate = new Date(site.lastRenewalAt);
     const daysAgo = Math.floor((Date.now() - renewDate) / (1000 * 60 * 60 * 24));
     const renewDateStr = renewDate.toLocaleDateString('fr-FR');
-    rightHtml = `
-      <div class="renewal-already-box">
-        <div class="already-icon"><i class="fa-solid fa-circle-check"></i></div>
-        <h3>Domaine déjà renouvelé</h3>
-        <p>Ce domaine a été renouvelé le <strong>${renewDateStr}</strong><br>Il y a <strong>${daysAgo} jour${daysAgo !== 1 ? 's' : ''}</strong>.</p>
-        <p style="margin-top:12px;font-size:0.8rem;">Le formulaire de renouvellement sera réactivé 90 jours avant l'expiration.</p>
-      </div>`;
+    if (hasStripeSubscription(site)) {
+      rightHtml = `
+        <div class="renewal-already-box">
+          <div class="already-icon"><i class="fa-solid fa-circle-check"></i></div>
+          <h3>Renouvellement automatique activé</h3>
+          <p>Ce domaine est en renouvellement automatique via Stripe Billing.</p>
+          <p>Le prélèvement annuel aura lieu <strong>15 jours avant la date d'expiration</strong>.</p>
+          <p style="margin-top:12px;font-size:0.8rem;">Aucune action n'est nécessaire de votre part.</p>
+        </div>`;
+    } else {
+      rightHtml = `
+        <div class="renewal-already-box">
+          <div class="already-icon"><i class="fa-solid fa-circle-check"></i></div>
+          <h3>Domaine déjà renouvelé</h3>
+          <p>Ce domaine a été renouvelé le <strong>${renewDateStr}</strong><br>Il y a <strong>${daysAgo} jour${daysAgo !== 1 ? 's' : ''}</strong>.</p>
+          <p style="margin-top:12px;font-size:0.8rem;">Le formulaire de renouvellement sera réactivé 15 jours avant l'expiration.</p>
+        </div>`;
+    }
   } else {
     rightHtml = `
       <h2><i class="fa-solid fa-rotate"></i> Renouveler ce domaine</h2>
