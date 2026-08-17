@@ -534,9 +534,13 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
       customer: customerId,
       items: [{ price: price.id }],
       payment_behavior: 'default_incomplete',
+      collection_method: 'charge_automatically',
+      payment_settings: { payment_method_types: ['card'] },
       expand: ['latest_invoice.payment_intent'],
       metadata: { siteId, domain, years: String(yearsInt), clientId: clientDocId || '' }
     });
+
+    console.log('[Stripe] Subscription status:', subscription.status, '| latest_invoice:', typeof subscription.latest_invoice);
 
     let latestInvoice = subscription.latest_invoice;
     if (typeof latestInvoice === 'string') {
@@ -544,13 +548,19 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
     } else if (latestInvoice && typeof latestInvoice === 'object' && (typeof latestInvoice.payment_intent !== 'object' || !latestInvoice.payment_intent)) {
       latestInvoice = await stripe.invoices.retrieve(latestInvoice.id, { expand: ['payment_intent'] });
     }
+
+    console.log('[Stripe] Invoice id:', latestInvoice?.id, '| status:', latestInvoice?.status, '| pi:', typeof latestInvoice?.payment_intent);
+
     let paymentIntent = latestInvoice && typeof latestInvoice === 'object' ? latestInvoice.payment_intent : null;
     if (typeof paymentIntent === 'string') {
       paymentIntent = await stripe.paymentIntents.retrieve(paymentIntent);
     }
+
+    console.log('[Stripe] PaymentIntent id:', paymentIntent?.id, '| status:', paymentIntent?.status);
+
     const clientSecret = paymentIntent && typeof paymentIntent === 'object' ? paymentIntent.client_secret : null;
     if (!clientSecret) {
-      console.error('[Stripe] latestInvoice:', latestInvoice);
+      console.error('[Stripe] latestInvoice:', JSON.stringify(latestInvoice, null, 2));
       throw new Error('Unable to retrieve payment intent client secret from subscription');
     }
 
