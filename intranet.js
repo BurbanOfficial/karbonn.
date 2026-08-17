@@ -1102,7 +1102,7 @@ function renderSiteRenewals(site) {
           <td>${escapeHtml(r.clientName || r.clientId || '—')}</td>
           <td>${years}</td>
           <td><strong>${amount}</strong></td>
-          <td><code style="font-size:0.75rem;color:var(--muted);">${escapeHtml(r.paymentIntentId || '—')}</code></td>
+          <td><code style="font-size:0.75rem;color:var(--muted);">${escapeHtml(r.subscriptionId || r.paymentIntentId || '—')}</code></td>
         </tr>`;
       }).join('')}
     </tbody>

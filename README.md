@@ -9,6 +9,8 @@ Backend Node.js/Express servant de proxy sécurisé entre l'intranet Karbonn et 
 | `QONTO_API_TOKEN` | Token API Qonto (depuis Paramètres > Intégrations) |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Contenu JSON du compte de service Firebase (sur une seule ligne) |
 | `ALLOWED_ORIGINS` | Domaines autorisés, séparés par des virgules |
+| `STRIPE_SECRET_KEY` | Clé secrète Stripe (préfixée par `sk_test_` ou `sk_live_`) |
+| `STRIPE_WEBHOOK_SECRET` | Secret du webhook Stripe pour `invoice.payment_succeeded` |
 | `PORT` | Render le définit automatiquement |
 
 ## Déploiement sur Render

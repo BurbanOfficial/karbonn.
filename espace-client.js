@@ -408,22 +408,22 @@ const EXTENSION_PRICES_HT = {
 };
 const DEFAULT_PRICE_HT = 10.00;
 const TVA_RATE = 0.20;
-const STRIPE_RATE = 0.015;
-const STRIPE_FIXED = 0.25;
+const CARD_FEE_RATE = 0.015;
+const BILLING_FEE_RATE = 0.007;
+const FIXED_FEE_EUR = 0.25;
 
-function addStripeFeesToPrice(amountTTC) {
-  return Math.ceil((amountTTC + STRIPE_FIXED) / (1 - STRIPE_RATE));
+function addRenewalProcessingFees(amountTTC) {
+  return Math.ceil((amountTTC + FIXED_FEE_EUR) / (1 - CARD_FEE_RATE - BILLING_FEE_RATE));
 }
 
 function getRenewalPlans(domain) {
   const ext = getDomainExtension(domain).toLowerCase();
   const htPerYear = EXTENSION_PRICES_HT[ext] !== undefined ? EXTENSION_PRICES_HT[ext] : DEFAULT_PRICE_HT;
-  return [1, 2, 5].map(years => {
-    const ttc = Math.round(htPerYear * years * (1 + TVA_RATE) * 100) / 100;
-    const total = addStripeFeesToPrice(ttc);
-    const cents = total * 100;
-    return { years, label: years === 1 ? '1 an' : `${years} ans`, price: total, cents, ttcDomain: ttc };
-  });
+  const years = 1;
+  const ttc = Math.round(htPerYear * years * (1 + TVA_RATE) * 100) / 100;
+  const total = addRenewalProcessingFees(ttc);
+  const cents = total * 100;
+  return [{ years, label: '1 an (renouvellement annuel)', price: total, cents, ttcDomain: ttc }];
 }
 
 function getStripePublicKey() {
@@ -529,7 +529,7 @@ function openRenewal(site) {
             <span class="plan-breakdown">dont ${p.ttcDomain.toFixed(2)} € TTC</span>
           </button>`).join('')}
       </div>
-      <div class="renewal-price-note"><i class="fa-solid fa-circle-info"></i> Prix TTC + frais de traitement Stripe inclus</div>
+      <div class="renewal-price-note"><i class="fa-solid fa-circle-info"></i> Prix TTC + frais Stripe inclus (carte européenne 1,5 % + 0,25 € et facturation récurrente 0,7 %). Abonnement annuel renouvelé automatiquement chaque année pour une année.</div>
       <div id="renewal-stripe-element" class="renewal-stripe-element">
         <div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement du formulaire...</div>
       </div>
@@ -556,7 +556,7 @@ let stripeInstance = null;
 let stripeElements = null;
 let currentPaymentElement = null;
 let currentRenewalYears = 1;
-let currentPaymentIntentId = null;
+let currentSubscriptionId = null;
 
 async function initStripePaymentElement(site) {
   const pubKey = getStripePublicKey();
@@ -600,14 +600,14 @@ async function loadPaymentElement(site, years, cents) {
   if (payBtn) payBtn.disabled = true;
 
   try {
-    const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/create-payment-intent`, {
+    const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/create-renewal-subscription`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ years, amount: cents })
+      body: JSON.stringify({ years })
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
-    currentPaymentIntentId = data.paymentIntentId;
+    currentSubscriptionId = data.subscriptionId;
 
     stripeElements = stripeInstance.elements({ clientSecret: data.clientSecret, appearance: { theme: 'stripe' } });
     currentPaymentElement = stripeElements.create('payment');
@@ -653,7 +653,7 @@ async function submitRenewalPayment(site) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        paymentIntentId: currentPaymentIntentId,
+        subscriptionId: currentSubscriptionId,
         years: currentRenewalYears,
         clientName: currentClient ? (currentClient.name || '') : '',
         clientId: currentClient ? (currentClient.id || '') : ''
@@ -690,7 +690,7 @@ async function submitRenewalPayment(site) {
           <div class="success-icon"><i class="fa-solid fa-circle-check"></i></div>
           <h3>Paiement réussi !</h3>
           <p>Votre domaine <strong>${site.domain}</strong> a été renouvelé pour <strong>${currentRenewalYears} an${currentRenewalYears > 1 ? 's' : ''}</strong>.</p>
-          <p style="margin-top:8px;">Renouvelé le <strong>${renewDateStr}</strong>.</p>
+          <p style="margin-top:8px;">Un abonnement annuel a été créé. Renouvelé le <strong>${renewDateStr}</strong>.</p>
           <p style="margin-top:4px;">Nouvelle date d'expiration : <strong>${newExpDisplay}</strong>.</p>
         </div>`;
     }

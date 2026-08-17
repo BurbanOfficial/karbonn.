@@ -61,6 +61,64 @@ async function sendEmail({ to, subject, text, html }) {
   return result;
 }
 
+// Stripe webhook must use raw body to verify signature
+app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    console.warn('[Stripe webhook] STRIPE_WEBHOOK_SECRET not configured');
+    return res.status(400).send('Webhook secret not configured');
+  }
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('[Stripe webhook] Signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'invoice.payment_succeeded') {
+    const invoice = event.data.object;
+    if (invoice.billing_reason === 'subscription_cycle' && invoice.subscription) {
+      try {
+        const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+        const siteId = subscription.metadata?.siteId;
+        if (!siteId) {
+          console.log('[Stripe webhook] No siteId in subscription metadata');
+        } else {
+          const siteRef = db.collection('sitesWeb').doc(siteId);
+          const siteDoc = await siteRef.get();
+          if (!siteDoc.exists) {
+            console.log('[Stripe webhook] Site not found:', siteId);
+          } else {
+            const siteData = siteDoc.data() || {};
+            const currentExp = siteData.expirationDate ? new Date(siteData.expirationDate) : new Date();
+            const baseDate = currentExp > new Date() ? currentExp : new Date();
+            baseDate.setFullYear(baseDate.getFullYear() + 1);
+            const newExpirationDate = baseDate.toISOString().split('T')[0];
+            const renewal = {
+              subscriptionId: invoice.subscription,
+              amount: invoice.amount_paid,
+              paidAt: new Date().toISOString(),
+              billingReason: 'subscription_cycle'
+            };
+            await siteRef.update({
+              renewals: admin.firestore.FieldValue.arrayUnion(renewal),
+              expirationDate: newExpirationDate,
+              status: 'Actif',
+              lastRenewalAt: admin.firestore.FieldValue.serverTimestamp(),
+              reminderEmailsSent: []
+            });
+            console.log('[Stripe webhook] Extended expiration for site:', siteId, 'to', newExpirationDate);
+          }
+        }
+      } catch (err) {
+        console.error('[Stripe webhook] Error processing renewal:', err);
+      }
+    }
+  }
+
+  res.json({ received: true });
+});
+
 app.use(express.json());
 
 const allowedOriginsCors = cors({
@@ -389,41 +447,108 @@ app.delete('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {
   }
 });
 
-// Stripe renewal: create a PaymentIntent for domain renewal
-const RENEWAL_PRICES = { 1: 1500, 2: 2800, 5: 6000 }; // in euro cents
+// Domain renewal pricing (Stripe Billing)
+const RENEWAL_EXTENSION_PRICES_HT = { '.com': 13.49, '.fr': 7.79 };
+const RENEWAL_DEFAULT_PRICE_HT = 10.00;
+const RENEWAL_TVA_RATE = 0.20;
+const RENEWAL_CARD_FEE_RATE = 0.015;
+const RENEWAL_BILLING_FEE_RATE = 0.007;
+const RENEWAL_FIXED_FEE_EUR = 0.25;
 
-app.post('/api/public/sites/:siteId/create-payment-intent', async (req, res) => {
-  console.log('[Stripe] create-payment-intent for site:', req.params.siteId);
+function getDomainExtensionForRenewal(domain) {
+  if (!domain) return '';
+  const parts = String(domain).split('.');
+  return parts.length < 2 ? '' : ('.' + parts[parts.length - 1]).toLowerCase();
+}
+
+function addRenewalProcessingFees(amountTTC) {
+  return Math.ceil((amountTTC + RENEWAL_FIXED_FEE_EUR) / (1 - RENEWAL_CARD_FEE_RATE - RENEWAL_BILLING_FEE_RATE));
+}
+
+function computeRenewalPriceCents(domain) {
+  const ext = getDomainExtensionForRenewal(domain);
+  const htPerYear = RENEWAL_EXTENSION_PRICES_HT[ext] !== undefined ? RENEWAL_EXTENSION_PRICES_HT[ext] : RENEWAL_DEFAULT_PRICE_HT;
+  const ttc = Math.round(htPerYear * (1 + RENEWAL_TVA_RATE) * 100) / 100;
+  const total = addRenewalProcessingFees(ttc);
+  return Math.round(total * 100);
+}
+
+// Stripe renewal: create a Billing subscription for domain renewal
+app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, res) => {
+  console.log('[Stripe] create-renewal-subscription for site:', req.params.siteId);
   if (!process.env.STRIPE_SECRET_KEY) {
     return res.status(500).json({ error: 'Stripe not configured' });
   }
   try {
     const { siteId } = req.params;
-    const { years, amount: requestedAmount } = req.body || {};
-    const yearsInt = parseInt(years, 10);
-    if (![1, 2, 5].includes(yearsInt)) {
-      return res.status(400).json({ error: 'Invalid duration. Choose 1, 2 or 5 years.' });
-    }
+    const { clientId, clientName } = req.body || {};
+    const yearsInt = 1; // annual subscription only
+
     const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
     if (!siteDoc.exists) return res.status(404).json({ error: 'Site not found' });
+    const siteData = siteDoc.data() || {};
+    const domain = siteData.domain || '';
 
-    const amount = (requestedAmount && Number.isInteger(requestedAmount) && requestedAmount >= 100)
-      ? requestedAmount
-      : RENEWAL_PRICES[yearsInt];
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount,
-      currency: 'eur',
-      metadata: { siteId, years: String(yearsInt) },
-      payment_method_options: {
-        card: {
-          request_three_d_secure: 'any'
+    const amountCents = computeRenewalPriceCents(domain);
+
+    // Resolve or create a Stripe Customer from the linked client
+    const clientDocId = clientId || siteData.clientId || null;
+    let customerId = null;
+    if (clientDocId) {
+      const clientDoc = await db.collection('clients').doc(clientDocId).get();
+      if (clientDoc.exists) {
+        const cData = clientDoc.data() || {};
+        if (cData.stripeCustomerId) {
+          customerId = cData.stripeCustomerId;
+        } else if (cData.email) {
+          const customer = await stripe.customers.create({
+            email: cData.email,
+            name: clientName || cData.fullName || cData.name || undefined
+          });
+          customerId = customer.id;
+          await db.collection('clients').doc(clientDocId).update({ stripeCustomerId: customerId });
         }
       }
+    }
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        name: clientName || domain || 'Client Karbonn',
+        metadata: { siteId, domain, clientId: clientDocId || '' }
+      });
+      customerId = customer.id;
+    }
+
+    const product = await stripe.products.create({
+      name: `Renouvellement ${domain || siteId}`,
+      metadata: { siteId, domain }
     });
-    console.log('[Stripe] PaymentIntent created:', paymentIntent.id, '| amount:', amount);
-    res.json({ clientSecret: paymentIntent.client_secret, amount, paymentIntentId: paymentIntent.id });
+    const price = await stripe.prices.create({
+      unit_amount: amountCents,
+      currency: 'eur',
+      recurring: { interval: 'year' },
+      product: product.id,
+      metadata: { siteId, domain }
+    });
+
+    const subscription = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: price.id }],
+      payment_behavior: 'default_incomplete',
+      expand: ['latest_invoice.payment_intent'],
+      metadata: { siteId, domain, years: String(yearsInt), clientId: clientDocId || '' }
+    });
+
+    const latestInvoice = subscription.latest_invoice;
+    const paymentIntent = latestInvoice && typeof latestInvoice === 'object' ? latestInvoice.payment_intent : null;
+    const clientSecret = paymentIntent && typeof paymentIntent === 'object' ? paymentIntent.client_secret : null;
+    if (!clientSecret) {
+      throw new Error('Unable to retrieve payment intent client secret from subscription');
+    }
+
+    console.log('[Stripe] Subscription created:', subscription.id, '| amount:', amountCents);
+    res.json({ clientSecret, subscriptionId: subscription.id, amount: amountCents, price: amountCents / 100 });
   } catch (err) {
-    console.error('[Stripe] Error creating payment intent:', err);
+    console.error('[Stripe] Error creating renewal subscription:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -436,21 +561,21 @@ app.post('/api/public/sites/:siteId/confirm-renewal', async (req, res) => {
   }
   try {
     const { siteId } = req.params;
-    const { paymentIntentId, years, clientName, clientId } = req.body || {};
-    if (!paymentIntentId || !years || !clientId) {
+    const { subscriptionId, years, clientName, clientId } = req.body || {};
+    if (!subscriptionId || !years || !clientId) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-    if (paymentIntent.status !== 'succeeded') {
-      return res.status(402).json({ error: 'Payment not completed', status: paymentIntent.status });
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    if (subscription.status !== 'active') {
+      return res.status(402).json({ error: 'Subscription not active', status: subscription.status });
     }
 
     const yearsInt = parseInt(years, 10);
-    const amount = paymentIntent.amount;
+    const amount = subscription.items?.data?.[0]?.price?.unit_amount || 0;
     const paidAt = new Date().toISOString();
     const renewal = {
-      paymentIntentId,
+      subscriptionId,
       years: yearsInt,
       amount,
       clientName: clientName || '',
