@@ -31,7 +31,9 @@ function escapeHtml(str) {
 
 function getEffectiveSiteStatus(site) {
   if (!site) return 'En attente';
-  if (site.status === 'Actif' && site.expirationDate) {
+  const status = site.status || 'En attente';
+  if (status === 'Suspendu' || status === 'En maintenance') return status;
+  if (site.expirationDate) {
     const exp = new Date(site.expirationDate);
     const now = new Date();
     now.setHours(0,0,0,0);
@@ -39,8 +41,9 @@ function getEffectiveSiteStatus(site) {
     if (exp < now) return 'Expiré';
     const daysUntil = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
     if (daysUntil <= 30) return 'Bientôt expiré';
+    return 'Actif';
   }
-  return site.status || 'En attente';
+  return status;
 }
 
 function getDomainExtension(domain) {
@@ -432,7 +435,22 @@ function getStripePublicKey() {
 }
 
 function hasStripeSubscription(site) {
+  if (site.stripeSubscriptionStatus === 'active') return true;
+  if (site.stripeSubscriptionStatus) return false;
+  // Legacy fallback for sites without stored status
   return (site.renewals || []).some(r => r.subscriptionId);
+}
+
+async function refreshStripeSubscriptionStatus(site) {
+  if (!site || !site.id) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/stripe-subscription-status`);
+    if (!res.ok) return;
+    const data = await res.json();
+    site.stripeSubscriptionStatus = data.status || null;
+  } catch (err) {
+    console.warn('[Client] Failed to refresh subscription status:', err);
+  }
 }
 
 function shouldShowRenewalForm(site) {
@@ -445,7 +463,9 @@ function shouldShowRenewalForm(site) {
   return daysUntilExp <= 15;
 }
 
-function openRenewal(site) {
+async function openRenewal(site) {
+  await refreshStripeSubscriptionStatus(site);
+
   const domain = site.domain || '—';
   const status = getEffectiveSiteStatus(site);
   const statusClass = getSiteStatusClass(status);
@@ -523,7 +543,7 @@ function openRenewal(site) {
           <h3>Renouvellement automatique activé</h3>
           <p>Ce domaine est en renouvellement automatique via Stripe Billing.</p>
           <p>Le prélèvement annuel aura lieu <strong>15 jours avant la date d'expiration</strong>.</p>
-          <p style="margin-top:12px;font-size:0.8rem;">Aucune action n'est nécessaire de votre part.</p>
+          <p style="margin-top:12px;font-size:0.8rem;">Aucune action n'est nécessaire de votre part. Pour modifier vos coordonnées bancaires, contactez <a href="mailto:hello@karbonn.fr">hello@karbonn.fr</a> ou appelez au <a href="tel:+33776691606">+33 7 76 69 16 06</a>.</p>
         </div>`;
     } else {
       rightHtml = `

@@ -42,12 +42,14 @@ Pour la production, ajoutez dans votre HTML avant le script :
 | PUT | `/api/clients/:id` | Met à jour un client (Qonto + Firestore) |
 | DELETE | `/api/clients/:id` | Supprime un client (Qonto + Firestore) |
 | POST | `/api/admin/sync-renewal-prices` | Force la mise à jour des prix des abonnements Stripe Billing actifs (manager) |
+| GET | `/api/public/sites/:siteId/stripe-subscription-status` | Retourne le statut Stripe Billing actuel d’un site |
 
 ## Webhooks Stripe
 
 Le endpoint `/stripe/webhook` écoute :
 - `invoice.payment_succeeded` : prolonge la date d’expiration du domaine après un renouvellement automatique.
 - `invoice.upcoming` : met à jour le prix de l’abonnement sur la prochaine facture si les tarifs ont changé.
+- `customer.subscription.updated` / `customer.subscription.deleted` : synchronise le statut de l’abonnement dans Firestore.
 
 ## Sécurité
 

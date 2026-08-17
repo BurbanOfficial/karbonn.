@@ -77,7 +77,7 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
 
   if (event.type === 'invoice.payment_succeeded') {
     const invoice = event.data.object;
-    if (invoice.billing_reason === 'subscription_cycle' && invoice.subscription) {
+    if (invoice.subscription) {
       try {
         const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
         const siteId = subscription.metadata?.siteId;
@@ -94,20 +94,29 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
             const baseDate = currentExp > new Date() ? currentExp : new Date();
             baseDate.setFullYear(baseDate.getFullYear() + 1);
             const newExpirationDate = baseDate.toISOString().split('T')[0];
-            const renewal = {
-              subscriptionId: invoice.subscription,
-              amount: invoice.amount_paid,
-              paidAt: new Date().toISOString(),
-              billingReason: 'subscription_cycle'
-            };
-            await siteRef.update({
-              renewals: admin.firestore.FieldValue.arrayUnion(renewal),
-              expirationDate: newExpirationDate,
-              status: 'Actif',
-              lastRenewalAt: admin.firestore.FieldValue.serverTimestamp(),
-              reminderEmailsSent: []
-            });
-            console.log('[Stripe webhook] Extended expiration for site:', siteId, 'to', newExpirationDate);
+            if (invoice.billing_reason === 'subscription_cycle') {
+              const renewal = {
+                subscriptionId: invoice.subscription,
+                amount: invoice.amount_paid,
+                paidAt: new Date().toISOString(),
+                billingReason: 'subscription_cycle'
+              };
+              await siteRef.update({
+                renewals: admin.firestore.FieldValue.arrayUnion(renewal),
+                expirationDate: newExpirationDate,
+                status: 'Actif',
+                stripeSubscriptionStatus: 'active',
+                lastRenewalAt: admin.firestore.FieldValue.serverTimestamp(),
+                reminderEmailsSent: []
+              });
+              console.log('[Stripe webhook] Extended expiration for site:', siteId, 'to', newExpirationDate);
+            } else if (invoice.billing_reason === 'subscription_create') {
+              await siteRef.update({
+                status: 'Actif',
+                stripeSubscriptionStatus: 'active',
+                reminderEmailsSent: []
+              });
+            }
           }
         }
       } catch (err) {
@@ -146,6 +155,39 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
         }
       } catch (err) {
         console.error('[Stripe webhook] Error updating upcoming invoice price:', err);
+      }
+    }
+  }
+
+  if (event.type === 'customer.subscription.updated') {
+    const subscription = event.data.object;
+    const siteId = subscription.metadata?.siteId;
+    if (siteId) {
+      try {
+        const status = subscription.status;
+        const siteRef = db.collection('sitesWeb').doc(siteId);
+        if (['canceled', 'unpaid', 'incomplete_expired', 'paused'].includes(status)) {
+          await siteRef.update({ stripeSubscriptionStatus: status });
+          console.log('[Stripe webhook] Subscription status updated for site:', siteId, 'to', status);
+        } else if (status === 'active') {
+          await siteRef.update({ stripeSubscriptionStatus: 'active', status: 'Actif' });
+          console.log('[Stripe webhook] Subscription reactivated for site:', siteId);
+        }
+      } catch (err) {
+        console.error('[Stripe webhook] Error updating subscription status:', err);
+      }
+    }
+  }
+
+  if (event.type === 'customer.subscription.deleted') {
+    const subscription = event.data.object;
+    const siteId = subscription.metadata?.siteId;
+    if (siteId) {
+      try {
+        await db.collection('sitesWeb').doc(siteId).update({ stripeSubscriptionStatus: 'canceled' });
+        console.log('[Stripe webhook] Subscription marked canceled for site:', siteId);
+      } catch (err) {
+        console.error('[Stripe webhook] Error marking subscription canceled:', err);
       }
     }
   }
@@ -251,6 +293,7 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
         createdAt: data.createdAt,
         renewals: data.renewals || [],
         lastRenewalAt: data.lastRenewalAt ? (data.lastRenewalAt.toDate ? data.lastRenewalAt.toDate().toISOString() : data.lastRenewalAt) : null,
+        stripeSubscriptionStatus: data.stripeSubscriptionStatus || null,
         history
       });
     }
@@ -659,12 +702,43 @@ app.post('/api/public/sites/:siteId/confirm-renewal', async (req, res) => {
       lastRenewalAt: admin.firestore.FieldValue.serverTimestamp(),
       expirationDate: newExpirationDate,
       status: 'Actif',
+      stripeSubscriptionStatus: 'active',
       reminderEmailsSent: []
     });
     console.log('[Stripe] Renewal recorded for site:', siteId, '| new expiration:', newExpirationDate);
     res.json({ success: true, renewal: { ...renewal, newExpirationDate } });
   } catch (err) {
     console.error('[Stripe] Error confirming renewal:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public endpoint: fetch current Stripe subscription status for a site
+app.get('/api/public/sites/:siteId/stripe-subscription-status', async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(500).json({ error: 'Stripe not configured' });
+  }
+  try {
+    const { siteId } = req.params;
+    const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+    if (!siteDoc.exists) return res.status(404).json({ error: 'Site not found' });
+    const siteData = siteDoc.data() || {};
+
+    const renewals = siteData.renewals || [];
+    const latestRenewal = renewals.slice().sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt))[0];
+    const subscriptionId = latestRenewal?.subscriptionId;
+
+    if (!subscriptionId) {
+      return res.json({ active: false, status: null });
+    }
+
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const status = subscription.status;
+    const active = status === 'active';
+    await siteDoc.ref.update({ stripeSubscriptionStatus: status });
+    res.json({ active, status });
+  } catch (err) {
+    console.error('[Stripe] Error fetching subscription status:', err);
     res.status(500).json({ error: err.message });
   }
 });
