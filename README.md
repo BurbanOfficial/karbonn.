@@ -10,7 +10,7 @@ Backend Node.js/Express servant de proxy sécurisé entre l'intranet Karbonn et 
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Contenu JSON du compte de service Firebase (sur une seule ligne) |
 | `ALLOWED_ORIGINS` | Domaines autorisés, séparés par des virgules |
 | `STRIPE_SECRET_KEY` | Clé secrète Stripe (préfixée par `sk_test_` ou `sk_live_`) |
-| `STRIPE_WEBHOOK_SECRET` | Secret du webhook Stripe pour `invoice.payment_succeeded` |
+| `STRIPE_WEBHOOK_SECRET` | Secret du webhook Stripe pour `invoice.payment_succeeded` et `invoice.upcoming` |
 | `PORT` | Render le définit automatiquement |
 
 ## Déploiement sur Render
@@ -41,6 +41,13 @@ Pour la production, ajoutez dans votre HTML avant le script :
 | GET | `/api/clients/:id` | Récupère un client |
 | PUT | `/api/clients/:id` | Met à jour un client (Qonto + Firestore) |
 | DELETE | `/api/clients/:id` | Supprime un client (Qonto + Firestore) |
+| POST | `/api/admin/sync-renewal-prices` | Force la mise à jour des prix des abonnements Stripe Billing actifs (manager) |
+
+## Webhooks Stripe
+
+Le endpoint `/stripe/webhook` écoute :
+- `invoice.payment_succeeded` : prolonge la date d’expiration du domaine après un renouvellement automatique.
+- `invoice.upcoming` : met à jour le prix de l’abonnement sur la prochaine facture si les tarifs ont changé.
 
 ## Sécurité
 

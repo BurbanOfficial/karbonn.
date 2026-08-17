@@ -116,6 +116,40 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
     }
   }
 
+  if (event.type === 'invoice.upcoming') {
+    const invoicePreview = event.data.object;
+    const subId = invoicePreview.subscription;
+    if (subId) {
+      try {
+        const subscription = await stripe.subscriptions.retrieve(subId);
+        const domain = subscription.metadata?.domain;
+        const siteId = subscription.metadata?.siteId;
+        if (!domain || !siteId) {
+          console.log('[Stripe webhook] No domain/siteId in subscription metadata for upcoming invoice');
+        } else {
+          const currentItem = subscription.items?.data?.[0];
+          if (currentItem) {
+            const currentAmount = currentItem.price?.unit_amount;
+            const newAmount = computeRenewalPriceCents(domain);
+            if (currentAmount !== newAmount) {
+              const newPrice = await createCurrentRenewalPrice(domain, siteId);
+              await stripe.subscriptions.update(subId, {
+                items: [{ id: currentItem.id, price: newPrice.id }],
+                proration_behavior: 'none',
+                metadata: subscription.metadata
+              });
+              console.log('[Stripe webhook] Updated subscription price for', domain, 'from', currentAmount, 'to', newAmount);
+            } else {
+              console.log('[Stripe webhook] Subscription price already up to date for', domain);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Stripe webhook] Error updating upcoming invoice price:', err);
+      }
+    }
+  }
+
   res.json({ received: true });
 });
 
@@ -473,6 +507,22 @@ function computeRenewalPriceCents(domain) {
   return Math.round(total * 100);
 }
 
+async function createCurrentRenewalPrice(domain, siteId) {
+  const amountCents = computeRenewalPriceCents(domain);
+  const product = await stripe.products.create({
+    name: `Renouvellement ${domain || siteId}`,
+    metadata: { siteId, domain }
+  });
+  const price = await stripe.prices.create({
+    unit_amount: amountCents,
+    currency: 'eur',
+    recurring: { interval: 'year' },
+    product: product.id,
+    metadata: { siteId, domain }
+  });
+  return price;
+}
+
 // Stripe renewal: create a Billing subscription for domain renewal
 app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, res) => {
   console.log('[Stripe] create-renewal-subscription for site:', req.params.siteId);
@@ -518,17 +568,7 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
       customerId = customer.id;
     }
 
-    const product = await stripe.products.create({
-      name: `Renouvellement ${domain || siteId}`,
-      metadata: { siteId, domain }
-    });
-    const price = await stripe.prices.create({
-      unit_amount: amountCents,
-      currency: 'eur',
-      recurring: { interval: 'year' },
-      product: product.id,
-      metadata: { siteId, domain }
-    });
+    const price = await createCurrentRenewalPrice(domain, siteId);
 
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
@@ -907,6 +947,42 @@ app.delete('/api/users/:uid', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[AUTH] Error deleting user:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin endpoint: force-update all active renewal subscription prices to current rates
+app.post('/api/admin/sync-renewal-prices', async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(500).json({ error: 'Stripe not configured' });
+  }
+  try {
+    const subscriptions = await stripe.subscriptions.list({ status: 'active', limit: 100 });
+    let checked = 0;
+    let updated = 0;
+    for (const sub of subscriptions.data) {
+      const domain = sub.metadata?.domain;
+      const siteId = sub.metadata?.siteId;
+      if (!domain || !siteId) continue;
+      checked++;
+      const currentItem = sub.items?.data?.[0];
+      if (!currentItem) continue;
+      const currentAmount = currentItem.price?.unit_amount;
+      const newAmount = computeRenewalPriceCents(domain);
+      if (currentAmount !== newAmount) {
+        const newPrice = await createCurrentRenewalPrice(domain, siteId);
+        await stripe.subscriptions.update(sub.id, {
+          items: [{ id: currentItem.id, price: newPrice.id }],
+          proration_behavior: 'none',
+          metadata: sub.metadata
+        });
+        updated++;
+      }
+    }
+    console.log('[Stripe admin] Synced renewal prices:', { checked, updated });
+    res.json({ success: true, checked, updated });
+  } catch (err) {
+    console.error('[Stripe admin] Error syncing renewal prices:', err);
     res.status(500).json({ error: err.message });
   }
 });
