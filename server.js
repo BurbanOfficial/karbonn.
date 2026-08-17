@@ -136,21 +136,47 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
         if (!domain || !siteId) {
           console.log('[Stripe webhook] No domain/siteId in subscription metadata for upcoming invoice');
         } else {
-          const currentItem = subscription.items?.data?.[0];
-          if (currentItem) {
-            const currentAmount = currentItem.price?.unit_amount;
-            const newAmount = computeRenewalPriceCents(domain);
-            if (currentAmount !== newAmount) {
-              const newPrice = await createCurrentRenewalPrice(domain, siteId);
-              await stripe.subscriptions.update(subId, {
-                items: [{ id: currentItem.id, price: newPrice.id }],
-                proration_behavior: 'none',
-                metadata: subscription.metadata
-              });
-              console.log('[Stripe webhook] Updated subscription price for', domain, 'from', currentAmount, 'to', newAmount);
-            } else {
-              console.log('[Stripe webhook] Subscription price already up to date for', domain);
+          const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+          const siteData = siteDoc.exists ? siteDoc.data() : {};
+          const abonnementsSnap = await db.collection('abonnements').get();
+          const abonnementsMap = {};
+          abonnementsSnap.forEach(d => { abonnementsMap[d.id] = d.data(); });
+
+          const expectedDomainCents = computeRenewalPriceCents(domain);
+          const expectedMonthlyCents = getSiteMonthlySubscriptionCents(siteData, abonnementsMap);
+
+          const itemsToUpdate = [];
+          for (const item of subscription.items?.data || []) {
+            const interval = item.price?.recurring?.interval;
+            if (interval === 'year') {
+              if (item.price?.unit_amount !== expectedDomainCents) {
+                const newPrice = await createCurrentRenewalPrice(domain, siteId);
+                itemsToUpdate.push({ id: item.id, price: newPrice.id });
+                console.log('[Stripe webhook] Updating domain price for', domain, 'from', item.price.unit_amount, 'to', expectedDomainCents);
+              }
+            } else if (interval === 'month') {
+              if (expectedMonthlyCents === 0) {
+                // Monthly subscription removed; do not change here, handle via dashboard/admin
+                console.log('[Stripe webhook] Monthly subscription removed for', domain, '- item left unchanged');
+              } else if (item.price?.unit_amount !== expectedMonthlyCents) {
+                const monthlyName = siteData.abonnementId === '__custom'
+                  ? 'Abonnement mensuel'
+                  : (abonnementsMap[siteData.abonnementId]?.name || 'Abonnement mensuel');
+                const newPrice = await createMonthlySubscriptionPrice(domain, siteId, expectedMonthlyCents, monthlyName);
+                itemsToUpdate.push({ id: item.id, price: newPrice.id });
+                console.log('[Stripe webhook] Updating monthly price for', domain, 'from', item.price.unit_amount, 'to', expectedMonthlyCents);
+              }
             }
+          }
+
+          if (itemsToUpdate.length > 0) {
+            await stripe.subscriptions.update(subId, {
+              items: itemsToUpdate,
+              proration_behavior: 'none',
+              metadata: subscription.metadata
+            });
+          } else {
+            console.log('[Stripe webhook] Subscription prices already up to date for', domain);
           }
         }
       } catch (err) {
@@ -264,6 +290,9 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
 
     const clientDoc = clientSnap.docs[0];
     const sitesSnap = await db.collection('sitesWeb').where('clientId', '==', clientDoc.id).get();
+    const abonnementsSnap = await db.collection('abonnements').get();
+    const abonnementsMap = {};
+    abonnementsSnap.forEach(d => { abonnementsMap[d.id] = d.data(); });
     const sites = [];
     for (const doc of sitesSnap.docs) {
       const data = doc.data();
@@ -294,6 +323,9 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
         renewals: data.renewals || [],
         lastRenewalAt: data.lastRenewalAt ? (data.lastRenewalAt.toDate ? data.lastRenewalAt.toDate().toISOString() : data.lastRenewalAt) : null,
         stripeSubscriptionStatus: data.stripeSubscriptionStatus || null,
+        abonnementId: data.abonnementId || null,
+        abonnementCustomPrice: data.abonnementCustomPrice || null,
+        monthlySubscriptionPrice: getSiteMonthlySubscriptionCents(data, abonnementsMap) / 100 || null,
         history
       });
     }
@@ -566,6 +598,33 @@ async function createCurrentRenewalPrice(domain, siteId) {
   return price;
 }
 
+async function createMonthlySubscriptionPrice(domain, siteId, amountCents, name) {
+  const product = await stripe.products.create({
+    name: name ? `Abonnement mensuel ${name} — ${domain || siteId}` : `Abonnement mensuel — ${domain || siteId}`,
+    metadata: { siteId, domain, type: 'monthly' }
+  });
+  const price = await stripe.prices.create({
+    unit_amount: amountCents,
+    currency: 'eur',
+    recurring: { interval: 'month' },
+    product: product.id,
+    metadata: { siteId, domain, type: 'monthly' }
+  });
+  return price;
+}
+
+function getSiteMonthlySubscriptionCents(siteData, abonnementsMap = {}) {
+  if (siteData.abonnementId === '__custom') {
+    const price = parseFloat(siteData.abonnementCustomPrice);
+    return !isNaN(price) && price > 0 ? Math.round(price * 100) : 0;
+  }
+  if (siteData.abonnementId && abonnementsMap[siteData.abonnementId]) {
+    const price = parseFloat(abonnementsMap[siteData.abonnementId].price);
+    return !isNaN(price) && price > 0 ? Math.round(price * 100) : 0;
+  }
+  return 0;
+}
+
 // Stripe renewal: create a Billing subscription for domain renewal
 app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, res) => {
   console.log('[Stripe] create-renewal-subscription for site:', req.params.siteId);
@@ -583,6 +642,19 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
     const domain = siteData.domain || '';
 
     const amountCents = computeRenewalPriceCents(domain);
+
+    // Build subscription items: domain renewal + optional monthly service subscription
+    const abonnementsSnap = await db.collection('abonnements').get();
+    const abonnementsMap = {};
+    abonnementsSnap.forEach(d => { abonnementsMap[d.id] = d.data(); });
+
+    let monthlyName = 'Abonnement mensuel';
+    if (siteData.abonnementId && siteData.abonnementId !== '__custom') {
+      if (abonnementsMap[siteData.abonnementId]) {
+        monthlyName = abonnementsMap[siteData.abonnementId].name || monthlyName;
+      }
+    }
+    const abonnementCents = getSiteMonthlySubscriptionCents(siteData, abonnementsMap);
 
     // Resolve or create a Stripe Customer from the linked client
     const clientDocId = clientId || siteData.clientId || null;
@@ -611,11 +683,18 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
       customerId = customer.id;
     }
 
-    const price = await createCurrentRenewalPrice(domain, siteId);
+    const domainPrice = await createCurrentRenewalPrice(domain, siteId);
+    const items = [{ price: domainPrice.id }];
+    if (abonnementCents > 0) {
+      const monthlyPrice = await createMonthlySubscriptionPrice(domain, siteId, abonnementCents, monthlyName);
+      items.push({ price: monthlyPrice.id });
+    }
+    const totalCents = amountCents + abonnementCents;
 
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
-      items: [{ price: price.id }],
+      items,
+      billing_mode: { type: 'flexible' },
       payment_behavior: 'default_incomplete',
       collection_method: 'charge_automatically',
       payment_settings: { payment_method_types: ['card'] },
@@ -651,8 +730,15 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
       throw new Error('Unable to retrieve payment client secret from subscription invoice');
     }
 
-    console.log('[Stripe] Subscription created:', subscription.id, '| amount:', amountCents);
-    res.json({ clientSecret, subscriptionId: subscription.id, amount: amountCents, price: amountCents / 100 });
+    console.log('[Stripe] Subscription created:', subscription.id, '| domainAmount:', amountCents, '| monthlyAmount:', abonnementCents, '| total:', totalCents);
+    res.json({
+      clientSecret,
+      subscriptionId: subscription.id,
+      amount: totalCents,
+      domainAmount: amountCents,
+      monthlyAmount: abonnementCents,
+      price: totalCents / 100
+    });
   } catch (err) {
     console.error('[Stripe] Error creating renewal subscription:', err);
     res.status(500).json({ error: err.message });
@@ -1032,6 +1118,9 @@ app.post('/api/admin/sync-renewal-prices', async (req, res) => {
   }
   try {
     const subscriptions = await stripe.subscriptions.list({ status: 'active', limit: 100 });
+    const abonnementsSnap = await db.collection('abonnements').get();
+    const abonnementsMap = {};
+    abonnementsSnap.forEach(d => { abonnementsMap[d.id] = d.data(); });
     let checked = 0;
     let updated = 0;
     for (const sub of subscriptions.data) {
@@ -1039,14 +1128,33 @@ app.post('/api/admin/sync-renewal-prices', async (req, res) => {
       const siteId = sub.metadata?.siteId;
       if (!domain || !siteId) continue;
       checked++;
-      const currentItem = sub.items?.data?.[0];
-      if (!currentItem) continue;
-      const currentAmount = currentItem.price?.unit_amount;
-      const newAmount = computeRenewalPriceCents(domain);
-      if (currentAmount !== newAmount) {
-        const newPrice = await createCurrentRenewalPrice(domain, siteId);
+      const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+      const siteData = siteDoc.exists ? siteDoc.data() : {};
+      const expectedDomainCents = computeRenewalPriceCents(domain);
+      const expectedMonthlyCents = getSiteMonthlySubscriptionCents(siteData, abonnementsMap);
+
+      const itemsToUpdate = [];
+      for (const item of sub.items?.data || []) {
+        const interval = item.price?.recurring?.interval;
+        if (interval === 'year') {
+          if (item.price?.unit_amount !== expectedDomainCents) {
+            const newPrice = await createCurrentRenewalPrice(domain, siteId);
+            itemsToUpdate.push({ id: item.id, price: newPrice.id });
+          }
+        } else if (interval === 'month' && expectedMonthlyCents > 0) {
+          if (item.price?.unit_amount !== expectedMonthlyCents) {
+            const monthlyName = siteData.abonnementId === '__custom'
+              ? 'Abonnement mensuel'
+              : (abonnementsMap[siteData.abonnementId]?.name || 'Abonnement mensuel');
+            const newPrice = await createMonthlySubscriptionPrice(domain, siteId, expectedMonthlyCents, monthlyName);
+            itemsToUpdate.push({ id: item.id, price: newPrice.id });
+          }
+        }
+      }
+
+      if (itemsToUpdate.length > 0) {
         await stripe.subscriptions.update(sub.id, {
-          items: [{ id: currentItem.id, price: newPrice.id }],
+          items: itemsToUpdate,
           proration_behavior: 'none',
           metadata: sub.metadata
         });

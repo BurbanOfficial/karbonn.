@@ -471,6 +471,8 @@ async function openRenewal(site) {
   const statusClass = getSiteStatusClass(status);
   const expiration = site.expirationDate ? new Date(site.expirationDate).toLocaleDateString('fr-FR') : '—';
   const extension = getDomainExtension(domain);
+  const monthlySubscriptionPrice = site.monthlySubscriptionPrice || 0;
+  const monthlyLabel = monthlySubscriptionPrice > 0 ? `${monthlySubscriptionPrice.toFixed(2)} € / mois` : 'Aucun';
 
   renewalTitle.textContent = 'Renouveler ' + domain;
 
@@ -490,6 +492,10 @@ async function openRenewal(site) {
       <div class="renewal-info-item">
         <div class="label">EXTENSION</div>
         <div class="value">${extension}</div>
+      </div>
+      <div class="renewal-info-item">
+        <div class="label">ABONNEMENT MENSUEL</div>
+        <div class="value">${monthlyLabel}</div>
       </div>
     </div>
     <div class="renewal-warning">
@@ -565,12 +571,12 @@ async function openRenewal(site) {
             <span class="plan-breakdown">dont ${p.ttcDomain.toFixed(2)} € TTC</span>
           </button>`).join('')}
       </div>
-      <div class="renewal-price-note"><i class="fa-solid fa-circle-info"></i> Prix TTC + frais Stripe inclus (carte européenne 1,5 % + 0,25 € et facturation récurrente 0,7 %). Abonnement annuel renouvelé automatiquement chaque année pour une année.</div>
+      <div class="renewal-price-note"><i class="fa-solid fa-circle-info"></i> Prix TTC + frais Stripe inclus. Abonnement annuel renouvelé automatiquement chaque année pour une année.</div>
       <div id="renewal-stripe-element" class="renewal-stripe-element">
         <div class="renewal-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement du formulaire...</div>
       </div>
       <button id="renewal-pay-btn" class="renewal-pay-btn" disabled>
-        <i class="fa-solid fa-lock"></i> Payer ${firstPlan.price.toFixed(2)} €
+        <i class="fa-solid fa-lock"></i> Payer ${(firstPlan.price + monthlySubscriptionPrice).toFixed(2)} €
       </button>
       <div id="renewal-pay-error" class="renewal-pay-error"></div>`;
   }
