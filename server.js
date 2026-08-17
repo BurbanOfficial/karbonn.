@@ -538,14 +538,23 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
       metadata: { siteId, domain, years: String(yearsInt), clientId: clientDocId || '' }
     });
 
-    const latestInvoice = subscription.latest_invoice;
-    const paymentIntent = latestInvoice && typeof latestInvoice === 'object' ? latestInvoice.payment_intent : null;
+    let latestInvoice = subscription.latest_invoice;
+    if (typeof latestInvoice === 'string') {
+      latestInvoice = await stripe.invoices.retrieve(latestInvoice, { expand: ['payment_intent'] });
+    } else if (latestInvoice && typeof latestInvoice === 'object' && (typeof latestInvoice.payment_intent !== 'object' || !latestInvoice.payment_intent)) {
+      latestInvoice = await stripe.invoices.retrieve(latestInvoice.id, { expand: ['payment_intent'] });
+    }
+    let paymentIntent = latestInvoice && typeof latestInvoice === 'object' ? latestInvoice.payment_intent : null;
+    if (typeof paymentIntent === 'string') {
+      paymentIntent = await stripe.paymentIntents.retrieve(paymentIntent);
+    }
     const clientSecret = paymentIntent && typeof paymentIntent === 'object' ? paymentIntent.client_secret : null;
     if (!clientSecret) {
+      console.error('[Stripe] latestInvoice:', latestInvoice);
       throw new Error('Unable to retrieve payment intent client secret from subscription');
     }
 
-    console.log('[Stripe] Subscription created:', subscription.id, '| amount:', amountCents);
+    console.log('[Stripe] Subscription created:', subscription.id, '| amount:', amountCents, '| paymentIntent:', paymentIntent.id);
     res.json({ clientSecret, subscriptionId: subscription.id, amount: amountCents, price: amountCents / 100 });
   } catch (err) {
     console.error('[Stripe] Error creating renewal subscription:', err);
