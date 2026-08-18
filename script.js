@@ -1089,11 +1089,17 @@ document.addEventListener('DOMContentLoaded', function () {
         <p><strong>À la commande</strong> : 30 % du montant total. Cette somme correspond à l’acompte de démarrage. Elle permet notamment la réservation du temps de production, le lancement du projet, la préparation technique.</p>
         <p><strong>À la livraison</strong> : 70 % du montant total. Le solde est dû après réalisation de la prestation conformément au devis.</p>
         <h3>7. Paiement des abonnements</h3>
-        <p>Certains services peuvent faire l’objet d’un abonnement récurrent, notamment :</p>
-        <h4>Abonnement Hébergement & Maintenance</h4>
-        <p><strong>Tarif :</strong> 19,99 € / mois<br><strong>Comprenant :</strong> hébergement, certificat SSL, sauvegardes, maintenance corrective, support client.</p>
-        <p><strong>Durée</strong> : l’abonnement est conclu pour une durée initiale minimale de trois (3) mois. À l’issue de cette période, il est renouvelé automatiquement par périodes successives d’un mois.</p>
-        <p><strong>Résiliation</strong> : le Client peut demander la résiliation en envoyant un email à <a href='mailto:hello@karbonn.fr' style='color:#fff;text-decoration:underline;'>hello@karbonn.fr</a>. Aucun délai de préavis n’est imposé. Toutefois, toute période commencée reste due, les prestations déjà réalisées restent facturables, et les engagements liés aux services tiers peuvent rester applicables.</p>
+        <p>Un abonnement mensuel est obligatoire pour toute formule. Les abonnements proposés sont les suivants :</p>
+        <h4>ESSENTIEL — 9,99 € / mois</h4>
+        <p>Hébergement du site, SSL / HTTPS, maintenance technique de base, surveillance du site, sauvegardes, assistance technique.</p>
+        <h4>SÉRÉNITÉ — 19,99 € / mois</h4>
+        <p>Tout ESSENTIEL + maintenance corrective, mises à jour techniques, sauvegardes renforcées, surveillance renforcée, support prioritaire, petites interventions techniques.</p>
+        <h4>PERFORMANCE — 39,99 € / mois</h4>
+        <p>Tout SÉRÉNITÉ + évolutions régulières du site, optimisations performances, optimisations SEO techniques, analyse des performances, automatisations simples, support prioritaire.</p>
+        <h4>PREMIUM — 69,99 € / mois</h4>
+        <p>Tout PERFORMANCE + accompagnement mensuel, modifications de contenu, optimisation continue, automatisations avancées, conseil digital, priorité maximale.</p>
+        <p><strong>Nom de domaine</strong> (.fr / .com) : facturé séparément selon le domaine choisi.</p>
+        <p><strong>Durée</strong> : L'abonnement est conclu jusqu'à résiliation du contrat ou résiliation par le Client. Il est renouvelé automatiquement par des périodes successives d'un (1) mois. ; si l'abonnement est résilié par le Client, alors l'intégralité des services peuvent être désactivés car il ne peut pas bénéficier des services gratuitement.</p>
         <h3>8. Paiement et facturation</h3>
         <p>Les factures sont générées manuellement par Karbonn. via son outil de facturation professionnel. Les factures sont disponibles dans l’espace client sécurisé. Le Client est responsable de consulter régulièrement son espace client.</p>
         <p>Le paiement peut être effectué :</p>

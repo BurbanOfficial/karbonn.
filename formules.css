@@ -683,3 +683,266 @@
     overflow-x: auto;
   }
 }
+
+/* Abonnements mensuels */
+.subscriptions-wrapper {
+  margin: 100px 0 60px;
+}
+
+.subscriptions-header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.subscriptions-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 500;
+  color: #000;
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+}
+
+.subscriptions-subtitle {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 16px;
+  color: #888;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.subscriptions-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  align-items: stretch;
+}
+
+.subscription-card {
+  background: #111;
+  border: 1px solid #222;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: all 0.4s ease;
+}
+
+.subscription-card:hover {
+  border-color: #333;
+  transform: translateY(-8px);
+}
+
+.subscription-card--featured {
+  border-color: var(--accent);
+  background: #151515;
+  box-shadow: 0 0 40px rgba(var(--accent-rgb, 120, 120, 120), 0.3);
+  z-index: 10;
+  transform: scale(1.03);
+}
+
+.subscription-card--featured:hover {
+  border-color: var(--accent);
+  transform: scale(1.03) translateY(-8px);
+}
+
+.subscription-card__badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #0a0a0a;
+  font-family: "Source Code Pro", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 6px 16px;
+  letter-spacing: 0.05em;
+}
+
+.subscription-card__num {
+  font-family: "Source Code Pro", monospace;
+  font-size: 12px;
+  color: #444;
+  margin-bottom: 20px;
+}
+
+.subscription-card__header {
+  margin-bottom: 20px;
+}
+
+.subscription-card__title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 24px;
+  font-weight: 500;
+  color: #fff;
+  margin: 0 0 8px;
+}
+
+.subscription-card__desc {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+  color: #aaa;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.subscription-card__section {
+  margin-bottom: 16px;
+}
+
+.subscription-card__section-label {
+  display: block;
+  font-family: "Source Code Pro", monospace;
+  font-size: 11px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.subscription-card__features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  flex: 1;
+}
+
+.subscription-card__features li {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13px;
+  color: #aaa;
+  padding: 10px 0;
+  border-bottom: 1px solid #1a1a1a;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.subscription-card__features li:last-child {
+  border-bottom: none;
+}
+
+.subscription-card__features i {
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.subscription-card__price {
+  padding: 16px 0;
+  border-top: 1px solid #222;
+  border-bottom: 1px solid #222;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.subscription-card__price-value {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.subscription-card__price-period {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+  color: #666;
+}
+
+.domain-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: #0a0a0a;
+  border: 1px solid #222;
+  padding: 24px;
+  margin-top: 40px;
+  text-align: center;
+}
+
+.domain-banner i {
+  font-size: 24px;
+  color: var(--accent);
+}
+
+.domain-banner__content {
+  display: flex;
+  flex-direction: column;
+}
+
+.domain-banner__content strong {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.domain-banner__content span {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+  color: #888;
+}
+
+@media (max-width: 1024px) {
+  .subscriptions-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+
+  .subscription-card--featured {
+    transform: none;
+  }
+
+  .subscription-card--featured:hover {
+    transform: translateY(-8px);
+  }
+}
+
+@media (max-width: 768px) {
+  .subscriptions-wrapper {
+    margin-top: 40px;
+  }
+
+  .subscriptions-header {
+    padding: 0 24px;
+  }
+
+  .subscriptions-grid {
+    display: flex;
+    flex-direction: row;
+    grid-template-columns: unset;
+    gap: 16px;
+    overflow-x: scroll;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 16px 24px 24px;
+    margin-bottom: 16px;
+  }
+
+  .subscriptions-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .subscription-card {
+    flex: 0 0 82vw;
+    max-width: 340px;
+    scroll-snap-align: center;
+    transform: none !important;
+    margin-top: 20px;
+  }
+
+  .subscription-card--featured {
+    order: -1;
+  }
+
+  .domain-banner {
+    margin: 24px;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+}

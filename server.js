@@ -1862,58 +1862,77 @@ Instagram : @agence.karbonn
 
 ## LES 3 FORMULES (noms exacts à utiliser)
 
-### 01 — FONDATION (à partir de 199 €)
+### 01 — FONDATION (à partir de 489 €)
 Idéal pour : entreprises, associations et indépendants souhaitant lancer ou moderniser leur présence en ligne.
 Inclus :
-- Site vitrine sur mesure jusqu'à 5 pages
-- Design UI/UX personnalisé (template personnalisé)
-- Responsive mobile, tablette, ordinateur
-- Configuration hébergement et nom de domaine
-- Optimisation performances et SEO technique de base
-- Formulaire de contact et outils essentiels
-- Animations basiques
-- Maintenance corrective 30 jours (support 1 mois)
-Non inclus : e-commerce, automatisation IA, outils métiers, communication digitale.
+- Développement d'un site vitrine sur mesure (jusqu'à 5 pages)
+- Design UI/UX personnalisé
+- Optimisation responsive (mobile, tablette, ordinateur)
+- Configuration de l'hébergement et du nom de domaine
+- Optimisation des performances et du référencement technique
+- Formulaire de contact et intégration des outils essentiels
+- Maintenance corrective pendant 30 jours
 
-### 02 — PERFORMANCE (à partir de 399 €) ⭐ Populaire
+### 02 — PERFORMANCE (à partir de 1099 €) ⭐ Populaire
 Idéal pour : entreprises cherchant à gagner du temps, automatiser leurs processus et générer davantage d'opportunités.
 Inclus (tout Fondation +) :
-- Développement web avancé, fonctionnalités sur mesure, jusqu'à 10 pages
-- Design sur-mesure, animations avancées
-- Parcours utilisateur optimisé (UX avancée, responsive multi-support)
-- Automatisations IA basiques et automatisations métiers
-- Connexion d'outils (CRM, formulaires, emailing, gestion interne)
+- Développement web avancé et fonctionnalités sur mesure
+- Parcours utilisateur optimisé (UX)
+- Automatisations IA et automatisations métiers
+- Connexion de vos outils (CRM, formulaires, emailing, gestion interne)
 - Tableau de bord et suivi des performances
-- SEO avancé
-- Hébergement professionnel et maintenance continue
-- Accompagnement stratégique mensuel
-- Formation incluse
-- E-commerce en option
-- Outils métiers en option
-- Support 3 mois
+- Optimisation SEO avancée
+- Accompagnement stratégique
 
-### 03 — EXCELLENCE (à partir de 899 €)
-Idéal pour : entreprises ambitieuses souhaitant un partenaire numérique gérant l'ensemble de leur écosystème digital.
+### 03 — EXCELLENCE (à partir de 2990 €)
+Idéal pour : entreprises ambitieuses souhaitant disposer d'un partenaire numérique capable de gérer l'ensemble de leur écosystème digital.
 Inclus (tout Performance +) :
-- Pages illimitées
-- Design premium sur-mesure, animations sur-mesure, expérience UX fluide totale
-- Développement d'outils métiers sur mesure (inclus)
+- Développement d'outils métiers sur mesure
 - Mise en place d'écosystèmes numériques complets
 - Automatisations IA avancées et agents intelligents
 - Infrastructure et hébergement haute performance
-- Stratégie de communication digitale complète + accompagnement
-- Création supports digitaux, optimisation de la marque
+- Stratégie de communication digitale complète
+- Création des supports digitaux et optimisation de la marque
 - Analyse comportementale et optimisation continue
-- E-commerce inclus
-- SEO Premium + stratégie complète
 - Priorité sur les demandes et évolutions
-- Support 6 mois
+- Accompagnement stratégique dédié
 
 ---
 
-## HÉBERGEMENT (obligatoire pour tous les clients)
-Abonnement mensuel : 19,99 € / mois (jusqu'à résiliation)
-Inclus : nom de domaine (.com ou .fr), certificat SSL (HTTPS), maintenance technique, mises à jour de sécurité.
+## ABONNEMENTS MENSUELS (obligatoires pour tous les clients)
+Un abonnement mensuel Karbonn. est obligatoire pour toute formule. Nom de domaine (.fr / .com) facturé séparément selon le domaine choisi.
+
+- ESSENTIEL — 9,99 €/mois (abonnement de base obligatoire, ou sélection d'un abonnement supérieur)
+  - Hébergement du site
+  - SSL / HTTPS
+  - Maintenance technique de base
+  - Surveillance du site
+  - Sauvegardes
+  - Assistance technique
+
+- SÉRÉNITÉ — 19,99 €/mois ⭐ Populaire (tout ESSENTIEL +)
+  - Maintenance corrective
+  - Mises à jour techniques
+  - Sauvegardes renforcées
+  - Surveillance renforcée
+  - Support prioritaire
+  - Petites interventions techniques
+
+- PERFORMANCE — 39,99 €/mois (tout SÉRÉNITÉ +)
+  - Évolutions régulières du site
+  - Optimisations performances
+  - Optimisations SEO techniques
+  - Analyse des performances
+  - Automatisations simples
+  - Support prioritaire
+
+- PREMIUM — 69,99 €/mois (tout PERFORMANCE +)
+  - Accompagnement mensuel
+  - Modifications de contenu
+  - Optimisation continue
+  - Automatisations avancées
+  - Conseil digital
+  - Priorité maximale
 
 ---
 
