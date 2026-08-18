@@ -209,6 +209,223 @@
       margin-top: 8px;
     }
 
+    .maintenance-box {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background-color: var(--panel);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .maintenance-box-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+
+    .maintenance-box-title i {
+      color: #f59e0b;
+      font-size: 0.9rem;
+    }
+
+    .maintenance-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      gap: 10px;
+    }
+
+    .maintenance-row + .maintenance-row {
+      border-top: 1px solid var(--border);
+    }
+
+    .maintenance-row-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-switch .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: var(--border);
+      border-radius: 999px;
+      transition: background-color 0.2s ease;
+    }
+
+    .toggle-switch .toggle-slider::before {
+      content: "";
+      position: absolute;
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s ease;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: #ef4444;
+    }
+
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateX(16px);
+    }
+
+    .toggle-switch input:disabled + .toggle-slider {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .maintenance-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      z-index: 2000;
+      text-align: center;
+      padding: 2rem;
+    }
+    .maintenance-overlay.hidden {
+      display: none !important;
+    }
+    .maintenance-card {
+      max-width: 600px;
+    }
+    .maintenance-card i {
+      font-size: 4rem;
+      color: #f59e0b;
+      margin-bottom: 1.5rem;
+    }
+    .maintenance-card h1 {
+      font-size: 1.75rem;
+      margin-bottom: 1rem;
+      color: var(--text);
+    }
+    .maintenance-card p {
+      color: #444;
+      line-height: 1.6;
+      margin-bottom: 1rem;
+    }
+    .maintenance-card a {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .hours-lock-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #0b0b0c;
+      z-index: 2000;
+      padding: 48px 24px;
+      overflow-y: auto;
+    }
+    .hours-lock-overlay.hidden {
+      display: none !important;
+    }
+    .hours-lock-card {
+      width: 100%;
+      max-width: 440px;
+      text-align: center;
+      animation: hoursLockFadeIn 0.45s ease both;
+    }
+    @keyframes hoursLockFadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hours-lock-icon {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 28px auto;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #f5f5f7;
+      font-size: 1.25rem;
+    }
+    .hours-lock-card h1 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      color: #f5f5f7;
+      line-height: 1.4;
+      letter-spacing: -0.015em;
+      margin-bottom: 12px;
+    }
+    .hours-lock-card p {
+      font-size: 0.9rem;
+      color: #8e8e93;
+      line-height: 1.6;
+    }
+    .hours-lock-schedule {
+      display: flex;
+      align-items: stretch;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius-md);
+      background: rgba(255,255,255,0.03);
+      overflow: hidden;
+      margin-top: 32px;
+    }
+    .hours-lock-slot {
+      flex: 1;
+      padding: 18px 12px;
+    }
+    .hours-lock-slot + .hours-lock-slot {
+      border-left: 1px solid rgba(255,255,255,0.1);
+    }
+    .hours-lock-slot-label {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #8e8e93;
+      margin-bottom: 6px;
+    }
+    .hours-lock-slot-value {
+      display: block;
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #f5f5f7;
+      letter-spacing: -0.01em;
+      font-variant-numeric: tabular-nums;
+    }
+    .hours-lock-footnote {
+      margin-top: 20px;
+      font-size: 0.78rem;
+      color: #6e6e73;
+    }
+
     .main {
       margin-left: var(--sidebar-width);
       width: calc(100% - var(--sidebar-width));
@@ -1326,6 +1543,22 @@
       background-color: var(--border);
       color: var(--text);
       border-color: transparent;
+    }
+
+    .detail-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-block-btn {
+      color: #ef4444;
+      border-color: #ef4444;
+    }
+    .modal-block-btn:hover {
+      background-color: #ef4444;
+      color: #fff;
+      border-color: #ef4444;
     }
 
     .modal-step {
@@ -3710,6 +3943,34 @@
   </style>
 </head>
 <body>
+  <div class="hours-lock-overlay hidden" id="hours-lock-screen">
+    <div class="hours-lock-card">
+      <div class="hours-lock-icon"><i class="fa-regular fa-moon"></i></div>
+      <h1>L'intranet est fermé pour le moment</h1>
+      <p>Afin de préserver la santé de ses collaborateurs, Karbonn. suspend les accès en dehors des heures de travail.</p>
+      <div class="hours-lock-schedule">
+        <div class="hours-lock-slot">
+          <span class="hours-lock-slot-label">Ouverture</span>
+          <span class="hours-lock-slot-value">08:00</span>
+        </div>
+        <div class="hours-lock-slot">
+          <span class="hours-lock-slot-label">Fermeture</span>
+          <span class="hours-lock-slot-value">20:00</span>
+        </div>
+      </div>
+      <p class="hours-lock-footnote">Les managers conservent un accès permanent.</p>
+    </div>
+  </div>
+
+  <div class="maintenance-overlay hidden" id="maintenance-screen-intranet">
+    <div class="maintenance-card">
+      <i class="fa-solid fa-screwdriver-wrench"></i>
+      <h1 id="maintenance-intranet-title">Votre espace de travail est en cours d'amélioration.</h1>
+      <p>Merci de revenir un peu plus tard pour l'utiliser, cela ne devrait pas durer longtemps.</p>
+      <p>Une urgence ? Contactez <a href="mailto:remy.cormon@karbonn.fr">remy.cormon@karbonn.fr</a> ou appelez le <a href="tel:+33776691606">+33 7 76 69 16 06</a> (appel non surtaxé + prix d'un appel selon votre forfait et votre opérateur).</p>
+    </div>
+  </div>
+
   <div class="login-overlay" id="login-screen">
     <div class="login-left">
       <a href="index.html" class="brand login-brand-text">Karbonn.</a>
@@ -3801,6 +4062,23 @@
         </a>
       </nav>
       <div class="sidebar-footer">
+        <div class="maintenance-box" id="maintenance-box" style="display:none;">
+          <div class="maintenance-box-title"><i class="fa-solid fa-screwdriver-wrench"></i> Maintenance</div>
+          <div class="maintenance-row">
+            <span class="maintenance-row-label">Espace client</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="maintenance-toggle-client">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="maintenance-row">
+            <span class="maintenance-row-label">Intranet</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="maintenance-toggle-intranet">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
         <a href="#" class="nav-item" data-label="Paramètres">
           <i class="fa-solid fa-gear"></i>
           <span class="nav-label">Paramètres</span>
@@ -4901,7 +5179,10 @@
           <h2 id="detail-modal-title">Client</h2>
           <span class="detail-client-id" id="detail-client-id">—</span>
         </div>
-        <button class="modal-close" id="detail-modal-close"><i class="fa-solid fa-xmark"></i></button>
+        <div class="detail-header-actions">
+          <button class="modal-close modal-block-btn" id="detail-block-btn" title="Bloquer les accès"><i class="fa-solid fa-person-circle-xmark"></i></button>
+          <button class="modal-close" id="detail-modal-close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Informations</div>

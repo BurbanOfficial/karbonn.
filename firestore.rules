@@ -70,6 +70,12 @@ service cloud.firestore {
       allow create, update, delete: if isManager();
     }
 
+    // Le statut de maintenance doit rester lisible publiquement (espace client sans authentification Firebase)
+    match /settings/maintenance {
+      allow read: if true;
+      allow create, update, delete: if isManager();
+    }
+
     // Collection abonnements (subscription plans)
     match /abonnements/{aboId} {
       allow read: if request.auth != null;

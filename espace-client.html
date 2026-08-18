@@ -1689,9 +1689,101 @@
         grid-template-columns: 1fr;
       }
     }
+    .suspended-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      z-index: 1000;
+      text-align: center;
+      padding: 2rem;
+    }
+    .suspended-overlay.hidden {
+      display: none !important;
+    }
+    .suspended-card {
+      max-width: 600px;
+    }
+    .suspended-card i {
+      font-size: 4rem;
+      color: #ef4444;
+      margin-bottom: 1.5rem;
+    }
+    .suspended-card h1 {
+      font-size: 1.75rem;
+      margin-bottom: 1rem;
+      color: #111;
+    }
+    .suspended-card p {
+      color: #444;
+      line-height: 1.6;
+      margin-bottom: 1rem;
+    }
+    .suspended-card a {
+      color: #111;
+      font-weight: 600;
+    }
+    .maintenance-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      z-index: 1000;
+      text-align: center;
+      padding: 2rem;
+    }
+    .maintenance-overlay.hidden {
+      display: none !important;
+    }
+    .maintenance-card {
+      max-width: 600px;
+    }
+    .maintenance-card i {
+      font-size: 4rem;
+      color: #f59e0b;
+      margin-bottom: 1.5rem;
+    }
+    .maintenance-card h1 {
+      font-size: 1.75rem;
+      margin-bottom: 1rem;
+      color: #111;
+    }
+    .maintenance-card p {
+      color: #444;
+      line-height: 1.6;
+      margin-bottom: 1rem;
+    }
+    .maintenance-card a {
+      color: #111;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
+  <div class="maintenance-overlay hidden" id="maintenance-screen">
+    <div class="maintenance-card">
+      <i class="fa-solid fa-screwdriver-wrench"></i>
+      <h1>Votre espace est actuellement en cours d'amélioration.</h1>
+      <p>Cela ne devrait pas prendre longtemps, merci de revenir un peu plus tard.</p>
+      <p>Notre équipe reste joignable à tout moment à l'adresse <a href="mailto:hello@karbonn.fr">hello@karbonn.fr</a>.</p>
+      <p>Une urgence ? Appelez-nous au <a href="tel:+33776691606">+33 7 76 69 16 06</a> (appel non surtaxé + prix d'un appel selon votre forfait et votre opérateur).</p>
+      <p>La Direction Karbonn. vous remercie de votre patience et s'excuse pour la gêne occasionnée.</p>
+    </div>
+  </div>
+
+  <div class="suspended-overlay hidden" id="suspended-screen">
+    <div class="suspended-card">
+      <i class="fa-solid fa-users-slash"></i>
+      <h1>La Direction de Karbonn. à décidée de suspendre votre espace.</h1>
+      <p>Pour en savoir plus sur la raison, veillez contacter l'adresse email <a href="mailto:hello@karbonn.fr">hello@karbonn.fr</a> ou appeler le <a href="tel:+33776691606">+33 7 76 69 16 06</a> (appel non surtaxé + prix d'un appel selon votre forfait et votre opérateur).</p>
+      <p>Merci pour votre compréhension.</p>
+    </div>
+  </div>
+
   <div class="login-overlay" id="login-screen">
     <div class="login-left">
       <a href="index.html" class="brand">

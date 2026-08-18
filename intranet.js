@@ -11,6 +11,153 @@ const userAvatarEl = document.getElementById('user-avatar');
 let currentUserProfile = null;
 let currentUserRole = null;
 
+// ── Maintenance mode ──
+const maintenanceBox = document.getElementById('maintenance-box');
+const maintenanceToggleClient = document.getElementById('maintenance-toggle-client');
+const maintenanceToggleIntranet = document.getElementById('maintenance-toggle-intranet');
+const maintenanceScreenIntranet = document.getElementById('maintenance-screen-intranet');
+const maintenanceIntranetTitle = document.getElementById('maintenance-intranet-title');
+
+let maintenanceSettings = { clientSpaceEnabled: false, intranetEnabled: false };
+let _applyingMaintenanceToggles = false;
+
+function applyMaintenanceUI() {
+  const manager = isManager();
+
+  if (maintenanceBox) maintenanceBox.style.display = manager ? '' : 'none';
+
+  if (maintenanceToggleClient || maintenanceToggleIntranet) {
+    _applyingMaintenanceToggles = true;
+    if (maintenanceToggleClient) maintenanceToggleClient.checked = maintenanceSettings.clientSpaceEnabled === true;
+    if (maintenanceToggleIntranet) maintenanceToggleIntranet.checked = maintenanceSettings.intranetEnabled === true;
+    _applyingMaintenanceToggles = false;
+  }
+
+  const shouldBlock = maintenanceSettings.intranetEnabled === true && !manager && currentUserProfile;
+  if (shouldBlock && maintenanceScreenIntranet) {
+    const name = [currentUserProfile.prenom, currentUserProfile.nom].filter(Boolean).join(' ')
+      || currentUserProfile.displayName
+      || auth.currentUser?.displayName
+      || '';
+    const hour = new Date().getHours();
+    const salut = hour >= 18 ? 'Bonsoir' : 'Bonjour';
+    if (maintenanceIntranetTitle) {
+      maintenanceIntranetTitle.textContent = name
+        ? `${salut} ${name}, votre espace de travail est actuellement en cours d'amélioration.`
+        : `${salut}, votre espace de travail est actuellement en cours d'amélioration.`;
+    }
+    maintenanceScreenIntranet.classList.remove('hidden');
+  } else if (maintenanceScreenIntranet) {
+    maintenanceScreenIntranet.classList.add('hidden');
+  }
+}
+
+function listenToMaintenanceSettings() {
+  db.collection('settings').doc('maintenance').onSnapshot(doc => {
+    maintenanceSettings = doc.exists ? doc.data() : { clientSpaceEnabled: false, intranetEnabled: false };
+    applyMaintenanceUI();
+  }, err => console.warn('[Maintenance] Failed to load settings:', err));
+}
+
+async function updateMaintenanceSetting(key, value) {
+  if (!isManager()) return;
+  try {
+    await db.collection('settings').doc('maintenance').set({ [key]: value }, { merge: true });
+  } catch (err) {
+    console.error('[Maintenance] Failed to update setting:', err);
+    showToast('Erreur lors de la mise à jour de la maintenance.', 'error');
+  }
+}
+
+if (maintenanceToggleClient) {
+  maintenanceToggleClient.addEventListener('change', () => {
+    if (_applyingMaintenanceToggles) return;
+    updateMaintenanceSetting('clientSpaceEnabled', maintenanceToggleClient.checked);
+  });
+}
+if (maintenanceToggleIntranet) {
+  maintenanceToggleIntranet.addEventListener('change', () => {
+    if (_applyingMaintenanceToggles) return;
+    updateMaintenanceSetting('intranetEnabled', maintenanceToggleIntranet.checked);
+  });
+}
+
+listenToMaintenanceSettings();
+
+// ── Horaires d'accès à l'intranet (8h — 20h, sauf managers) ──
+const WORK_HOURS_START = 8;
+const WORK_HOURS_END = 20;
+const hoursLockScreen = document.getElementById('hours-lock-screen');
+
+let _workHoursWarningShown = false;
+let _workHoursCheckInterval = null;
+
+function isWithinWorkHours() {
+  const hour = new Date().getHours();
+  return hour >= WORK_HOURS_START && hour < WORK_HOURS_END;
+}
+
+function showWorkHoursEndingWarning() {
+  const overlay = document.createElement('div');
+  overlay.className = 'app-confirm-overlay';
+  overlay.innerHTML = `
+    <div class="app-confirm-card">
+      <div class="app-confirm-icon" style="background:rgba(99,102,241,0.1);color:#6366f1;"><i class="fa-regular fa-moon"></i></div>
+      <div class="app-confirm-title">Il est 20h</div>
+      <div class="app-confirm-message">Il est l'heure de terminer votre journée. Pensez à sauvegarder votre travail : au prochain rechargement ou à votre retour, l'accès à l'intranet sera bloqué jusqu'à 8h.</div>
+      <div class="app-confirm-actions">
+        <button class="app-confirm-btn app-confirm-btn--confirm">J'ai compris</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('visible'));
+  const close = () => {
+    overlay.classList.remove('visible');
+    setTimeout(() => overlay.remove(), 200);
+  };
+  overlay.querySelector('.app-confirm-btn--confirm').addEventListener('click', close);
+}
+
+function applyWorkHoursUI() {
+  if (!currentUserProfile) return;
+  const manager = isManager();
+  if (manager) {
+    if (hoursLockScreen) hoursLockScreen.classList.add('hidden');
+    return;
+  }
+
+  if (!isWithinWorkHours()) {
+    if (hoursLockScreen) hoursLockScreen.classList.remove('hidden');
+    appContent.classList.add('hidden');
+  } else if (!_workHoursWarningShown && new Date().getHours() === WORK_HOURS_END) {
+    // Safety net; the interval below handles the exact-hour transition.
+  }
+}
+
+function startWorkHoursWatcher() {
+  if (_workHoursCheckInterval) clearInterval(_workHoursCheckInterval);
+  _workHoursWarningShown = false;
+  _workHoursCheckInterval = setInterval(() => {
+    if (!currentUserProfile || isManager()) return;
+    const hour = new Date().getHours();
+    if (hour >= WORK_HOURS_END && !_workHoursWarningShown) {
+      _workHoursWarningShown = true;
+      showWorkHoursEndingWarning();
+    }
+    if (!isWithinWorkHours()) {
+      if (hoursLockScreen) hoursLockScreen.classList.remove('hidden');
+      appContent.classList.add('hidden');
+    }
+  }, 30000);
+}
+
+function stopWorkHoursWatcher() {
+  if (_workHoursCheckInterval) { clearInterval(_workHoursCheckInterval); _workHoursCheckInterval = null; }
+  _workHoursWarningShown = false;
+  if (hoursLockScreen) hoursLockScreen.classList.add('hidden');
+}
+
 // Backend API configuration (Render)
 const API_BASE_URL = 'https://karbonn-x-abby.onrender.com';
 
@@ -215,6 +362,9 @@ function showApp(user, profile) {
 
   currentUserProfile = { uid: user.uid, ...(profile || {}) };
   currentUserRole = role;
+  applyMaintenanceUI();
+  applyWorkHoursUI();
+  startWorkHoursWatcher();
 
   if (userNameEl) userNameEl.textContent = name;
   if (userRoleEl) userRoleEl.textContent = role;
@@ -533,6 +683,10 @@ function renderDashboardProjects() {
 function showLogin() {
   loginScreen.classList.remove('hidden');
   appContent.classList.add('hidden');
+  if (maintenanceScreenIntranet) maintenanceScreenIntranet.classList.add('hidden');
+  stopWorkHoursWatcher();
+  currentUserProfile = null;
+  currentUserRole = null;
   if (userNameEl) userNameEl.textContent = '';
   if (userRoleEl) userRoleEl.textContent = '';
   if (userAvatarEl) userAvatarEl.textContent = '';
@@ -1517,8 +1671,9 @@ function renderClients(clients) {
     const entreprise = c.entreprise || '—';
     const date = c.createdAt ? new Date(c.createdAt.seconds * 1000).toLocaleDateString('fr-FR') : '—';
     const badgeClass = type === 'professionnel' ? 'badge-professionnel' : 'badge-particulier';
+    const blockedIcon = c.blocked ? '<i class="fa-solid fa-users-slash" title="Espace client bloqué" style="color:#ef4444;margin-left:6px;"></i>' : '';
     return `<tr data-client-id="${c.id}">
-      <td>${nom}</td>
+      <td>${nom}${blockedIcon}</td>
       <td>${email}</td>
       <td>${telephone}</td>
       <td><span class="badge ${badgeClass}">${type}</span></td>
@@ -2341,6 +2496,7 @@ formProjet.addEventListener('submit', async e => {
 // Client Detail Modal
 const clientDetailModal = document.getElementById('client-detail-modal');
 const detailModalClose = document.getElementById('detail-modal-close');
+const detailBlockBtn = document.getElementById('detail-block-btn');
 const detailModalTitle = document.getElementById('detail-modal-title');
 const detailFieldsContainer = document.getElementById('detail-fields');
 const detailProjetsContainer = document.getElementById('detail-projets');
@@ -2355,10 +2511,24 @@ function openClientDetail(client) {
   detailModalTitle.textContent = name;
   detailClientIdEl.textContent = client.clientId || '—';
 
+  updateDetailBlockButton(client);
   renderDetailFields(client);
   loadClientProjets(client.id);
   loadClientSites(client.id);
   clientDetailModal.classList.add('visible');
+}
+
+function updateDetailBlockButton(client) {
+  if (!detailBlockBtn) return;
+  const blocked = client?.blocked === true;
+  detailBlockBtn.title = blocked ? 'Débloquer les accès' : 'Bloquer les accès';
+  detailBlockBtn.innerHTML = `<i class="fa-solid ${blocked ? 'fa-user-check' : 'fa-person-circle-xmark'}"></i>`;
+  if (!isManager()) {
+    detailBlockBtn.disabled = true;
+    detailBlockBtn.title = 'Réservé aux managers';
+  } else {
+    detailBlockBtn.disabled = false;
+  }
 }
 
 function closeClientDetail() {
@@ -2367,6 +2537,28 @@ function closeClientDetail() {
 }
 
 detailModalClose.addEventListener('click', closeClientDetail);
+if (detailBlockBtn) {
+  detailBlockBtn.addEventListener('click', async () => {
+    if (!currentDetailClient) return;
+    if (!isManager()) {
+      showToast('Accès réservé aux managers.', 'error');
+      return;
+    }
+    try {
+      const newBlocked = !currentDetailClient.blocked;
+      await db.collection('clients').doc(currentDetailClient.id).update({ blocked: newBlocked });
+      currentDetailClient.blocked = newBlocked;
+      const idx = allClients.findIndex(c => c.id === currentDetailClient.id);
+      if (idx !== -1) allClients[idx].blocked = newBlocked;
+      updateDetailBlockButton(currentDetailClient);
+      showToast(newBlocked ? 'Espace client bloqué.' : 'Espace client débloqué.', 'success');
+      renderClients(allClients);
+    } catch (err) {
+      console.error(err);
+      showToast('Erreur lors du blocage : ' + err.message, 'error');
+    }
+  });
+}
 clientDetailModal.addEventListener('click', e => {
   if (e.target === clientDetailModal) closeClientDetail();
 });

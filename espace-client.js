@@ -2,6 +2,8 @@ const API_BASE_URL = 'https://karbonn-x-abby.onrender.com';
 
 const loginScreen = document.getElementById('login-screen');
 const appContent = document.getElementById('app-content');
+const suspendedScreen = document.getElementById('suspended-screen');
+const maintenanceScreen = document.getElementById('maintenance-screen');
 const loginForm = document.getElementById('login-form');
 const loginIdInput = document.getElementById('login-id');
 const loginError = document.getElementById('login-error');
@@ -11,6 +13,24 @@ const clientBadgeEl = document.getElementById('client-badge');
 let currentClient = null;
 let clientSites = [];
 let sitesPollingInterval = null;
+let clientSpaceMaintenanceEnabled = false;
+
+// Real-time listener for client-space maintenance mode
+if (db && maintenanceScreen) {
+  db.collection('settings').doc('maintenance').onSnapshot(doc => {
+    const data = doc.exists ? doc.data() : {};
+    clientSpaceMaintenanceEnabled = data.clientSpaceEnabled === true;
+    if (clientSpaceMaintenanceEnabled) {
+      loginScreen.classList.add('hidden');
+      appContent.classList.add('hidden');
+      if (suspendedScreen) suspendedScreen.classList.add('hidden');
+      maintenanceScreen.classList.remove('hidden');
+    } else {
+      maintenanceScreen.classList.add('hidden');
+      if (!currentClient) loginScreen.classList.remove('hidden');
+    }
+  }, err => console.warn('[Client] Failed to load maintenance settings:', err));
+}
 
 const SITE_STATUSES = ['Actif','Suspendu','En maintenance','Expiré','En attente'];
 
@@ -57,6 +77,12 @@ loginForm.addEventListener('submit', async e => {
   e.preventDefault();
   loginError.textContent = '';
 
+  if (clientSpaceMaintenanceEnabled) {
+    loginScreen.classList.add('hidden');
+    if (maintenanceScreen) maintenanceScreen.classList.remove('hidden');
+    return;
+  }
+
   const rawId = loginIdInput.value.trim().toUpperCase();
 
   if (!rawId) {
@@ -80,6 +106,11 @@ loginForm.addEventListener('submit', async e => {
 
     const doc = snapshot.docs[0];
     currentClient = { id: doc.id, ...doc.data() };
+    if (currentClient.blocked) {
+      loginScreen.classList.add('hidden');
+      suspendedScreen.classList.remove('hidden');
+      return;
+    }
     showApp(currentClient);
   } catch (err) {
     console.error(err);
@@ -843,6 +874,7 @@ function logout() {
   currentClient = null;
   loginScreen.classList.remove('hidden');
   appContent.classList.add('hidden');
+  if (suspendedScreen) suspendedScreen.classList.add('hidden');
   loginIdInput.value = '';
   loginError.textContent = '';
   if (clientNameEl) clientNameEl.textContent = '';
