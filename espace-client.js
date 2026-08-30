@@ -503,7 +503,8 @@ async function openRenewal(site) {
   const expiration = site.expirationDate ? new Date(site.expirationDate).toLocaleDateString('fr-FR') : '—';
   const extension = getDomainExtension(domain);
   const monthlySubscriptionPrice = site.monthlySubscriptionPrice || 0;
-  const monthlyLabel = monthlySubscriptionPrice > 0 ? `${monthlySubscriptionPrice.toFixed(2)} € / mois` : 'Aucun';
+  const monthlySubscriptionName = site.monthlySubscriptionName || 'Abonnement mensuel';
+  const monthlyLabel = monthlySubscriptionPrice > 0 ? `${monthlySubscriptionName} — ${monthlySubscriptionPrice.toFixed(2)} € / mois` : 'Aucun';
 
   renewalTitle.textContent = 'Renouveler ' + domain;
 
@@ -597,7 +598,7 @@ async function openRenewal(site) {
       <div class="renewal-plans">
         ${plans.map((p, i) => `
           <button class="renewal-plan-btn${i === 0 ? ' selected' : ''}" data-years="${p.years}" data-cents="${p.cents}" data-price="${p.price}">
-            <span class="plan-years">${p.label}</span>
+            <span class="plan-years">1 an (renouvellement annuel pour ${escapeHtml(domain)})${monthlySubscriptionPrice > 0 ? ` + abonnement ${escapeHtml(monthlySubscriptionName)} à ${monthlySubscriptionPrice.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/mois` : ''}</span>
             <span class="plan-price">${p.price.toFixed(2)} €</span>
             <span class="plan-breakdown">dont ${p.ttcDomain.toFixed(2)} € TTC</span>
           </button>`).join('')}

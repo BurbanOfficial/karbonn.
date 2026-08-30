@@ -320,6 +320,7 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
         stripeSubscriptionStatus: data.stripeSubscriptionStatus || null,
         abonnementId: data.abonnementId || null,
         abonnementCustomPrice: data.abonnementCustomPrice || null,
+        monthlySubscriptionName: getSiteMonthlySubscriptionCents(data, abonnementsMap) > 0 ? getMonthlySubscriptionName(data, abonnementsMap) : null,
         monthlySubscriptionPrice: getSiteMonthlySubscriptionCents(data, abonnementsMap) / 100 || null,
         history
       });
