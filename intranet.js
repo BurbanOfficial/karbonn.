@@ -5209,10 +5209,14 @@ function renderSiteSubscriptionSelector(site) {
     try {
       await db.collection('sitesWeb').doc(site.id).update(update);
       Object.assign(site, update);
-      showToast('Abonnement mis à jour.', 'success');
+      const syncResult = await apiRequest(`/api/admin/sites/${site.id}/sync-monthly-subscription`, { method: 'POST' });
+      const message = syncResult.synchronized
+        ? 'Abonnement mis à jour. Le changement s’appliquera à la prochaine échéance mensuelle.'
+        : 'Abonnement mis à jour. Il sera ajouté lors de l’activation du paiement automatique.';
+      showToast(message, 'success');
     } catch (e) {
       console.error(e);
-      showToast('Erreur mise à jour abonnement.', 'error');
+      showToast('Abonnement enregistré, mais la synchronisation Stripe a échoué.', 'error');
     }
   });
 }
