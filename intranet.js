@@ -84,80 +84,6 @@ if (maintenanceToggleIntranet) {
 
 listenToMaintenanceSettings();
 
-// ── Horaires d'accès à l'intranet (8h — 20h, sauf managers) ──
-const WORK_HOURS_START = 8;
-const WORK_HOURS_END = 20;
-const hoursLockScreen = document.getElementById('hours-lock-screen');
-
-let _workHoursWarningShown = false;
-let _workHoursCheckInterval = null;
-
-function isWithinWorkHours() {
-  const hour = new Date().getHours();
-  return hour >= WORK_HOURS_START && hour < WORK_HOURS_END;
-}
-
-function showWorkHoursEndingWarning() {
-  const overlay = document.createElement('div');
-  overlay.className = 'app-confirm-overlay';
-  overlay.innerHTML = `
-    <div class="app-confirm-card">
-      <div class="app-confirm-icon" style="background:rgba(99,102,241,0.1);color:#6366f1;"><i class="fa-regular fa-moon"></i></div>
-      <div class="app-confirm-title">Il est 20h</div>
-      <div class="app-confirm-message">Il est l'heure de terminer votre journée. Pensez à sauvegarder votre travail : au prochain rechargement ou à votre retour, l'accès à l'intranet sera bloqué jusqu'à 8h.</div>
-      <div class="app-confirm-actions">
-        <button class="app-confirm-btn app-confirm-btn--confirm">J'ai compris</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  requestAnimationFrame(() => overlay.classList.add('visible'));
-  const close = () => {
-    overlay.classList.remove('visible');
-    setTimeout(() => overlay.remove(), 200);
-  };
-  overlay.querySelector('.app-confirm-btn--confirm').addEventListener('click', close);
-}
-
-function applyWorkHoursUI() {
-  if (!currentUserProfile) return;
-  const manager = isManager();
-  if (manager) {
-    if (hoursLockScreen) hoursLockScreen.classList.add('hidden');
-    return;
-  }
-
-  if (!isWithinWorkHours()) {
-    if (hoursLockScreen) hoursLockScreen.classList.remove('hidden');
-    appContent.classList.add('hidden');
-  } else if (!_workHoursWarningShown && new Date().getHours() === WORK_HOURS_END) {
-    // Safety net; the interval below handles the exact-hour transition.
-  }
-}
-
-function startWorkHoursWatcher() {
-  if (_workHoursCheckInterval) clearInterval(_workHoursCheckInterval);
-  _workHoursWarningShown = false;
-  _workHoursCheckInterval = setInterval(() => {
-    if (!currentUserProfile || isManager()) return;
-    const hour = new Date().getHours();
-    if (hour >= WORK_HOURS_END && !_workHoursWarningShown) {
-      _workHoursWarningShown = true;
-      showWorkHoursEndingWarning();
-    }
-    if (!isWithinWorkHours()) {
-      if (hoursLockScreen) hoursLockScreen.classList.remove('hidden');
-      appContent.classList.add('hidden');
-    }
-  }, 30000);
-}
-
-function stopWorkHoursWatcher() {
-  if (_workHoursCheckInterval) { clearInterval(_workHoursCheckInterval); _workHoursCheckInterval = null; }
-  _workHoursWarningShown = false;
-  if (hoursLockScreen) hoursLockScreen.classList.add('hidden');
-}
-
 // Backend API configuration (Render)
 const API_BASE_URL = 'https://karbonn-x-abby.onrender.com';
 
@@ -363,8 +289,6 @@ function showApp(user, profile) {
   currentUserProfile = { uid: user.uid, ...(profile || {}) };
   currentUserRole = role;
   applyMaintenanceUI();
-  applyWorkHoursUI();
-  startWorkHoursWatcher();
 
   if (userNameEl) userNameEl.textContent = name;
   if (userRoleEl) userRoleEl.textContent = role;
@@ -684,7 +608,6 @@ function showLogin() {
   loginScreen.classList.remove('hidden');
   appContent.classList.add('hidden');
   if (maintenanceScreenIntranet) maintenanceScreenIntranet.classList.add('hidden');
-  stopWorkHoursWatcher();
   currentUserProfile = null;
   currentUserRole = null;
   if (userNameEl) userNameEl.textContent = '';

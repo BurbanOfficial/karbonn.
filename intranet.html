@@ -336,96 +336,6 @@
       font-weight: 600;
     }
 
-    .hours-lock-overlay {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: #0b0b0c;
-      z-index: 2000;
-      padding: 48px 24px;
-      overflow-y: auto;
-    }
-    .hours-lock-overlay.hidden {
-      display: none !important;
-    }
-    .hours-lock-card {
-      width: 100%;
-      max-width: 440px;
-      text-align: center;
-      animation: hoursLockFadeIn 0.45s ease both;
-    }
-    @keyframes hoursLockFadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .hours-lock-icon {
-      width: 56px;
-      height: 56px;
-      margin: 0 auto 28px auto;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: #f5f5f7;
-      font-size: 1.25rem;
-    }
-    .hours-lock-card h1 {
-      font-size: 1.35rem;
-      font-weight: 600;
-      color: #f5f5f7;
-      line-height: 1.4;
-      letter-spacing: -0.015em;
-      margin-bottom: 12px;
-    }
-    .hours-lock-card p {
-      font-size: 0.9rem;
-      color: #8e8e93;
-      line-height: 1.6;
-    }
-    .hours-lock-schedule {
-      display: flex;
-      align-items: stretch;
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: var(--radius-md);
-      background: rgba(255,255,255,0.03);
-      overflow: hidden;
-      margin-top: 32px;
-    }
-    .hours-lock-slot {
-      flex: 1;
-      padding: 18px 12px;
-    }
-    .hours-lock-slot + .hours-lock-slot {
-      border-left: 1px solid rgba(255,255,255,0.1);
-    }
-    .hours-lock-slot-label {
-      display: block;
-      font-size: 0.68rem;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: #8e8e93;
-      margin-bottom: 6px;
-    }
-    .hours-lock-slot-value {
-      display: block;
-      font-size: 1.3rem;
-      font-weight: 600;
-      color: #f5f5f7;
-      letter-spacing: -0.01em;
-      font-variant-numeric: tabular-nums;
-    }
-    .hours-lock-footnote {
-      margin-top: 20px;
-      font-size: 0.78rem;
-      color: #6e6e73;
-    }
-
     .main {
       margin-left: var(--sidebar-width);
       width: calc(100% - var(--sidebar-width));
@@ -3975,25 +3885,6 @@
   </style>
 </head>
 <body>
-  <div class="hours-lock-overlay hidden" id="hours-lock-screen">
-    <div class="hours-lock-card">
-      <div class="hours-lock-icon"><i class="fa-regular fa-moon"></i></div>
-      <h1>L'intranet est fermé pour le moment</h1>
-      <p>Afin de préserver la santé de ses collaborateurs, Karbonn. suspend les accès en dehors des heures de travail.</p>
-      <div class="hours-lock-schedule">
-        <div class="hours-lock-slot">
-          <span class="hours-lock-slot-label">Ouverture</span>
-          <span class="hours-lock-slot-value">08:00</span>
-        </div>
-        <div class="hours-lock-slot">
-          <span class="hours-lock-slot-label">Fermeture</span>
-          <span class="hours-lock-slot-value">20:00</span>
-        </div>
-      </div>
-      <p class="hours-lock-footnote">Les managers conservent un accès permanent.</p>
-    </div>
-  </div>
-
   <div class="maintenance-overlay hidden" id="maintenance-screen-intranet">
     <div class="maintenance-card">
       <i class="fa-solid fa-screwdriver-wrench"></i>
