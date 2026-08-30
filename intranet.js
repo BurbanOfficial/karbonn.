@@ -3076,6 +3076,7 @@ const planningToday = document.getElementById('planning-today');
 const planningNextWeek = document.getElementById('planning-next-week');
 const weekStartDate = document.getElementById('week-start-date');
 const weekEndDate = document.getElementById('week-end-date');
+const planningNextStep = document.getElementById('planning-next-step');
 
 // Task Modal DOM elements
 const taskModal = document.getElementById('task-modal');
@@ -3185,6 +3186,14 @@ function updatePlanningHeader() {
   document.getElementById('wednesday-date').textContent = weekDates.wednesday.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   document.getElementById('thursday-date').textContent = weekDates.thursday.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   document.getElementById('friday-date').textContent = weekDates.friday.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  Object.entries(weekDates).forEach(([day, date]) => {
+    if (!['start', 'end'].includes(day)) {
+      document.querySelector(`.planning-day[data-day="${day}"]`)?.classList.toggle('is-today', date.getTime() === today.getTime());
+    }
+  });
 }
 
 function collectPlanningProjects() {
@@ -3368,8 +3377,52 @@ function filterPlanningProjects() {
   return planningProjects;
 }
 
+function updateNextPlanningStep() {
+  if (!planningNextStep) return;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const nextStep = planningProjects.find(item => {
+    const stepDate = new Date(item.date);
+    stepDate.setHours(0, 0, 0, 0);
+    return item.type !== 'site_expiration'
+      && stepDate >= today
+      && !areAllTasksCompleted(item.projet, item.folder);
+  });
+
+  if (!nextStep) {
+    planningNextStep.textContent = 'Vous avez terminé votre travail.';
+    return;
+  }
+
+  const stepDate = new Date(nextStep.date);
+  const formattedDate = stepDate.toLocaleDateString('fr-FR');
+  planningNextStep.innerHTML = `Prochaine étape au <button type="button" data-next-step-date="${nextStep.date}">${formattedDate}</button>`;
+}
+
+function goToPlanningDate(dateValue) {
+  const targetDate = new Date(dateValue);
+  targetDate.setHours(0, 0, 0, 0);
+  const targetDay = targetDate.getDay();
+  const targetMonday = new Date(targetDate);
+  targetMonday.setDate(targetDate.getDate() + (targetDay === 0 ? -6 : 1 - targetDay));
+  const currentMonday = getWeekDates(0).start;
+  currentWeekOffset = Math.round((targetMonday - currentMonday) / (7 * 24 * 60 * 60 * 1000));
+  updatePlanningHeader();
+  renderPlanning();
+  document.querySelector('.planning-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+if (planningNextStep) {
+  planningNextStep.addEventListener('click', event => {
+    const button = event.target.closest('[data-next-step-date]');
+    if (button) goToPlanningDate(button.dataset.nextStepDate);
+  });
+}
+
 function refreshPlanning() {
   collectPlanningProjects();
+  updateNextPlanningStep();
   renderPlanning();
 }
 
