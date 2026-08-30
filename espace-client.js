@@ -9,6 +9,8 @@ const loginIdInput = document.getElementById('login-id');
 const loginError = document.getElementById('login-error');
 const clientNameEl = document.getElementById('client-name');
 const clientBadgeEl = document.getElementById('client-badge');
+const clientBadgeMobileEl = document.getElementById('client-badge-mobile');
+const clientAvatarEl = document.getElementById('client-avatar');
 
 let currentClient = null;
 let clientSites = [];
@@ -781,6 +783,7 @@ async function submitRenewalPayment(site) {
 function renderDomaines(sites) {
   if (!domainesListEl) return;
   clientSites = sites || [];
+  renderDashboard();
   if (!clientSites.length) {
     domainesListEl.innerHTML = `
       <div class="placeholder">
@@ -856,6 +859,103 @@ async function loadSites() {
   }
 }
 
+// ── Dashboard (Accueil) ──
+function navigateToSection(label) {
+  const target = Array.from(navItems).find(i => i.dataset.label === label);
+  if (target) target.click();
+}
+
+function renderDashboard() {
+  const statsEl = document.getElementById('dashboard-stats');
+  const actionsEl = document.getElementById('dashboard-actions');
+  if (!statsEl || !actionsEl) return;
+
+  const sitesNeedingRenewal = clientSites.filter(site => {
+    const status = getEffectiveSiteStatus(site);
+    return status === 'Expiré' || status === 'Bientôt expiré';
+  });
+  const unpaidInvoices = clientDocuments.filter(d => d.type === 'invoice' && d.status === 'unpaid');
+  const pendingQuotes = clientDocuments.filter(d => d.type === 'quote' && d.status === 'pending_approval');
+
+  const stats = [
+    { icon: 'fa-globe', value: clientSites.length, label: clientSites.length > 1 ? 'Domaines actifs' : 'Domaine actif', variant: '' },
+    { icon: 'fa-triangle-exclamation', value: sitesNeedingRenewal.length, label: 'À renouveler', variant: sitesNeedingRenewal.length ? 'danger' : '' },
+    { icon: 'fa-file-invoice-dollar', value: unpaidInvoices.length, label: 'Factures non payées', variant: unpaidInvoices.length ? 'alert' : '' },
+    { icon: 'fa-file-contract', value: pendingQuotes.length, label: 'Devis en attente', variant: pendingQuotes.length ? 'alert' : '' }
+  ];
+
+  statsEl.innerHTML = stats.map(s => `
+    <div class="dashboard-stat-card ${s.variant}">
+      <div class="dashboard-stat-icon"><i class="fa-solid ${s.icon}"></i></div>
+      <div>
+        <div class="dashboard-stat-value">${s.value}</div>
+        <div class="dashboard-stat-label">${s.label}</div>
+      </div>
+    </div>
+  `).join('');
+
+  const actions = [];
+  sitesNeedingRenewal.forEach(site => {
+    actions.push({
+      icon: 'fa-globe',
+      title: site.domain || '—',
+      desc: getEffectiveSiteStatus(site) === 'Expiré' ? 'Domaine expiré' : 'Expire bientôt',
+      btnLabel: 'Renouveler',
+      onClick: () => openRenewal(site)
+    });
+  });
+  unpaidInvoices.forEach(doc => {
+    actions.push({
+      icon: 'fa-file-invoice-dollar',
+      title: doc.number || 'Facture',
+      desc: `${formatAmount(doc.total_amount, doc.currency)} à régler`,
+      btnLabel: 'Voir',
+      onClick: () => navigateToSection('Mes factures & Devis')
+    });
+  });
+  pendingQuotes.forEach(doc => {
+    actions.push({
+      icon: 'fa-file-contract',
+      title: doc.number || 'Devis',
+      desc: 'En attente de votre validation',
+      btnLabel: 'Voir',
+      onClick: () => navigateToSection('Mes factures & Devis')
+    });
+  });
+
+  if (!actions.length) {
+    actionsEl.innerHTML = `
+      <div class="dashboard-empty-state">
+        <i class="fa-solid fa-circle-check"></i>
+        <p>Tout est à jour, rien à signaler.</p>
+      </div>`;
+    return;
+  }
+
+  actionsEl.innerHTML = actions.map((a, i) => `
+    <div class="dashboard-action-row">
+      <div class="dashboard-action-icon"><i class="fa-solid ${a.icon}"></i></div>
+      <div class="dashboard-action-content">
+        <div class="dashboard-action-title">${escapeHtml(a.title)}</div>
+        <div class="dashboard-action-desc">${escapeHtml(a.desc)}</div>
+      </div>
+      <button class="dashboard-action-btn" data-action-index="${i}">${a.btnLabel}</button>
+    </div>
+  `).join('');
+
+  actionsEl.querySelectorAll('[data-action-index]').forEach(btn => {
+    const action = actions[parseInt(btn.dataset.actionIndex, 10)];
+    if (action) btn.addEventListener('click', action.onClick);
+  });
+}
+
+document.querySelectorAll('.dashboard-quick-link').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    navigateToSection(link.dataset.quickNav);
+  });
+});
+
 async function showApp(client) {
   loginScreen.classList.add('hidden');
   appContent.classList.remove('hidden');
@@ -863,14 +963,22 @@ async function showApp(client) {
   const name = [client.prenom, client.nom].filter(Boolean).join(' ') || 'Client';
   if (clientNameEl) clientNameEl.textContent = name;
   if (clientBadgeEl) clientBadgeEl.textContent = client.clientId;
+  if (clientBadgeMobileEl) clientBadgeMobileEl.textContent = client.clientId;
+  if (clientAvatarEl) {
+    const initials = [client.prenom, client.nom].filter(Boolean).map(s => s[0]).join('').toUpperCase() || 'K';
+    clientAvatarEl.textContent = initials.slice(0, 2);
+  }
+  const greetingEl = document.getElementById('dashboard-greeting');
+  if (greetingEl) greetingEl.textContent = `Bonjour ${client.prenom || name} 👋`;
 
-  await loadSites();
+  await Promise.all([loadSites(), loadClientDocuments()]);
 
   if (sitesPollingInterval) clearInterval(sitesPollingInterval);
   sitesPollingInterval = setInterval(() => { loadSites(); }, 30000);
 }
 
 function logout() {
+  setMobileMenu(false);
   if (sitesPollingInterval) { clearInterval(sitesPollingInterval); sitesPollingInterval = null; }
   currentClient = null;
   loginScreen.classList.remove('hidden');
@@ -880,6 +988,11 @@ function logout() {
   loginError.textContent = '';
   if (clientNameEl) clientNameEl.textContent = '';
   if (clientBadgeEl) clientBadgeEl.textContent = '';
+  if (clientBadgeMobileEl) clientBadgeMobileEl.textContent = '';
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+  document.querySelector('.nav-item[data-label="Accueil"]')?.classList.add('active');
+  document.querySelectorAll('.section-page').forEach(s => s.classList.remove('active'));
+  document.getElementById('section-accueil')?.classList.add('active');
 }
 
 document.getElementById('logout-btn').addEventListener('click', logout);
@@ -890,7 +1003,34 @@ if (navLogout) navLogout.addEventListener('click', e => { e.preventDefault(); lo
 // Navigation
 const navItems = document.querySelectorAll('.nav-item');
 const sections = document.querySelectorAll('.section-page');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+const clientSidebar = document.getElementById('client-sidebar');
+const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+
+function setMobileMenu(open) {
+  if (!mobileMenuBtn || !clientSidebar || !sidebarBackdrop) return;
+  clientSidebar.classList.toggle('is-open', open);
+  sidebarBackdrop.classList.toggle('is-visible', open);
+  mobileMenuBtn.setAttribute('aria-expanded', String(open));
+  mobileMenuBtn.setAttribute('aria-label', open ? 'Fermer le menu' : 'Ouvrir le menu');
+  mobileMenuBtn.querySelector('i')?.classList.toggle('fa-bars', !open);
+  mobileMenuBtn.querySelector('i')?.classList.toggle('fa-xmark', open);
+  document.body.style.overflow = open ? 'hidden' : '';
+}
+
+if (mobileMenuBtn) {
+  mobileMenuBtn.addEventListener('click', () => setMobileMenu(!clientSidebar.classList.contains('is-open')));
+}
+if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', () => setMobileMenu(false));
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') setMobileMenu(false);
+});
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 768) setMobileMenu(false);
+});
+
 const sectionMap = [
+  'section-accueil',
   'section-domaines',
   'section-factures',
   'section-support'
@@ -910,8 +1050,10 @@ navItems.forEach((item, index) => {
     item.classList.add('active');
     const target = document.getElementById(sectionId);
     if (target) target.classList.add('active');
+    setMobileMenu(false);
 
     if (sectionId === 'section-factures' && currentClient) loadClientDocuments();
+    if (sectionId === 'section-accueil') renderDashboard();
   });
 });
 
@@ -995,6 +1137,7 @@ function renderDocumentCard(doc) {
 
 function renderDocuments() {
   if (!quotesList || !invoicesList) return;
+  renderDashboard();
   const quotes = clientDocuments.filter(d => d.type === 'quote');
   const invoices = clientDocuments.filter(d => d.type === 'invoice');
   if (quotesCount) quotesCount.textContent = quotes.length;
