@@ -29,7 +29,23 @@
       --radius-sm: 10px;
       --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.05);
       --shadow-hover: 0 4px 8px rgba(0,0,0,0.04), 0 12px 28px rgba(0,0,0,0.08);
+      --bg-translucent: rgba(255,255,255,0.72);
       --sidebar-width: 260px;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #1c1c1e;
+      --page-bg: #121214;
+      --panel: #232326;
+      --text: #f5f5f7;
+      --muted: #9a9aa0;
+      --accent: #409cff;
+      --accent-soft: rgba(64,156,255,0.16);
+      --primary: #409cff;
+      --border: #3a3a3d;
+      --shadow-card: 0 1px 2px rgba(0,0,0,0.3), 0 6px 20px rgba(0,0,0,0.35);
+      --shadow-hover: 0 4px 8px rgba(0,0,0,0.3), 0 12px 28px rgba(0,0,0,0.45);
+      --bg-translucent: rgba(28,28,30,0.72);
     }
 
     * {
@@ -355,7 +371,7 @@
       align-items: center;
       justify-content: flex-end;
       padding: 0 40px;
-      background-color: rgba(255,255,255,0.72);
+      background-color: var(--bg-translucent);
       backdrop-filter: blur(20px) saturate(180%);
       -webkit-backdrop-filter: blur(20px) saturate(180%);
       border-bottom: 1px solid var(--border);
@@ -1033,6 +1049,166 @@
     @media (max-width: 560px) {
       .dashboard-stats { grid-template-columns: 1fr; }
       .dashboard-greeting { font-size: 1.25rem; }
+    }
+
+    /* ── Paramètres ── */
+    .params-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .params-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+      padding: 24px;
+    }
+
+    .params-card-wide {
+      grid-column: 1 / -1;
+    }
+
+    .params-card-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .params-card-title i {
+      color: var(--accent);
+      font-size: 0.9rem;
+    }
+
+    .params-card-desc {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .params-subtitle {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text);
+      margin: 24px 0 12px;
+    }
+
+    .params-security-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .theme-switch {
+      display: flex;
+      gap: 8px;
+      background-color: var(--page-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 4px;
+    }
+
+    .theme-option {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: none;
+      border: none;
+      border-radius: calc(var(--radius-sm) - 2px);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .theme-option:hover {
+      color: var(--text);
+    }
+
+    .theme-option.active {
+      background-color: var(--bg);
+      color: var(--text);
+      box-shadow: var(--shadow-card);
+    }
+
+    .history-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .history-badge.login {
+      background: rgba(34,197,94,0.12);
+      color: #16a34a;
+    }
+
+    .history-badge.logout {
+      background: rgba(239,68,68,0.1);
+      color: #dc2626;
+    }
+
+    .maintenance-settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .maintenance-settings-col {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+    }
+
+    .maintenance-settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+
+    .btn-secondary-sm {
+      margin-top: 12px;
+      padding: 9px 16px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color 0.2s ease, background-color 0.2s ease;
+    }
+
+    .btn-secondary-sm:hover {
+      border-color: var(--accent);
+      background-color: var(--accent-soft);
+    }
+
+    @media (max-width: 900px) {
+      .params-grid { grid-template-columns: 1fr; }
+      .maintenance-settings-grid { grid-template-columns: 1fr; }
     }
 
     .section-page {
@@ -3883,6 +4059,18 @@
       .sim-rent-card-wrapper { grid-column: span 1; }
     }
   </style>
+  <script>
+    (function() {
+      try {
+        var pref = localStorage.getItem('themePreference') || 'light';
+        var effective = pref;
+        if (pref === 'auto') {
+          effective = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        if (effective === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <div class="maintenance-overlay hidden" id="maintenance-screen-intranet">
@@ -3985,23 +4173,6 @@
         </a>
       </nav>
       <div class="sidebar-footer">
-        <div class="maintenance-box" id="maintenance-box" style="display:none;">
-          <div class="maintenance-box-title"><i class="fa-solid fa-screwdriver-wrench"></i> Maintenance</div>
-          <div class="maintenance-row">
-            <span class="maintenance-row-label">Espace client</span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="maintenance-toggle-client">
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="maintenance-row">
-            <span class="maintenance-row-label">Intranet</span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="maintenance-toggle-intranet">
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-        </div>
         <a href="#" class="nav-item" data-label="Paramètres">
           <i class="fa-solid fa-gear"></i>
           <span class="nav-label">Paramètres</span>
@@ -4798,8 +4969,180 @@
           </div>
         </section>
 
+        <!-- Paramètres -->
+        <section class="section-page" id="section-parametres">
+          <div class="section-loader" id="loader-parametres"><div class="loader"></div></div>
+          <div class="section-content" id="content-parametres">
+          <div class="section-header">
+            <div class="section-header-left">
+              <h1>Paramètres</h1>
+            </div>
+          </div>
+
+          <div class="params-grid">
+            <div class="params-card">
+              <div class="params-card-title"><i class="fa-solid fa-id-badge"></i> Compte utilisateur</div>
+              <div class="detail-field">
+                <div class="detail-field-left">
+                  <span class="detail-field-label">Prénom</span>
+                  <span class="detail-field-value" id="param-prenom">—</span>
+                </div>
+              </div>
+              <div class="detail-field">
+                <div class="detail-field-left">
+                  <span class="detail-field-label">Nom</span>
+                  <span class="detail-field-value" id="param-nom">—</span>
+                </div>
+              </div>
+              <div class="detail-field">
+                <div class="detail-field-left">
+                  <span class="detail-field-label">Adresse email</span>
+                  <span class="detail-field-value" id="param-email">—</span>
+                </div>
+              </div>
+              <div class="detail-field">
+                <div class="detail-field-left">
+                  <span class="detail-field-label">Rôle</span>
+                  <span class="detail-field-value" id="param-role">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="params-card">
+              <div class="params-card-title"><i class="fa-solid fa-palette"></i> Préférences d'affichage</div>
+              <p class="params-card-desc">Choisissez l'apparence de votre intranet. Le mode dynamique suit les réglages de votre appareil.</p>
+              <div class="theme-switch" id="theme-switch">
+                <button type="button" class="theme-option" data-theme-value="light"><i class="fa-solid fa-sun"></i> Clair</button>
+                <button type="button" class="theme-option" data-theme-value="dark"><i class="fa-solid fa-moon"></i> Sombre</button>
+                <button type="button" class="theme-option" data-theme-value="auto"><i class="fa-solid fa-circle-half-stroke"></i> Dynamique</button>
+              </div>
+            </div>
+
+            <div class="params-card params-card-wide">
+              <div class="params-card-title"><i class="fa-solid fa-shield-halved"></i> Sécurité et accès</div>
+              <div class="params-security-row">
+                <p class="params-card-desc" style="margin-bottom:0;">Modifiez votre mot de passe régulièrement pour sécuriser votre compte.</p>
+                <button type="button" class="btn-create" id="btn-change-password" style="width:auto;">
+                  <i class="fa-solid fa-key"></i> Changer mon mot de passe
+                </button>
+              </div>
+              <div class="params-subtitle">Historique des connexions</div>
+              <div class="table-wrapper">
+                <table class="data-table" id="login-history-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Action</th>
+                      <th>Appareil</th>
+                      <th>Localisation</th>
+                    </tr>
+                  </thead>
+                  <tbody id="login-history-body">
+                    <tr><td colspan="4" class="empty">Chargement...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="params-card params-card-wide" id="maintenance-box" style="display:none;">
+              <div class="params-card-title"><i class="fa-solid fa-screwdriver-wrench"></i> Maintenance</div>
+              <p class="params-card-desc">Activez immédiatement une maintenance ou planifiez une plage horaire pour l'espace client et l'intranet.</p>
+
+              <div class="maintenance-settings-grid">
+                <div class="maintenance-settings-col">
+                  <div class="maintenance-settings-header">
+                    <span>Espace client</span>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="maintenance-toggle-client">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="maintenance-schedule-client-start">Début planifié</label>
+                      <input type="datetime-local" id="maintenance-schedule-client-start">
+                    </div>
+                    <div class="form-group">
+                      <label for="maintenance-schedule-client-end">Fin planifiée</label>
+                      <input type="datetime-local" id="maintenance-schedule-client-end">
+                    </div>
+                  </div>
+                  <button type="button" class="btn-secondary-sm" id="btn-save-schedule-client">Enregistrer la planification</button>
+                </div>
+
+                <div class="maintenance-settings-col">
+                  <div class="maintenance-settings-header">
+                    <span>Intranet</span>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="maintenance-toggle-intranet">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="maintenance-schedule-intranet-start">Début planifié</label>
+                      <input type="datetime-local" id="maintenance-schedule-intranet-start">
+                    </div>
+                    <div class="form-group">
+                      <label for="maintenance-schedule-intranet-end">Fin planifiée</label>
+                      <input type="datetime-local" id="maintenance-schedule-intranet-end">
+                    </div>
+                  </div>
+                  <button type="button" class="btn-secondary-sm" id="btn-save-schedule-intranet">Enregistrer la planification</button>
+                </div>
+              </div>
+
+              <div class="params-subtitle">Journal des mises à jour</div>
+              <div class="table-wrapper">
+                <table class="data-table" id="maintenance-logs-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Auteur</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="maintenance-logs-body">
+                    <tr><td colspan="3" class="empty">Chargement...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          </div>
+        </section>
+
       </div>
     </main>
+  </div>
+
+  <!-- Modal - Changer le mot de passe -->
+  <div class="modal-overlay" id="password-modal">
+    <div class="modal-card" style="max-width:420px;">
+      <div class="modal-header">
+        <h2>Changer mon mot de passe</h2>
+        <button class="modal-close" id="password-modal-close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form class="modal-form" id="form-password">
+        <div class="form-group">
+          <label for="password-current">Mot de passe actuel</label>
+          <input type="password" id="password-current" required />
+        </div>
+        <div class="form-group">
+          <label for="password-new">Nouveau mot de passe</label>
+          <input type="password" id="password-new" required minlength="8" />
+        </div>
+        <div class="form-group">
+          <label for="password-confirm">Confirmer le nouveau mot de passe</label>
+          <input type="password" id="password-confirm" required minlength="8" />
+        </div>
+        <p class="modal-error" id="password-modal-error"></p>
+        <div class="modal-actions">
+          <span></span>
+          <button type="submit" class="btn-submit" id="password-modal-submit">Mettre à jour</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- Modal - Créer/modifier un membre -->

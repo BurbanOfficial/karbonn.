@@ -11,6 +11,57 @@ const userAvatarEl = document.getElementById('user-avatar');
 let currentUserProfile = null;
 let currentUserRole = null;
 
+// ── Thème (clair / sombre / dynamique) ──
+const themeSwitch = document.getElementById('theme-switch');
+let _systemThemeQuery = null;
+
+function getEffectiveTheme(pref) {
+  if (pref === 'auto') {
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return pref;
+}
+
+function applyTheme(pref) {
+  const effective = getEffectiveTheme(pref);
+  document.documentElement.setAttribute('data-theme', effective === 'dark' ? 'dark' : 'light');
+  localStorage.setItem('themePreference', pref);
+
+  if (themeSwitch) {
+    themeSwitch.querySelectorAll('.theme-option').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.themeValue === pref);
+    });
+  }
+
+  if (_systemThemeQuery) {
+    _systemThemeQuery.onchange = null;
+    _systemThemeQuery = null;
+  }
+  if (pref === 'auto' && window.matchMedia) {
+    _systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    _systemThemeQuery.onchange = () => applyTheme('auto');
+  }
+}
+
+async function setThemePreference(pref) {
+  applyTheme(pref);
+  if (auth.currentUser) {
+    try {
+      await db.collection('users').doc(auth.currentUser.uid).update({ themePreference: pref });
+    } catch (err) {
+      console.warn('[Theme] Failed to save preference:', err);
+    }
+  }
+}
+
+if (themeSwitch) {
+  themeSwitch.querySelectorAll('.theme-option').forEach(btn => {
+    btn.addEventListener('click', () => setThemePreference(btn.dataset.themeValue));
+  });
+}
+
+applyTheme(localStorage.getItem('themePreference') || 'light');
+
 // ── Maintenance mode ──
 const maintenanceBox = document.getElementById('maintenance-box');
 const maintenanceToggleClient = document.getElementById('maintenance-toggle-client');
@@ -63,6 +114,9 @@ async function updateMaintenanceSetting(key, value) {
   if (!isManager()) return;
   try {
     await db.collection('settings').doc('maintenance').set({ [key]: value }, { merge: true });
+    const surface = key === 'clientSpaceEnabled' ? 'Espace client' : 'Intranet';
+    logMaintenanceAction(surface, value ? 'Maintenance activée manuellement' : 'Maintenance désactivée manuellement');
+    if (document.getElementById('section-parametres')?.classList.contains('active')) loadMaintenanceLogs();
   } catch (err) {
     console.error('[Maintenance] Failed to update setting:', err);
     showToast('Erreur lors de la mise à jour de la maintenance.', 'error');
@@ -289,6 +343,7 @@ function showApp(user, profile) {
   currentUserProfile = { uid: user.uid, ...(profile || {}) };
   currentUserRole = role;
   applyMaintenanceUI();
+  applyTheme(profile?.themePreference || localStorage.getItem('themePreference') || 'light');
 
   if (userNameEl) userNameEl.textContent = name;
   if (userRoleEl) userRoleEl.textContent = role;
@@ -789,7 +844,8 @@ loginForm.addEventListener('submit', async e => {
     loginSubmitBtn.disabled = true;
     loginSubmitBtn.textContent = 'Connexion…';
     try {
-      await auth.signInWithEmailAndPassword(email, password);
+      const cred = await auth.signInWithEmailAndPassword(email, password);
+      logSession(cred.user.uid, 'login');
     } catch (err) {
       console.error(err);
       let message = 'Échec de la connexion.';
@@ -838,6 +894,7 @@ loginForm.addEventListener('submit', async e => {
 });
 
 document.getElementById('logout-btn').addEventListener('click', async () => {
+  if (auth.currentUser) await logSession(auth.currentUser.uid, 'logout');
   await auth.signOut();
   _setLoginStep('email');
 });
@@ -1552,6 +1609,11 @@ navItems.forEach((item, index) => {
     // Load simulations when opening the section
     if (sectionId === 'section-simulations') {
       loadSimulations();
+    }
+
+    // Load account/security/maintenance data when opening the settings section
+    if (sectionId === 'section-parametres') {
+      renderParametres();
     }
 
   });
@@ -4377,6 +4439,253 @@ const roleClasses = {
 function isManager() {
   return currentUserRole === 'Manager';
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Paramètres — Compte, préférences, sécurité, maintenance
+// ═══════════════════════════════════════════════════════════════
+
+function parseUserAgent(ua) {
+  ua = ua || '';
+  let browser = 'Navigateur inconnu';
+  if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/OPR\//.test(ua)) browser = 'Opera';
+  else if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) browser = 'Chrome';
+  else if (/Firefox\//.test(ua)) browser = 'Firefox';
+  else if (/Safari\//.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
+
+  let os = 'OS inconnu';
+  if (/Windows/.test(ua)) os = 'Windows';
+  else if (/Mac OS X/.test(ua)) os = 'macOS';
+  else if (/Android/.test(ua)) os = 'Android';
+  else if (/iPhone|iPad|iPod/.test(ua)) os = 'iOS';
+  else if (/Linux/.test(ua)) os = 'Linux';
+
+  const deviceType = /Mobi|Android|iPhone/.test(ua) ? 'Mobile' : (/iPad|Tablet/.test(ua) ? 'Tablette' : 'Ordinateur');
+  const icon = deviceType === 'Mobile' ? 'fa-mobile-screen' : (deviceType === 'Tablette' ? 'fa-tablet-screen-button' : 'fa-desktop');
+
+  return { browser, os, deviceType, icon, label: `${browser} · ${os} (${deviceType})` };
+}
+
+async function getApproxLocation() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch('https://ipwho.is/', { signal: controller.signal });
+    clearTimeout(timeout);
+    const data = await res.json();
+    if (data && data.success !== false) {
+      return [data.city, data.country].filter(Boolean).join(', ') || null;
+    }
+  } catch (err) {
+    console.warn('[Sécurité] Localisation indisponible:', err.message);
+  }
+  return null;
+}
+
+async function logSession(uid, type) {
+  try {
+    const device = parseUserAgent(navigator.userAgent);
+    const location = await getApproxLocation();
+    await db.collection('users').doc(uid).collection('sessions').add({
+      type, // 'login' | 'logout'
+      device: device.label,
+      deviceIcon: device.icon,
+      location: location || 'Localisation indisponible',
+      userAgent: navigator.userAgent,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (err) {
+    console.warn('[Sécurité] Échec de l\'enregistrement de la session:', err.message);
+  }
+}
+
+async function loadLoginHistory() {
+  const tbody = document.getElementById('login-history-body');
+  if (!tbody || !auth.currentUser) return;
+  tbody.innerHTML = '<tr><td colspan="4" class="empty">Chargement...</td></tr>';
+  try {
+    const snapshot = await db.collection('users').doc(auth.currentUser.uid)
+      .collection('sessions').orderBy('createdAt', 'desc').limit(20).get();
+    if (snapshot.empty) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">Aucune connexion enregistrée.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = snapshot.docs.map(doc => {
+      const d = doc.data();
+      const date = d.createdAt ? new Date(d.createdAt.seconds * 1000).toLocaleString('fr-FR') : '—';
+      const isLogin = d.type === 'login';
+      return `
+        <tr>
+          <td>${date}</td>
+          <td><span class="history-badge ${isLogin ? 'login' : 'logout'}"><i class="fa-solid ${isLogin ? 'fa-right-to-bracket' : 'fa-right-from-bracket'}"></i> ${isLogin ? 'Connexion' : 'Déconnexion'}</span></td>
+          <td><i class="fa-solid ${d.deviceIcon || 'fa-desktop'}"></i> ${escapeHtml(d.device || '—')}</td>
+          <td>${escapeHtml(d.location || '—')}</td>
+        </tr>`;
+    }).join('');
+  } catch (err) {
+    console.error('[Sécurité] Erreur chargement historique:', err);
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Erreur lors du chargement.</td></tr>';
+  }
+}
+
+function renderAccountFields() {
+  const p = currentUserProfile || {};
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value || '—'; };
+  set('param-prenom', p.prenom);
+  set('param-nom', p.nom);
+  set('param-email', p.email || auth.currentUser?.email);
+  set('param-role', p.role?.label || p.role || currentUserRole);
+}
+
+function renderParametres() {
+  showSection('parametres');
+  renderAccountFields();
+  loadLoginHistory();
+  if (isManager()) {
+    loadMaintenanceLogs();
+    loadMaintenanceSchedules();
+  }
+}
+
+// ── Changement de mot de passe ──
+const passwordModal = document.getElementById('password-modal');
+const passwordModalClose = document.getElementById('password-modal-close');
+const formPassword = document.getElementById('form-password');
+const passwordModalError = document.getElementById('password-modal-error');
+const btnChangePassword = document.getElementById('btn-change-password');
+
+if (btnChangePassword) {
+  btnChangePassword.addEventListener('click', () => {
+    formPassword.reset();
+    passwordModalError.textContent = '';
+    passwordModal.classList.add('visible');
+  });
+}
+if (passwordModalClose) {
+  passwordModalClose.addEventListener('click', () => passwordModal.classList.remove('visible'));
+}
+
+if (formPassword) {
+  formPassword.addEventListener('submit', async e => {
+    e.preventDefault();
+    passwordModalError.textContent = '';
+    const current = document.getElementById('password-current').value;
+    const next = document.getElementById('password-new').value;
+    const confirm = document.getElementById('password-confirm').value;
+
+    if (next.length < 8) { passwordModalError.textContent = 'Le nouveau mot de passe doit contenir au moins 8 caractères.'; return; }
+    if (next !== confirm) { passwordModalError.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+
+    const submitBtn = document.getElementById('password-modal-submit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Mise à jour…';
+    try {
+      const user = auth.currentUser;
+      const credential = firebase.auth.EmailAuthProvider.credential(user.email, current);
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(next);
+      passwordModal.classList.remove('visible');
+      showToast('Mot de passe mis à jour avec succès.', 'success');
+    } catch (err) {
+      console.error(err);
+      let message = 'Erreur lors de la mise à jour du mot de passe.';
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') message = 'Mot de passe actuel incorrect.';
+      if (err.code === 'auth/weak-password') message = 'Le nouveau mot de passe est trop faible.';
+      passwordModalError.textContent = message;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Mettre à jour';
+    }
+  });
+}
+
+// ── Maintenance : planification et journal ──
+async function saveMaintenanceSchedule(surface) {
+  if (!isManager()) return;
+  const startInput = document.getElementById(`maintenance-schedule-${surface}-start`);
+  const endInput = document.getElementById(`maintenance-schedule-${surface}-end`);
+  const start = startInput?.value || null;
+  const end = endInput?.value || null;
+
+  if (start && end && new Date(start) >= new Date(end)) {
+    showToast('La date de fin doit être postérieure à la date de début.', 'error');
+    return;
+  }
+
+  const field = surface === 'client' ? 'clientSpaceSchedule' : 'intranetSchedule';
+  try {
+    await db.collection('settings').doc('maintenance').set({ [field]: { start, end } }, { merge: true });
+    await logMaintenanceAction(surface === 'client' ? 'Espace client' : 'Intranet', `Planification enregistrée${start ? ` (${new Date(start).toLocaleString('fr-FR')} → ${end ? new Date(end).toLocaleString('fr-FR') : '—'})` : ' (supprimée)'}`);
+    showToast('Planification enregistrée.', 'success');
+    loadMaintenanceLogs();
+  } catch (err) {
+    console.error(err);
+    showToast('Erreur lors de l\'enregistrement de la planification.', 'error');
+  }
+}
+
+async function loadMaintenanceSchedules() {
+  try {
+    const doc = await db.collection('settings').doc('maintenance').get();
+    const data = doc.exists ? doc.data() : {};
+    const toLocalInput = iso => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+    const clientStart = document.getElementById('maintenance-schedule-client-start');
+    const clientEnd = document.getElementById('maintenance-schedule-client-end');
+    const intranetStart = document.getElementById('maintenance-schedule-intranet-start');
+    const intranetEnd = document.getElementById('maintenance-schedule-intranet-end');
+    if (clientStart) clientStart.value = toLocalInput(data.clientSpaceSchedule?.start);
+    if (clientEnd) clientEnd.value = toLocalInput(data.clientSpaceSchedule?.end);
+    if (intranetStart) intranetStart.value = toLocalInput(data.intranetSchedule?.start);
+    if (intranetEnd) intranetEnd.value = toLocalInput(data.intranetSchedule?.end);
+  } catch (err) {
+    console.warn('[Maintenance] Échec du chargement des plages planifiées:', err.message);
+  }
+}
+
+async function logMaintenanceAction(surface, action) {
+  try {
+    const name = [currentUserProfile?.prenom, currentUserProfile?.nom].filter(Boolean).join(' ') || auth.currentUser?.email || 'Inconnu';
+    await db.collection('maintenanceLogs').add({
+      author: name,
+      surface,
+      action,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (err) {
+    console.warn('[Maintenance] Échec de l\'enregistrement du journal:', err.message);
+  }
+}
+
+async function loadMaintenanceLogs() {
+  const tbody = document.getElementById('maintenance-logs-body');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="3" class="empty">Chargement...</td></tr>';
+  try {
+    const snapshot = await db.collection('maintenanceLogs').orderBy('createdAt', 'desc').limit(20).get();
+    if (snapshot.empty) {
+      tbody.innerHTML = '<tr><td colspan="3" class="empty">Aucune action enregistrée.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = snapshot.docs.map(doc => {
+      const d = doc.data();
+      const date = d.createdAt ? new Date(d.createdAt.seconds * 1000).toLocaleString('fr-FR') : '—';
+      return `<tr><td>${date}</td><td>${escapeHtml(d.author || '—')}</td><td>${escapeHtml(d.surface ? `[${d.surface}] ` : '')}${escapeHtml(d.action || '—')}</td></tr>`;
+    }).join('');
+  } catch (err) {
+    console.error('[Maintenance] Erreur chargement du journal:', err);
+    tbody.innerHTML = '<tr><td colspan="3" class="empty">Erreur lors du chargement.</td></tr>';
+  }
+}
+
+const btnSaveScheduleClient = document.getElementById('btn-save-schedule-client');
+const btnSaveScheduleIntranet = document.getElementById('btn-save-schedule-intranet');
+if (btnSaveScheduleClient) btnSaveScheduleClient.addEventListener('click', () => saveMaintenanceSchedule('client'));
+if (btnSaveScheduleIntranet) btnSaveScheduleIntranet.addEventListener('click', () => saveMaintenanceSchedule('intranet'));
 
 const FOLDER_ROLE_PERMISSIONS = {
   '01 - Administration': ['Manager'],

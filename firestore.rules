@@ -23,8 +23,17 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null;
       allow create: if isOwner(userId) || isManager();
-      allow update: if isManager();
+      // Un utilisateur peut modifier certains de ses propres champs (préférences, première connexion) ; le reste est réservé aux managers
+      allow update: if isManager() ||
+        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['themePreference', 'firstLogin']));
       allow delete: if isManager();
+
+      // Historique des connexions/déconnexions de l'utilisateur
+      match /sessions/{sessionId} {
+        allow read: if isOwner(userId) || isManager();
+        allow create: if isOwner(userId);
+        allow update, delete: if false;
+      }
     }
 
     // Collection roles
@@ -74,6 +83,13 @@ service cloud.firestore {
     match /settings/maintenance {
       allow read: if true;
       allow create, update, delete: if isManager();
+    }
+
+    // Journal des actions de maintenance (activation, désactivation, planification)
+    match /maintenanceLogs/{logId} {
+      allow read: if isManager();
+      allow create: if isManager();
+      allow update, delete: if false;
     }
 
     // Collection abonnements (subscription plans)

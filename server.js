@@ -1048,6 +1048,54 @@ async function sendReminderEmail(site, type, daysLeft) {
   }
 }
 
+// Applique automatiquement les plages de maintenance planifiées depuis les paramètres de l'intranet
+async function processScheduledMaintenance() {
+  try {
+    const ref = db.collection('settings').doc('maintenance');
+    const doc = await ref.get();
+    if (!doc.exists) return;
+    const data = doc.data() || {};
+    const now = new Date();
+    const updates = {};
+    const logs = [];
+
+    const surfaces = [
+      { key: 'clientSpaceEnabled', schedule: data.clientSpaceSchedule, label: 'Espace client' },
+      { key: 'intranetEnabled', schedule: data.intranetSchedule, label: 'Intranet' }
+    ];
+
+    for (const surface of surfaces) {
+      const { start, end } = surface.schedule || {};
+      if (!start || !end) continue;
+      const withinWindow = now >= new Date(start) && now <= new Date(end);
+      const currentlyEnabled = data[surface.key] === true;
+      if (withinWindow && !currentlyEnabled) {
+        updates[surface.key] = true;
+        logs.push({ surface: surface.label, action: 'Maintenance activée automatiquement (planification)' });
+      } else if (!withinWindow && currentlyEnabled && data[`${surface.key}AutoStarted`]) {
+        updates[surface.key] = false;
+        logs.push({ surface: surface.label, action: 'Maintenance désactivée automatiquement (fin de planification)' });
+      }
+      if (updates[surface.key] === true) updates[`${surface.key}AutoStarted`] = true;
+      if (updates[surface.key] === false) updates[`${surface.key}AutoStarted`] = false;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await ref.set(updates, { merge: true });
+      for (const log of logs) {
+        await db.collection('maintenanceLogs').add({
+          author: 'Automatisation',
+          surface: log.surface,
+          action: log.action,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[Maintenance] Erreur lors de la vérification des plages planifiées:', err.message);
+  }
+}
+
 async function processRenewalReminders() {
   console.log('[Reminders] Running daily renewal reminder check');
   try {
@@ -2091,6 +2139,9 @@ app.listen(PORT, () => {
   // Daily renewal reminder check
   setTimeout(() => { processRenewalReminders(); }, 60 * 1000);
   setInterval(() => { processRenewalReminders(); }, 24 * 60 * 60 * 1000);
+
+  // Scheduled maintenance windows (client space / intranet)
+  setInterval(() => { processScheduledMaintenance(); }, 60 * 1000);
 
   // Auto-sync Bunq transactions every 5 minutes
   if (bunq.isConfigured()) {
