@@ -3091,7 +3091,8 @@ const defaultFolderStructure = {
     'Arborescence': { required: true }
   },
   '03 - Design': {
-    'Maquette': { required: true },
+    'Maquette 1': { required: true },
+    'Maquette 2': { required: true },
     'Charte graphique': { required: true },
     'Assets': { required: true }
   },

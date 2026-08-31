@@ -337,7 +337,7 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
 const PROJECT_FOLDER_STRUCTURE = {
   '01 - Administration': ['Contrat', 'Devis'],
   '02 - Analyse': ['Cahier des charges', 'Arborescence'],
-  '03 - Design': ['Maquette', 'Charte graphique', 'Assets'],
+  '03 - Design': ['Maquette 1', 'Maquette 2', 'Charte graphique', 'Assets'],
   '04 - Développement': ['Site Web'],
   '05 - Tests': ['Rapport QA'],
   '06 - Livraison': ['Documentation', 'Identifiants', 'Guide utilisateur']
