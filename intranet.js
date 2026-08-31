@@ -3692,8 +3692,14 @@ function renderFileTree(files) {
 
     const deliveryDateDisplay = deliveryDate ? new Date(deliveryDate).toLocaleDateString('fr-FR') : '';
 
+    const isDeveloppementFolder = folder === '04 - Développement';
+    const hasPreviewUrl = !!currentPageProjet.previewUrl;
+
     const folderActions = isManager() ? `
       <div class="tree-node-actions">
+        ${isDeveloppementFolder ? `<button onclick="openFolderUrlModal()" title="${hasPreviewUrl ? 'Modifier le lien du site' : 'Ajouter le lien du site'}">
+          <i class="fa-solid fa-link"></i>
+        </button>` : ''}
         <button onclick="openFolderDateModal('${folder}')" title="Définir la date de livraison">
           <i class="fa-solid fa-calendar"></i>
         </button>
@@ -3704,6 +3710,7 @@ function renderFileTree(files) {
       <div class="tree-node-content">
         <i class="fa-solid ${hasFiles ? 'fa-folder-open' : 'fa-folder'}"></i>
         <span>${folder}</span>
+        ${isDeveloppementFolder && hasPreviewUrl ? `<a class="folder-date" href="${escapeHtml(currentPageProjet.previewUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation();" title="Ouvrir le lien du site"><i class="fa-solid fa-up-right-from-square"></i> Lien du site</a>` : ''}
         ${deliveryDateDisplay ? `<span class="folder-date">${deliveryDateDisplay}</span>` : ''}
         ${folderActions}
       </div>
@@ -3952,6 +3959,56 @@ folderDateSubmit.addEventListener('click', async () => {
     folderDateError.textContent = 'Erreur lors de l\'enregistrement de la date.';
   }
 });
+
+// Lien du site (dossier "04 - Développement") — visible côté client à partir de cette étape
+const folderUrlModal = document.getElementById('folder-url-modal');
+const folderUrlClose = document.getElementById('folder-url-close');
+const folderUrlInput = document.getElementById('folder-url-input');
+const folderUrlSubmit = document.getElementById('folder-url-submit');
+const folderUrlError = document.getElementById('folder-url-error');
+
+function openFolderUrlModal() {
+  if (!isManager()) {
+    showToast('Action réservée aux managers.', 'error');
+    return;
+  }
+  folderUrlInput.value = currentPageProjet.previewUrl || '';
+  folderUrlError.textContent = '';
+  folderUrlModal.classList.add('visible');
+}
+
+if (folderUrlClose) folderUrlClose.addEventListener('click', () => folderUrlModal.classList.remove('visible'));
+if (folderUrlModal) {
+  folderUrlModal.addEventListener('click', e => {
+    if (e.target === folderUrlModal) folderUrlModal.classList.remove('visible');
+  });
+}
+
+if (folderUrlSubmit) {
+  folderUrlSubmit.addEventListener('click', async () => {
+    if (!isManager()) {
+      showToast('Action réservée aux managers.', 'error');
+      return;
+    }
+    const url = folderUrlInput.value.trim();
+    if (url) {
+      try { new URL(url); } catch (e) {
+        folderUrlError.textContent = 'Veuillez saisir une URL valide (ex : https://exemple.com).';
+        return;
+      }
+    }
+    try {
+      await db.collection('projets').doc(currentPageProjet.id).update({ previewUrl: url || firebase.firestore.FieldValue.delete() });
+      currentPageProjet.previewUrl = url || null;
+      renderProjetPageFiles(currentPageProjet);
+      showToast(url ? 'Lien du site enregistré.' : 'Lien du site supprimé.', 'success');
+      folderUrlModal.classList.remove('visible');
+    } catch (err) {
+      console.error(err);
+      folderUrlError.textContent = "Erreur lors de l'enregistrement du lien.";
+    }
+  });
+}
 
 // Planning event listeners
 if (planningPrevWeek) {

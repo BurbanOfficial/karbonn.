@@ -333,6 +333,75 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
   }
 });
 
+// Structure des dossiers/fichiers requis par étape de projet (doit rester alignée avec intranet.js)
+const PROJECT_FOLDER_STRUCTURE = {
+  '01 - Administration': ['Contrat', 'Devis'],
+  '02 - Analyse': ['Cahier des charges', 'Arborescence'],
+  '03 - Design': ['Maquette', 'Charte graphique', 'Assets'],
+  '04 - Développement': ['Site Web'],
+  '05 - Tests': ['Rapport QA'],
+  '06 - Livraison': ['Documentation', 'Identifiants', 'Guide utilisateur']
+};
+const PROJECT_STEPS = Object.keys(PROJECT_FOLDER_STRUCTURE);
+const PROJECT_DEV_STEP_INDEX = PROJECT_STEPS.indexOf('04 - Développement');
+
+function computeProjectSteps(projetData) {
+  const files = projetData.files || {};
+  const uploadedByFolder = {};
+  Object.values(files).forEach(f => {
+    if (!f || !f.folder || !f.filename) return;
+    const baseName = f.filename.includes('.') ? f.filename.substring(0, f.filename.lastIndexOf('.')) : f.filename;
+    if (!uploadedByFolder[f.folder]) uploadedByFolder[f.folder] = new Set();
+    uploadedByFolder[f.folder].add(baseName);
+  });
+
+  const steps = PROJECT_STEPS.map(folder => {
+    const required = PROJECT_FOLDER_STRUCTURE[folder];
+    const uploaded = uploadedByFolder[folder] || new Set();
+    const completed = required.every(name => uploaded.has(name));
+    return { name: folder, completed };
+  });
+
+  let currentStepIndex = steps.findIndex(s => !s.completed);
+  if (currentStepIndex === -1 || projetData.statut === 'Projet livré') currentStepIndex = steps.length;
+  if (projetData.statut === 'Projet livré') steps.forEach(s => { s.completed = true; });
+
+  return { steps, currentStepIndex };
+}
+
+// Public endpoint for client space: list projects (with progress) linked to a client by its clientId
+app.get('/api/public/client/:clientId/projets', async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const clientSnap = await db.collection('clients').where('clientId', '==', clientId).limit(1).get();
+    if (clientSnap.empty) return res.status(404).json({ error: 'Client not found' });
+
+    const clientDoc = clientSnap.docs[0];
+    const projetsSnap = await db.collection('projets').where('clientId', '==', clientDoc.id).get();
+
+    const projets = projetsSnap.docs.map(doc => {
+      const data = doc.data();
+      const { steps, currentStepIndex } = computeProjectSteps(data);
+      const previewUrlVisible = currentStepIndex >= PROJECT_DEV_STEP_INDEX && !!data.previewUrl;
+      return {
+        id: doc.id,
+        nom: data.nom || 'Projet',
+        statut: data.statut || null,
+        dateLivraison: data.dateLivraison || null,
+        createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toISOString() : data.createdAt) : null,
+        steps,
+        currentStepIndex,
+        previewUrl: previewUrlVisible ? data.previewUrl : null
+      };
+    });
+
+    res.json({ projets });
+  } catch (err) {
+    console.error('[Public API] Error fetching client projets:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Public endpoint for client space: add a note to a site's history
 app.post('/api/public/sites/:siteId/notes', async (req, res) => {
   console.log('[Public API] Add note request:', req.method, req.path, '| siteId:', req.params.siteId);

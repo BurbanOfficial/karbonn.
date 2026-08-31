@@ -748,6 +748,186 @@
       margin: 0;
     }
 
+    /* Mes projets */
+    .projets-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .projet-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .projet-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+
+    .projet-card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .projet-card-sub {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .projet-preview-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      background-color: var(--primary);
+      color: #fff;
+      border-radius: var(--radius-sm);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      animation: projetPreviewIn 0.4s ease both;
+    }
+
+    .projet-preview-link:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    @keyframes projetPreviewIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .projet-timeline {
+      display: flex;
+      align-items: flex-start;
+      width: 100%;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .projet-timeline-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      min-width: 92px;
+      position: relative;
+    }
+
+    .projet-timeline-connector {
+      position: absolute;
+      top: 15px;
+      left: calc(50% + 24px);
+      right: calc(-50% + 24px);
+      height: 3px;
+      background: var(--border);
+      z-index: 0;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .projet-timeline-connector::after {
+      content: "";
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: var(--primary);
+      border-radius: 2px;
+      transition: width 0.8s cubic-bezier(0.65, 0, 0.35, 1);
+    }
+
+    .projet-timeline-step.done .projet-timeline-connector::after {
+      width: 100%;
+    }
+
+    .projet-timeline-dot {
+      position: relative;
+      z-index: 1;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--bg);
+      border: 3px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 700;
+      transition: border-color 0.5s ease, background-color 0.5s ease, color 0.5s ease, transform 0.3s ease;
+    }
+
+    .projet-timeline-step.done .projet-timeline-dot {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .projet-timeline-step.active .projet-timeline-dot {
+      border-color: var(--primary);
+      color: var(--primary);
+      animation: projetPulse 1.8s ease-in-out infinite;
+    }
+
+    @keyframes projetPulse {
+      0% { box-shadow: 0 0 0 0 rgba(67, 97, 238, 0.35); }
+      70% { box-shadow: 0 0 0 8px rgba(67, 97, 238, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(67, 97, 238, 0); }
+    }
+
+    .projet-timeline-label {
+      margin-top: 10px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-align: center;
+      max-width: 100px;
+      line-height: 1.3;
+    }
+
+    .projet-timeline-step.done .projet-timeline-label,
+    .projet-timeline-step.active .projet-timeline-label {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .projet-status-banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 28px;
+      padding: 12px 16px;
+      background: var(--panel);
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+
+    .projet-status-banner i {
+      color: var(--primary);
+    }
+
+    @media (max-width: 700px) {
+      .projet-timeline-label {
+        display: none;
+      }
+      .projet-timeline-connector {
+        top: 15px;
+      }
+    }
+
     .support-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -2272,6 +2452,9 @@
         <a href="#" class="nav-item" data-label="Mes domaines">
           <i class="fa-solid fa-globe"></i><span>Mes domaines</span>
         </a>
+        <a href="#" class="nav-item" data-label="Mes projets">
+          <i class="fa-solid fa-diagram-project"></i><span>Mes projets</span>
+        </a>
         <a href="#" class="nav-item" data-label="Mes factures &amp; Devis">
           <i class="fa-solid fa-file-invoice-dollar"></i><span>Factures &amp; Devis</span>
         </a>
@@ -2339,6 +2522,19 @@
             <div class="placeholder">
               <i class="fa-solid fa-globe fa-2x"></i>
               <p>Vos noms de domaine apparaîtront ici.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Mes projets -->
+        <section class="section-page" id="section-projets">
+          <div class="section-header">
+            <h1>Mes projets</h1>
+          </div>
+          <div id="projets-list">
+            <div class="placeholder">
+              <i class="fa-solid fa-diagram-project fa-2x"></i>
+              <p>L'avancée de vos projets apparaîtra ici.</p>
             </div>
           </div>
         </section>

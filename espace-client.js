@@ -859,6 +859,79 @@ async function loadSites() {
   }
 }
 
+// ── Mes projets ──
+const projetsListEl = document.getElementById('projets-list');
+
+function shortStepLabel(name) {
+  return (name || '').replace(/^\d+\s*-\s*/, '');
+}
+
+function renderProjetTimeline(projet) {
+  const total = projet.steps.length;
+  return projet.steps.map((step, index) => {
+    const done = index < projet.currentStepIndex;
+    const active = index === projet.currentStepIndex;
+    const cls = done ? 'done' : (active ? 'active' : '');
+    const connector = index < total - 1 ? `<div class="projet-timeline-connector"></div>` : '';
+    return `
+      <div class="projet-timeline-step ${cls}">
+        ${connector}
+        <div class="projet-timeline-dot">${done ? '<i class="fa-solid fa-check"></i>' : index + 1}</div>
+        <div class="projet-timeline-label">${escapeHtml(shortStepLabel(step.name))}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderProjetCard(projet) {
+  const isDelivered = projet.currentStepIndex >= projet.steps.length;
+  const statusText = isDelivered
+    ? 'Votre projet est terminé et livré 🎉'
+    : `Étape en cours : ${shortStepLabel(projet.steps[projet.currentStepIndex]?.name || '')}`;
+
+  return `
+    <div class="projet-card">
+      <div class="projet-card-header">
+        <div>
+          <div class="projet-card-title">${escapeHtml(projet.nom)}</div>
+          ${projet.dateLivraison ? `<div class="projet-card-sub">Livraison prévue : ${new Date(projet.dateLivraison).toLocaleDateString('fr-FR')}</div>` : ''}
+        </div>
+        ${projet.previewUrl ? `<a class="projet-preview-link" href="${escapeHtml(projet.previewUrl)}" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Voir mon site</a>` : ''}
+      </div>
+      <div class="projet-timeline">
+        ${renderProjetTimeline(projet)}
+      </div>
+      <div class="projet-status-banner">
+        <i class="fa-solid ${isDelivered ? 'fa-circle-check' : 'fa-hourglass-half'}"></i>
+        <span>${statusText}</span>
+      </div>
+    </div>`;
+}
+
+function renderProjets(projets) {
+  if (!projetsListEl) return;
+  if (!projets.length) {
+    projetsListEl.innerHTML = `
+      <div class="placeholder">
+        <i class="fa-solid fa-diagram-project fa-2x"></i>
+        <p>Aucun projet en cours pour le moment.</p>
+      </div>`;
+    return;
+  }
+  projetsListEl.innerHTML = `<div class="projets-grid">${projets.map(renderProjetCard).join('')}</div>`;
+}
+
+async function loadClientProjets() {
+  if (!currentClient || !currentClient.id) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${currentClient.clientId}/projets`);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    renderProjets(data.projets || []);
+  } catch (err) {
+    console.warn('[Client] Failed to load projets:', err);
+  }
+}
+
 // ── Dashboard (Accueil) ──
 function navigateToSection(label) {
   const target = Array.from(navItems).find(i => i.dataset.label === label);
@@ -971,7 +1044,7 @@ async function showApp(client) {
   const greetingEl = document.getElementById('dashboard-greeting');
   if (greetingEl) greetingEl.textContent = `Bonjour ${client.prenom || name} 👋`;
 
-  await Promise.all([loadSites(), loadClientDocuments()]);
+  await Promise.all([loadSites(), loadClientDocuments(), loadClientProjets()]);
 
   if (sitesPollingInterval) clearInterval(sitesPollingInterval);
   sitesPollingInterval = setInterval(() => { loadSites(); }, 30000);
@@ -1032,6 +1105,7 @@ window.addEventListener('resize', () => {
 const sectionMap = [
   'section-accueil',
   'section-domaines',
+  'section-projets',
   'section-factures',
   'section-support'
 ];
@@ -1053,6 +1127,7 @@ navItems.forEach((item, index) => {
     setMobileMenu(false);
 
     if (sectionId === 'section-factures' && currentClient) loadClientDocuments();
+    if (sectionId === 'section-projets' && currentClient) loadClientProjets();
     if (sectionId === 'section-accueil') renderDashboard();
   });
 });
