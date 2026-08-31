@@ -2844,10 +2844,18 @@ function renderProjetPageInfo(projet) {
                 return;
               }
               
+              const _stepIndexBeforeDelivery = computeProjetStepIndex(currentPageProjet);
+              const totalProjetSteps = Object.keys(defaultFolderStructure).length;
+
               const today = new Date().toISOString().split('T')[0];
               await db.collection('projets').doc(currentPageProjet.id).update({ statut: newStatut, dateFin: today });
               currentPageProjet.statut = newStatut;
               currentPageProjet.dateFin = today;
+
+              // Notify the client if the project wasn't already fully complete (files-based) at this point
+              if (_stepIndexBeforeDelivery < totalProjetSteps) {
+                notifyClientProjetProgress(currentPageProjet, _stepIndexBeforeDelivery, totalProjetSteps);
+              }
               
               // Clear project files after successful download and status change
               await clearProjectFiles(currentPageProjet.id);
@@ -3099,6 +3107,68 @@ const defaultFolderStructure = {
     'Guide utilisateur': { required: true }
   }
 };
+
+// ── Suivi d'avancement de projet & email client à chaque étape franchie ──
+function computeProjetStepIndex(projetData) {
+  const files = (projetData && projetData.files) || {};
+  const uploadedByFolder = {};
+  Object.values(files).forEach(f => {
+    if (!f || !f.folder || !f.filename) return;
+    const baseName = f.filename.includes('.') ? f.filename.substring(0, f.filename.lastIndexOf('.')) : f.filename;
+    if (!uploadedByFolder[f.folder]) uploadedByFolder[f.folder] = new Set();
+    uploadedByFolder[f.folder].add(baseName);
+  });
+
+  const folderNames = Object.keys(defaultFolderStructure);
+  const completedFlags = folderNames.map(folder => {
+    const required = Object.keys(defaultFolderStructure[folder]);
+    const uploaded = uploadedByFolder[folder] || new Set();
+    return required.every(name => uploaded.has(name));
+  });
+
+  let currentStepIndex = completedFlags.findIndex(c => !c);
+  if (currentStepIndex === -1) currentStepIndex = folderNames.length;
+  return currentStepIndex;
+}
+
+function shortStepLabel(name) {
+  return (name || '').replace(/^\d+\s*-\s*/, '');
+}
+
+async function notifyClientProjetProgress(projet, fromIndex, toIndex) {
+  try {
+    if (!projet || !projet.clientId || toIndex <= fromIndex) return;
+    const client = allClients.find(c => c.id === projet.clientId);
+    if (!client || !client.email) return;
+
+    const folderNames = Object.keys(defaultFolderStructure);
+    const totalSteps = folderNames.length;
+
+    const clientHref = 'https://karbonn.fr/espace-client';
+
+    if (toIndex >= totalSteps) {
+      const intro = "Notre équipe vient de terminer votre projet, toute l'équipe Karbonn. vous remercie pour votre confiance et vous souhaite une très bonne continuation. Nous restons toujours joignables à tout moment.";
+      const signature = 'Karbonn. Vos idées, notre job.';
+      const subject = `[Karbonn] Votre projet ${projet.nom || ''} est terminé`;
+      const html = buildEmailHtml({ title: 'Votre projet est terminé', intro, lines: [signature], buttonText: 'Accéder à mon espace client', buttonHref: clientHref });
+      await sendNotificationEmail({ to: [client.email], subject, text: `${intro}\n\n${signature}\n\n${clientHref}`, html });
+      console.log('[Client Email] Projet terminé notifié:', client.email, '| projet:', projet.nom);
+      return;
+    }
+
+    for (let i = fromIndex; i < toIndex; i++) {
+      const completedStep = shortStepLabel(folderNames[i]);
+      const nextStep = shortStepLabel(folderNames[i + 1]);
+      const intro = `Notre équipe vient de terminer l'étape ${completedStep}, nous entamons dès à présent l'étape ${nextStep}. Vous pouvez suivre l'avancée de votre projet directement depuis votre espace client, section Mes projets. Nous vous remercions pour votre confiance.`;
+      const subject = `[Karbonn] Étape terminée : ${completedStep}`;
+      const html = buildEmailHtml({ title: 'Avancement de votre projet', intro, lines: [], buttonText: 'Suivre mon projet', buttonHref: clientHref });
+      await sendNotificationEmail({ to: [client.email], subject, text: `${intro}\n\n${clientHref}`, html });
+      console.log('[Client Email] Étape notifiée:', completedStep, '→', nextStep, '|', client.email, '| projet:', projet.nom);
+    }
+  } catch (err) {
+    console.warn('[Client Email] Failed to notify project progress:', err);
+  }
+}
 
 function getFileIcon(filename) {
   const ext = filename.split('.').pop().toLowerCase();
@@ -3580,6 +3650,7 @@ function uploadTaskFile(projetId, folder, fileName) {
       // Update project files in Firestore - metadata only
       const currentFiles = projet.files || {};
       const fileKey = `${folder}|${fullFileName}`;
+      const _stepIndexBefore = computeProjetStepIndex(projet);
       
       // Upload file to Supabase
       const filePath = sanitizeStoragePath(`${projetId}/${folder}/${fullFileName}`);
@@ -3611,6 +3682,7 @@ function uploadTaskFile(projetId, folder, fileName) {
       await db.collection('projets').doc(projetId).update({ files: currentFiles });
       projet.files = currentFiles;
       await saveFolderHours(projetId, folder, hours);
+      notifyClientProjetProgress(projet, _stepIndexBefore, computeProjetStepIndex(projet));
       
       // Refresh task modal
       renderTaskList(projet, folder);
@@ -4081,6 +4153,7 @@ fileUploadSubmit.addEventListener('click', async () => {
       // Update project files in Firestore - metadata only
       const currentFiles = currentPageProjet.files || {};
       const fileKey = `${folder}|${customName}`;
+      const _stepIndexBefore = computeProjetStepIndex(currentPageProjet);
       
       // Upload file to Supabase - use public bucket approach
       const filePath = sanitizeStoragePath(`${currentPageProjet.id}/${folder}/${customName}`);
@@ -4137,6 +4210,7 @@ fileUploadSubmit.addEventListener('click', async () => {
               await db.collection('projets').doc(currentPageProjet.id).update({ files: currentFiles });
               currentPageProjet.files = currentFiles;
               await saveFolderHours(currentPageProjet.id, folder, hours);
+              notifyClientProjetProgress(currentPageProjet, _stepIndexBefore, computeProjetStepIndex(currentPageProjet));
               
               // Real-time refresh
               renderProjetPageFiles(currentPageProjet);
@@ -4177,6 +4251,7 @@ fileUploadSubmit.addEventListener('click', async () => {
       await db.collection('projets').doc(currentPageProjet.id).update({ files: currentFiles });
       currentPageProjet.files = currentFiles;
       await saveFolderHours(currentPageProjet.id, folder, hours);
+      notifyClientProjetProgress(currentPageProjet, _stepIndexBefore, computeProjetStepIndex(currentPageProjet));
       
       // Real-time refresh
       renderProjetPageFiles(currentPageProjet);
@@ -4291,6 +4366,7 @@ async function deleteFile(folder, filename) {
     const currentFiles = currentPageProjet.files || {};
     const fileKey = `${folder}|${filename}`;
     const file = currentFiles[fileKey];
+    const _stepIndexBefore = computeProjetStepIndex(currentPageProjet);
     
     // Remove from Supabase storage
     if (file) {
@@ -4310,6 +4386,7 @@ async function deleteFile(folder, filename) {
     
     await db.collection('projets').doc(currentPageProjet.id).update({ files: currentFiles });
     currentPageProjet.files = currentFiles;
+    notifyClientProjetProgress(currentPageProjet, _stepIndexBefore, computeProjetStepIndex(currentPageProjet));
     
     renderProjetPageFiles(currentPageProjet);
     refreshPlanning(); // Update planning if needed
