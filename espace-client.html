@@ -928,6 +928,103 @@
       }
     }
 
+    .projet-validation-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--page-bg);
+    }
+
+    .projet-validation-actions strong {
+      flex-basis: 100%;
+      font-size: 0.86rem;
+    }
+
+    .projet-validation-btn {
+      border: 0;
+      border-radius: var(--radius-md);
+      padding: 10px 16px;
+      color: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    .projet-validation-btn.approve { background: #16a34a; }
+    .projet-validation-btn.reject { background: #dc2626; }
+
+    .client-validation-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.55);
+    }
+
+    .client-validation-modal.visible { display: flex; }
+
+    .client-validation-dialog {
+      width: min(520px, 100%);
+      border-radius: var(--radius-lg);
+      background: var(--bg);
+      box-shadow: var(--shadow-lg);
+      padding: 26px;
+    }
+
+    .client-validation-dialog h2 { margin: 0 0 8px; color: var(--text); }
+    .client-validation-dialog > p { margin: 0 0 20px; color: var(--muted); }
+
+    .client-validation-choice {
+      display: flex;
+      gap: 18px;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+
+    .client-validation-comment { display: none; }
+    .client-validation-comment.visible { display: block; }
+
+    .client-validation-comment textarea {
+      width: 100%;
+      min-height: 120px;
+      box-sizing: border-box;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--page-bg);
+      color: var(--text);
+      padding: 12px;
+      font: inherit;
+    }
+
+    .client-validation-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .client-validation-modal-actions button {
+      border-radius: var(--radius-md);
+      padding: 10px 16px;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 600;
+    }
+
+    .client-validation-cancel { border: 1px solid var(--border); background: transparent; color: var(--text); }
+    .client-validation-submit { border: 0; background: var(--primary); color: #fff; }
+    .client-validation-error { min-height: 18px; margin-top: 8px; color: #dc2626; font-size: 0.8rem; }
+
     .support-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -2631,6 +2728,27 @@
       </div>
     </main>
   </div>
+
+  <div class="client-validation-modal" id="client-validation-modal" aria-hidden="true">
+    <div class="client-validation-dialog" role="dialog" aria-modal="true" aria-labelledby="client-validation-title">
+      <h2 id="client-validation-title">Validation de l’étape</h2>
+      <p id="client-validation-description"></p>
+      <div class="client-validation-choice">
+        <label><input type="radio" name="client-validation-modifications" value="no"> Non, aucune modification</label>
+        <label><input type="radio" name="client-validation-modifications" value="yes"> Oui, j’ai des modifications</label>
+      </div>
+      <div class="client-validation-comment" id="client-validation-comment">
+        <label for="client-validation-text">Modifications à apporter</label>
+        <textarea id="client-validation-text" maxlength="4000" placeholder="Décrivez précisément les modifications souhaitées…"></textarea>
+      </div>
+      <div class="client-validation-error" id="client-validation-error"></div>
+      <div class="client-validation-modal-actions">
+        <button type="button" class="client-validation-cancel" id="client-validation-cancel">Annuler</button>
+        <button type="button" class="client-validation-submit" id="client-validation-submit">Envoyer ma réponse</button>
+      </div>
+    </div>
+  </div>
+
   <meta id="stripe-pub-key" data-key="pk_live_51Trn3T3bEnjxdETqSV2lBIrj9V5zPY6fVVF7TQPMbE5xKskA8sxpEGd3hL7JZf7eAal2aeBarOnYX48EXtwzXxdK00zCCpuSgV">
   <script src="espace-client.js"></script>
 </body>

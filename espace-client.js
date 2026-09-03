@@ -882,6 +882,29 @@ function renderProjetTimeline(projet) {
   }).join('');
 }
 
+function renderProjetValidationActions(projet) {
+  const folders = [
+    { key: 'design', label: 'Design' },
+    { key: 'development', label: 'Développement' }
+  ];
+  return folders.map(folder => {
+    const validation = projet.clientValidations?.[folder.key];
+    if (!validation) return '';
+    if (validation.status === 'pending') {
+      return `<div class="projet-validation-actions">
+        <strong>L’étape ${folder.label} attend votre vérification.</strong>
+        <button class="projet-validation-btn approve" onclick="openClientValidationModal('${projet.id}', '${folder.key}', '${validation.requestId}', 'approved')"><i class="fa-solid fa-check"></i> Je valide</button>
+        <button class="projet-validation-btn reject" onclick="openClientValidationModal('${projet.id}', '${folder.key}', '${validation.requestId}', 'rejected')"><i class="fa-solid fa-xmark"></i> Je ne valide pas</button>
+      </div>`;
+    }
+    const approved = validation.status === 'approved';
+    return `<div class="projet-validation-actions">
+      <strong><i class="fa-solid ${approved ? 'fa-circle-check' : 'fa-circle-xmark'}"></i> Étape ${folder.label} ${approved ? 'validée' : 'non validée'}.</strong>
+      ${validation.response ? `<span>${escapeHtml(validation.response)}</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
 function renderProjetCard(projet) {
   const isDelivered = projet.currentStepIndex >= projet.steps.length;
   const statusText = isDelivered
@@ -904,6 +927,7 @@ function renderProjetCard(projet) {
         <i class="fa-solid ${isDelivered ? 'fa-circle-check' : 'fa-hourglass-half'}"></i>
         <span>${statusText}</span>
       </div>
+      ${renderProjetValidationActions(projet)}
     </div>`;
 }
 
@@ -931,6 +955,92 @@ async function loadClientProjets() {
     console.warn('[Client] Failed to load projets:', err);
   }
 }
+
+const clientValidationModal = document.getElementById('client-validation-modal');
+const clientValidationDescription = document.getElementById('client-validation-description');
+const clientValidationComment = document.getElementById('client-validation-comment');
+const clientValidationText = document.getElementById('client-validation-text');
+const clientValidationError = document.getElementById('client-validation-error');
+let pendingClientValidation = null;
+
+function updateClientValidationCommentVisibility() {
+  const selected = document.querySelector('input[name="client-validation-modifications"]:checked')?.value;
+  clientValidationComment.classList.toggle('visible', selected === 'yes');
+}
+
+document.querySelectorAll('input[name="client-validation-modifications"]').forEach(input => {
+  input.addEventListener('change', updateClientValidationCommentVisibility);
+});
+
+function openClientValidationModal(projetId, folderKey, requestId, decision) {
+  const folderLabel = folderKey === 'design' ? 'Design' : 'Développement';
+  pendingClientValidation = { projetId, folderKey, requestId, decision };
+  clientValidationDescription.textContent = decision === 'approved'
+    ? `Vous souhaitez valider l’étape ${folderLabel}. Avez-vous des modifications à apporter ?`
+    : `Vous ne validez pas l’étape ${folderLabel}. Indiquez obligatoirement les modifications à apporter.`;
+  clientValidationText.value = '';
+  clientValidationError.textContent = '';
+  const noInput = document.querySelector('input[name="client-validation-modifications"][value="no"]');
+  const yesInput = document.querySelector('input[name="client-validation-modifications"][value="yes"]');
+  noInput.disabled = decision === 'rejected';
+  yesInput.checked = decision === 'rejected';
+  if (decision === 'approved') {
+    noInput.checked = false;
+    yesInput.checked = false;
+  }
+  updateClientValidationCommentVisibility();
+  clientValidationModal.classList.add('visible');
+  clientValidationModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeClientValidationModal() {
+  clientValidationModal.classList.remove('visible');
+  clientValidationModal.setAttribute('aria-hidden', 'true');
+  pendingClientValidation = null;
+}
+
+document.getElementById('client-validation-cancel').addEventListener('click', closeClientValidationModal);
+clientValidationModal.addEventListener('click', e => {
+  if (e.target === clientValidationModal) closeClientValidationModal();
+});
+
+document.getElementById('client-validation-submit').addEventListener('click', async () => {
+  if (!pendingClientValidation || !currentClient) return;
+  const modifications = document.querySelector('input[name="client-validation-modifications"]:checked')?.value;
+  if (!modifications) {
+    clientValidationError.textContent = 'Veuillez indiquer si vous avez des modifications à apporter.';
+    return;
+  }
+  const response = clientValidationText.value.trim();
+  if (modifications === 'yes' && !response) {
+    clientValidationError.textContent = 'Veuillez décrire les modifications à apporter.';
+    return;
+  }
+  const status = pendingClientValidation.decision === 'rejected' || modifications === 'yes' ? 'rejected' : 'approved';
+  const submitBtn = document.getElementById('client-validation-submit');
+  submitBtn.disabled = true;
+  clientValidationError.textContent = '';
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${encodeURIComponent(currentClient.clientId)}/projets/${encodeURIComponent(pendingClientValidation.projetId)}/validation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        folderKey: pendingClientValidation.folderKey,
+        requestId: pendingClientValidation.requestId,
+        status,
+        response
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur lors de l’envoi');
+    closeClientValidationModal();
+    await loadClientProjets();
+  } catch (err) {
+    clientValidationError.textContent = err.message || 'Impossible d’envoyer votre réponse.';
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
 
 // ── Dashboard (Accueil) ──
 function navigateToSection(label) {

@@ -737,6 +737,7 @@ auth.onAuthStateChanged(async user => {
     if (unsubscribeSites) { unsubscribeSites(); unsubscribeSites = null; }
     if (unsubscribeSiteHistory) { unsubscribeSiteHistory(); unsubscribeSiteHistory = null; }
     if (unsubscribeProjetNotes) { unsubscribeProjetNotes(); unsubscribeProjetNotes = null; }
+    if (unsubscribeValidationHistory) { unsubscribeValidationHistory(); unsubscribeValidationHistory = null; }
     if (unsubscribeUsers) { unsubscribeUsers(); unsubscribeUsers = null; }
     if (unsubscribeActivity) { unsubscribeActivity(); unsubscribeActivity = null; }
     showLogin();
@@ -2703,9 +2704,11 @@ const projetPageTeamSection = document.getElementById('projet-page-team');
 const projetNoteForm = document.getElementById('projet-note-form');
 const projetNoteInput = document.getElementById('projet-note-input');
 const projetNotesList = document.getElementById('projet-notes-list');
+const validationHistoryList = document.getElementById('validation-history-list');
 
 let currentPageProjet = null;
 let unsubscribeProjetNotes = null;
+let unsubscribeValidationHistory = null;
 
 function openProjetPage(projet) {
   currentPageProjet = projet;
@@ -2731,6 +2734,7 @@ function openProjetPage(projet) {
   renderProjetPageTeam(projet);
   renderProjetPageFiles(projet);
   loadProjetNotes(projet.id);
+  loadValidationHistory(projet.id);
 }
 
 function closeProjetPage() {
@@ -2741,6 +2745,10 @@ function closeProjetPage() {
   if (unsubscribeProjetNotes) {
     unsubscribeProjetNotes();
     unsubscribeProjetNotes = null;
+  }
+  if (unsubscribeValidationHistory) {
+    unsubscribeValidationHistory();
+    unsubscribeValidationHistory = null;
   }
   if (projetNoteForm) projetNoteForm.reset();
   currentPageProjet = null;
@@ -2766,6 +2774,36 @@ function loadProjetNotes(projetId) {
   }, err => {
     console.error(err);
     projetNotesList.innerHTML = '<p class="empty-history">Erreur lors du chargement des notes.</p>';
+  });
+}
+
+function loadValidationHistory(projetId) {
+  if (!validationHistoryList) return;
+  if (unsubscribeValidationHistory) unsubscribeValidationHistory();
+  unsubscribeValidationHistory = db.collection('projets').doc(projetId).collection('validationHistory').orderBy('respondedAt', 'desc').onSnapshot(snapshot => {
+    const entries = [];
+    snapshot.forEach(doc => entries.push({ id: doc.id, ...doc.data() }));
+    if (!entries.length) {
+      validationHistoryList.innerHTML = '<p class="empty-history">Aucune validation client enregistrée.</p>';
+      return;
+    }
+    validationHistoryList.innerHTML = entries.map(entry => {
+      const approved = entry.status === 'approved';
+      const respondedAt = entry.respondedAt?.toDate ? entry.respondedAt.toDate().toLocaleString('fr-FR') : '—';
+      const requestedAt = entry.requestedAt?.toDate ? entry.requestedAt.toDate().toLocaleString('fr-FR') : '—';
+      return `<div class="validation-history-item ${approved ? 'approved' : 'rejected'}">
+        <div class="validation-history-header">
+          <strong>${escapeHtml(entry.folderName || 'Dossier')}</strong>
+          <span>${approved ? 'Validé' : 'Refusé'}</span>
+        </div>
+        <div class="validation-history-meta">Réponse le ${respondedAt} · Demande envoyée le ${requestedAt}</div>
+        <div class="validation-history-meta">Client : ${escapeHtml(entry.clientName || entry.clientDisplayId || '—')} · Demandée par : ${escapeHtml(entry.requestedByName || '—')}</div>
+        ${entry.response ? `<div class="validation-history-response"><strong>Modifications demandées</strong><p>${escapeHtml(entry.response)}</p></div>` : '<div class="validation-history-response">Aucune modification demandée.</div>'}
+      </div>`;
+    }).join('');
+  }, err => {
+    console.error(err);
+    validationHistoryList.innerHTML = '<p class="empty-history">Erreur lors du chargement de l’historique.</p>';
   });
 }
 
@@ -3193,7 +3231,10 @@ function computeProjetStepIndex(projetData) {
   const completedFlags = folderNames.map(folder => {
     const required = Object.keys(defaultFolderStructure[folder]);
     const uploaded = uploadedByFolder[folder] || new Set();
-    return required.every(name => uploaded.has(name));
+    const filesCompleted = required.every(name => uploaded.has(name));
+    const validationKey = folder === '03 - Design' ? 'design' : (folder === '04 - Développement' ? 'development' : null);
+    const validation = validationKey ? projetData.clientValidations?.[validationKey] : null;
+    return filesCompleted && (!validationKey || validation?.status === 'approved');
   });
 
   let currentStepIndex = completedFlags.findIndex(c => !c);
@@ -3835,10 +3876,16 @@ function renderFileTree(files) {
     const deliveryDateDisplay = deliveryDate ? new Date(deliveryDate).toLocaleDateString('fr-FR') : '';
 
     const isDeveloppementFolder = folder === '04 - Développement';
+    const validationKey = folder === '03 - Design' ? 'design' : (isDeveloppementFolder ? 'development' : null);
+    const validation = validationKey ? currentPageProjet.clientValidations?.[validationKey] : null;
+    const validationClass = validation?.status ? `folder-validation-${validation.status}` : '';
     const hasPreviewUrl = !!currentPageProjet.previewUrl;
 
     const folderActions = isManager() ? `
       <div class="tree-node-actions">
+        ${validationKey ? `<button onclick="requestClientFolderValidation('${validationKey}')" title="Demander la validation du client">
+          <i class="fa-solid fa-check"></i>
+        </button>` : ''}
         ${isDeveloppementFolder ? `<button onclick="openFolderUrlModal()" title="${hasPreviewUrl ? 'Modifier le lien du site' : 'Ajouter le lien du site'}">
           <i class="fa-solid fa-link"></i>
         </button>` : ''}
@@ -3848,12 +3895,13 @@ function renderFileTree(files) {
       </div>
     ` : '';
 
-    html += `<div class="tree-node ${hasFiles ? 'expanded' : 'empty'} ${folderReadOnlyClass}" data-folder="${folder}">
+    html += `<div class="tree-node ${hasFiles ? 'expanded' : 'empty'} ${folderReadOnlyClass} ${validationClass}" data-folder="${folder}">
       <div class="tree-node-content">
         <i class="fa-solid ${hasFiles ? 'fa-folder-open' : 'fa-folder'}"></i>
         <span>${folder}</span>
         ${isDeveloppementFolder && hasPreviewUrl ? `<a class="folder-date" href="${escapeHtml(currentPageProjet.previewUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation();" title="Ouvrir le lien du site"><i class="fa-solid fa-up-right-from-square"></i> Lien du site</a>` : ''}
         ${deliveryDateDisplay ? `<span class="folder-date">${deliveryDateDisplay}</span>` : ''}
+        ${validation?.status ? `<span class="folder-validation-badge ${validationClass}">${validation.status === 'approved' ? 'Validé par le client' : (validation.status === 'rejected' ? 'Refusé par le client' : 'En attente du client')}</span>` : ''}
         ${folderActions}
       </div>
       <div class="tree-children">`;
@@ -3941,6 +3989,15 @@ function renderFileTree(files) {
         </div>`;
       }
     });
+
+    if (validationKey && validation?.response) {
+      const respondedAt = validation.respondedAt?.toDate ? validation.respondedAt.toDate().toLocaleString('fr-FR') : '';
+      html += `<div class="folder-client-feedback ${validationClass}">
+        <strong><i class="fa-solid fa-message"></i> Modifications demandées par le client</strong>
+        <p>${escapeHtml(validation.response)}</p>
+        ${respondedAt ? `<small>Réponse reçue le ${respondedAt}</small>` : ''}
+      </div>`;
+    }
     
     html += `</div>
     </div>`;
@@ -3969,6 +4026,28 @@ function renderFileTree(files) {
       }
     });
   });
+}
+
+async function requestClientFolderValidation(folderKey) {
+  if (!isManager() || !currentPageProjet) return;
+  const folderName = folderKey === 'design' ? '03 - Design' : '04 - Développement';
+  const confirmed = await appConfirm('Souhaitez-vous valider le dossier ? Votre client devra le valider pour passer à l’étape suivante.', {
+    title: `Validation du dossier ${folderName}`,
+    confirmLabel: 'Oui, demander la validation',
+    cancelLabel: 'Non',
+    icon: 'fa-check'
+  });
+  if (!confirmed) return;
+  try {
+    await apiRequest(`/api/admin/projets/${currentPageProjet.id}/request-validation`, {
+      method: 'POST',
+      body: JSON.stringify({ folderKey })
+    });
+    showToast('La demande de validation a été envoyée au client.', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || "Erreur lors de l'envoi de la demande.", 'error');
+  }
 }
 
 function renderProjetPageFiles(projet) {

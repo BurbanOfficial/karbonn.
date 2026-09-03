@@ -358,7 +358,10 @@ function computeProjectSteps(projetData) {
   const steps = PROJECT_STEPS.map(folder => {
     const required = PROJECT_FOLDER_STRUCTURE[folder];
     const uploaded = uploadedByFolder[folder] || new Set();
-    const completed = required.every(name => uploaded.has(name));
+    const filesCompleted = required.every(name => uploaded.has(name));
+    const validationKey = folder === '03 - Design' ? 'design' : (folder === '04 - Développement' ? 'development' : null);
+    const validation = validationKey ? projetData.clientValidations?.[validationKey] : null;
+    const completed = filesCompleted && (!validationKey || validation?.status === 'approved');
     return { name: folder, completed };
   });
 
@@ -391,7 +394,19 @@ app.get('/api/public/client/:clientId/projets', async (req, res) => {
         createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toISOString() : data.createdAt) : null,
         steps,
         currentStepIndex,
-        previewUrl: previewUrlVisible ? data.previewUrl : null
+        previewUrl: previewUrlVisible ? data.previewUrl : null,
+        clientValidations: {
+          design: data.clientValidations?.design ? {
+            requestId: data.clientValidations.design.requestId || null,
+            status: data.clientValidations.design.status || null,
+            response: data.clientValidations.design.response || ''
+          } : null,
+          development: data.clientValidations?.development ? {
+            requestId: data.clientValidations.development.requestId || null,
+            status: data.clientValidations.development.status || null,
+            response: data.clientValidations.development.response || ''
+          } : null
+        }
       };
     });
 
@@ -399,6 +414,155 @@ app.get('/api/public/client/:clientId/projets', async (req, res) => {
   } catch (err) {
     console.error('[Public API] Error fetching client projets:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+const CLIENT_VALIDATION_FOLDERS = {
+  design: '03 - Design',
+  development: '04 - Développement'
+};
+
+app.post('/api/admin/projets/:projetId/request-validation', verifyAuth, requireManager, async (req, res) => {
+  try {
+    const { projetId } = req.params;
+    const { folderKey } = req.body || {};
+    const folderName = CLIENT_VALIDATION_FOLDERS[folderKey];
+    if (!folderName) return res.status(400).json({ error: 'Invalid validation folder' });
+
+    const projetRef = db.collection('projets').doc(projetId);
+    const [projetDoc, managerDoc] = await Promise.all([
+      projetRef.get(),
+      db.collection('users').doc(req.user.uid).get()
+    ]);
+    if (!projetDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    const projet = projetDoc.data();
+    if (projet.clientValidations?.[folderKey]?.status === 'pending') {
+      return res.status(409).json({ error: 'Une validation est déjà en attente pour ce dossier' });
+    }
+    if (!projet.clientId) return res.status(400).json({ error: 'Project has no client' });
+    const clientDoc = await db.collection('clients').doc(projet.clientId).get();
+    if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+    const client = clientDoc.data();
+    if (!client.email) return res.status(400).json({ error: 'Client has no email address' });
+
+    const requestId = db.collection('_ids').doc().id;
+    const manager = managerDoc.exists ? managerDoc.data() : {};
+    const requestedByName = manager.displayName || [manager.prenom, manager.nom].filter(Boolean).join(' ') || req.user.email || 'Manager';
+    const validation = {
+      requestId,
+      status: 'pending',
+      response: '',
+      requestedAt: admin.firestore.FieldValue.serverTimestamp(),
+      requestedBy: req.user.uid,
+      requestedByName,
+      respondedAt: null
+    };
+
+    const clientName = [client.prenom, client.nom].filter(Boolean).join(' ') || client.entreprise || 'Client';
+    const clientHref = 'https://karbonn.fr/espace-client';
+    const intro = `Bonjour ${clientName}, l’étape ${folderName} du projet « ${projet.nom || 'Projet'} » est prête à être vérifiée.`;
+    const html = buildRenewalEmailHtml({
+      title: 'Une étape est à vérifier',
+      intro,
+      lines: [`Projet : ${projet.nom || 'Projet'}`, `Dossier : ${folderName}`],
+      buttonText: 'Accéder à mon espace client',
+      buttonHref: clientHref
+    });
+    await sendEmail({
+      to: [client.email],
+      subject: `[Karbonn] Étape à vérifier : ${folderName.replace(/^\d+\s*-\s*/, '')}`,
+      text: `${intro}\n\nProjet : ${projet.nom || 'Projet'}\nDossier : ${folderName}\n\n${clientHref}`,
+      html
+    });
+    await projetRef.set({ clientValidations: { [folderKey]: validation } }, { merge: true });
+    res.json({ success: true, requestId });
+  } catch (err) {
+    console.error('[Project Validation] Failed to request validation:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/public/client/:clientId/projets/:projetId/validation', async (req, res) => {
+  try {
+    const { clientId, projetId } = req.params;
+    const { folderKey, requestId, status, response = '' } = req.body || {};
+    const folderName = CLIENT_VALIDATION_FOLDERS[folderKey];
+    if (!folderName) return res.status(400).json({ error: 'Invalid validation folder' });
+    if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid validation status' });
+    const cleanResponse = typeof response === 'string' ? response.trim() : '';
+    if (status === 'rejected' && !cleanResponse) return res.status(400).json({ error: 'A modification request is required' });
+    if (cleanResponse.length > 4000) return res.status(400).json({ error: 'Response is too long' });
+
+    const clientSnap = await db.collection('clients').where('clientId', '==', clientId).limit(1).get();
+    if (clientSnap.empty) return res.status(404).json({ error: 'Client not found' });
+    const clientDoc = clientSnap.docs[0];
+    const client = clientDoc.data();
+    const projetRef = db.collection('projets').doc(projetId);
+    const historyRef = projetRef.collection('validationHistory').doc();
+    let projetName = 'Projet';
+    let historyEntry = null;
+
+    await db.runTransaction(async transaction => {
+      const projetDoc = await transaction.get(projetRef);
+      if (!projetDoc.exists) throw Object.assign(new Error('Project not found'), { status: 404 });
+      const projet = projetDoc.data();
+      if (projet.clientId !== clientDoc.id) throw Object.assign(new Error('Project does not belong to this client'), { status: 403 });
+      const validation = projet.clientValidations?.[folderKey];
+      if (!validation || validation.status !== 'pending' || validation.requestId !== requestId) {
+        throw Object.assign(new Error('This validation request is no longer pending'), { status: 409 });
+      }
+      projetName = projet.nom || 'Projet';
+      historyEntry = {
+        requestId,
+        folderKey,
+        folderName,
+        status,
+        response: cleanResponse,
+        clientId: clientDoc.id,
+        clientDisplayId: clientId,
+        clientName: [client.prenom, client.nom].filter(Boolean).join(' ') || client.entreprise || 'Client',
+        requestedAt: validation.requestedAt || null,
+        requestedBy: validation.requestedBy || '',
+        requestedByName: validation.requestedByName || 'Manager',
+        respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+        source: 'client-space'
+      };
+      transaction.update(projetRef, {
+        [`clientValidations.${folderKey}.status`]: status,
+        [`clientValidations.${folderKey}.response`]: cleanResponse,
+        [`clientValidations.${folderKey}.respondedAt`]: admin.firestore.FieldValue.serverTimestamp()
+      });
+      transaction.set(historyRef, historyEntry);
+    });
+
+    const managerEmails = await getManagerEmails();
+    if (managerEmails.length) {
+      const approved = status === 'approved';
+      const resultLabel = approved ? 'validée' : 'refusée';
+      const lines = [`Projet : ${projetName}`, `Dossier : ${folderName}`, `Décision : Étape ${resultLabel}`];
+      if (cleanResponse) lines.push(`Modifications demandées : ${cleanResponse}`);
+      const html = buildRenewalEmailHtml({
+        title: `Étape ${resultLabel} par le client`,
+        intro: `Le client a ${approved ? 'validé' : 'refusé'} l’étape ${folderName} du projet « ${projetName} ».`,
+        lines,
+        buttonText: 'Accéder à l’intranet',
+        buttonHref: 'https://karbonn.fr/intranet'
+      });
+      try {
+        await sendEmail({
+          to: managerEmails,
+          subject: `[Karbonn] Étape ${resultLabel} – ${projetName}`,
+          text: lines.join('\n'),
+          html
+        });
+      } catch (emailErr) {
+        console.error('[Project Validation] Manager notification failed:', emailErr);
+      }
+    }
+    res.json({ success: true, status });
+  } catch (err) {
+    console.error('[Project Validation] Failed to record client response:', err);
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

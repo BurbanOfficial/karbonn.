@@ -64,6 +64,11 @@ service cloud.firestore {
         allow read, create: if request.auth != null;
         allow update, delete: if false;
       }
+
+      match /validationHistory/{validationId} {
+        allow read: if request.auth != null;
+        allow create, update, delete: if false;
+      }
     }
 
     // Collection billings (Facturation & Devis)

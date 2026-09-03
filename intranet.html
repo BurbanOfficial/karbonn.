@@ -2398,6 +2398,70 @@
       }
     }
 
+    .folder-validation-badge {
+      margin-left: auto;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 0.7rem;
+      font-family: inherit;
+      font-weight: 600;
+    }
+
+    .folder-validation-pending { color: #64748b; border-color: #94a3b8; }
+    .folder-validation-approved { color: #15803d; border-color: #22c55e; }
+    .folder-validation-rejected { color: #b91c1c; border-color: #ef4444; }
+    .tree-node[data-folder].folder-validation-pending > .tree-node-content { background: #f1f5f9; }
+    .tree-node[data-folder].folder-validation-approved > .tree-node-content { background: #dcfce7; }
+    .tree-node[data-folder].folder-validation-rejected > .tree-node-content { background: #fee2e2; }
+    .folder-validation-badge.folder-validation-pending { background: #f1f5f9; }
+    .folder-validation-badge.folder-validation-approved { background: #dcfce7; }
+    .folder-validation-badge.folder-validation-rejected { background: #fee2e2; }
+
+    .folder-client-feedback {
+      margin: 10px 0 8px 22px;
+      border: 1px solid currentColor;
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      font-family: inherit;
+    }
+
+    .folder-client-feedback p {
+      margin: 8px 0;
+      color: var(--text);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .folder-client-feedback small { color: var(--muted); }
+
+    .validation-history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .validation-history-item {
+      border: 1px solid var(--border);
+      border-left-width: 4px;
+      border-radius: var(--radius-md);
+      background: var(--page-bg);
+      padding: 14px;
+    }
+
+    .validation-history-item.approved { border-left-color: #22c55e; }
+    .validation-history-item.rejected { border-left-color: #ef4444; }
+
+    .validation-history-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .validation-history-meta { color: var(--muted); font-size: 0.76rem; margin-top: 3px; }
+    .validation-history-response { margin-top: 10px; color: var(--text); font-size: 0.84rem; }
+    .validation-history-response p { margin: 5px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
     .tree-node {
       user-select: none;
     }
@@ -4586,6 +4650,13 @@
                 </form>
                 <div class="projet-notes-list" id="projet-notes-list">
                   <p class="empty-history">Aucune note pour ce projet.</p>
+                </div>
+              </div>
+
+              <div class="detail-section">
+                <div class="detail-section-title">Historique des validations client</div>
+                <div class="validation-history-list" id="validation-history-list">
+                  <p class="empty-history">Aucune validation client enregistrée.</p>
                 </div>
               </div>
             </div>
