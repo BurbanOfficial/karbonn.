@@ -337,7 +337,7 @@ app.get('/api/public/client/:clientId/sites', async (req, res) => {
 const PROJECT_FOLDER_STRUCTURE = {
   '01 - Administration': ['Contrat', 'Devis'],
   '02 - Analyse': ['Cahier des charges', 'Arborescence'],
-  '03 - Design': ['Maquette 1', 'Maquette 2', 'Charte graphique', 'Assets'],
+  '03 - Design': ['Maquette 1', 'Charte graphique', 'Assets'],
   '04 - Développement': ['Site Web'],
   '05 - Tests': ['Rapport QA'],
   '06 - Livraison': ['Documentation', 'Identifiants', 'Guide utilisateur']
@@ -356,7 +356,7 @@ function computeProjectSteps(projetData) {
   });
 
   const steps = PROJECT_STEPS.map(folder => {
-    const required = PROJECT_FOLDER_STRUCTURE[folder];
+    const required = Array.isArray(projetData.requiredFiles?.[folder]) ? projetData.requiredFiles[folder] : PROJECT_FOLDER_STRUCTURE[folder];
     const uploaded = uploadedByFolder[folder] || new Set();
     const filesCompleted = required.every(name => uploaded.has(name));
     const validationKey = folder === '03 - Design' ? 'design' : (folder === '04 - Développement' ? 'development' : null);
@@ -421,6 +421,32 @@ const CLIENT_VALIDATION_FOLDERS = {
   design: '03 - Design',
   development: '04 - Développement'
 };
+
+app.put('/api/admin/projets/:projetId/required-files', verifyAuth, requireManager, async (req, res) => {
+  try {
+    const { projetId } = req.params;
+    const { folder, files } = req.body || {};
+    if (!PROJECT_FOLDER_STRUCTURE[folder] || !Array.isArray(files)) {
+      return res.status(400).json({ error: 'Invalid folder or required files' });
+    }
+    const normalizedFiles = files.map(name => typeof name === 'string' ? name.trim() : '').filter(Boolean);
+    if (normalizedFiles.length !== files.length || normalizedFiles.some(name => name.length > 120)) {
+      return res.status(400).json({ error: 'Invalid required file name' });
+    }
+    if (new Set(normalizedFiles.map(name => name.toLocaleLowerCase('fr'))).size !== normalizedFiles.length) {
+      return res.status(400).json({ error: 'Required file names must be unique' });
+    }
+    const projetRef = db.collection('projets').doc(projetId);
+    const projetDoc = await projetRef.get();
+    if (!projetDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    const requiredFiles = { ...(projetDoc.data().requiredFiles || {}), [folder]: normalizedFiles };
+    await projetRef.update({ requiredFiles });
+    res.json({ success: true, requiredFiles });
+  } catch (err) {
+    console.error('[Projects] Failed to update required files:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post('/api/admin/projets/:projetId/request-validation', verifyAuth, requireManager, async (req, res) => {
   try {

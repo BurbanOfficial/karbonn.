@@ -156,9 +156,21 @@ async function apiRequest(path, options = {}, _retry = false) {
   if (response.status === 401 && !_retry) {
     return apiRequest(path, options, true);
   }
-  const data = await response.json();
+  const responseText = await response.text();
+  let data = {};
+  if (responseText) {
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      const error = new Error(response.ok
+        ? 'Le serveur a renvoyé une réponse invalide.'
+        : `Route API indisponible (${response.status}). Vérifiez que le serveur Render est à jour.`);
+      error.status = response.status;
+      throw error;
+    }
+  }
   if (!response.ok) {
-    const error = new Error(data.error || 'Erreur API');
+    const error = new Error(data.error || `Erreur API (${response.status})`);
     error.details = data.details || data;
     error.status = response.status;
     throw error;
@@ -3199,7 +3211,6 @@ const defaultFolderStructure = {
   },
   '03 - Design': {
     'Maquette 1': { required: true },
-    'Maquette 2': { required: true },
     'Charte graphique': { required: true },
     'Assets': { required: true }
   },
@@ -3216,6 +3227,14 @@ const defaultFolderStructure = {
   }
 };
 
+function getProjetFolderStructure(projetData) {
+  const custom = projetData?.requiredFiles || {};
+  return Object.fromEntries(Object.entries(defaultFolderStructure).map(([folder, files]) => {
+    const names = Array.isArray(custom[folder]) ? custom[folder] : Object.keys(files);
+    return [folder, Object.fromEntries(names.map(name => [name, { required: true }]))];
+  }));
+}
+
 // ── Suivi d'avancement de projet & email client à chaque étape franchie ──
 function computeProjetStepIndex(projetData) {
   const files = (projetData && projetData.files) || {};
@@ -3227,9 +3246,10 @@ function computeProjetStepIndex(projetData) {
     uploadedByFolder[f.folder].add(baseName);
   });
 
-  const folderNames = Object.keys(defaultFolderStructure);
+  const folderStructure = getProjetFolderStructure(projetData);
+  const folderNames = Object.keys(folderStructure);
   const completedFlags = folderNames.map(folder => {
-    const required = Object.keys(defaultFolderStructure[folder]);
+    const required = Object.keys(folderStructure[folder]);
     const uploaded = uploadedByFolder[folder] || new Set();
     const filesCompleted = required.every(name => uploaded.has(name));
     const validationKey = folder === '03 - Design' ? 'design' : (folder === '04 - Développement' ? 'development' : null);
@@ -3458,10 +3478,11 @@ function renderPlanning() {
 
 function areAllTasksCompleted(projet, folderName = null) {
   const projectFiles = projet.files || {};
+  const folderStructure = getProjetFolderStructure(projet);
   
   if (folderName) {
     // Check specific folder
-    const requiredFiles = defaultFolderStructure[folderName] || {};
+    const requiredFiles = folderStructure[folderName] || {};
     for (const fileName of Object.keys(requiredFiles)) {
       // Check if any file with this base name is uploaded
       let isUploaded = false;
@@ -3481,8 +3502,8 @@ function areAllTasksCompleted(projet, folderName = null) {
     return true;
   } else {
     // Check all folders
-    for (const folder of Object.keys(defaultFolderStructure)) {
-      const requiredFiles = defaultFolderStructure[folder] || {};
+    for (const folder of Object.keys(folderStructure)) {
+      const requiredFiles = folderStructure[folder] || {};
       for (const fileName of Object.keys(requiredFiles)) {
         // Check if any file with this base name is uploaded
         let isUploaded = false;
@@ -3626,6 +3647,7 @@ function openTaskModal(projetId, folderName = null) {
 
 function renderTaskList(projet, specificFolder = null) {
   const projectFiles = projet.files || {};
+  const folderStructure = getProjetFolderStructure(projet);
   let html = '';
 
   // If specific folder is provided, only show that folder (but still respect role permissions)
@@ -3636,7 +3658,7 @@ function renderTaskList(projet, specificFolder = null) {
   
   foldersToShow.forEach(folder => {
     // Skip if folder doesn't exist in default structure
-    if (!defaultFolderStructure[folder]) return;
+    if (!folderStructure[folder]) return;
     
     const folderFiles = {};
     
@@ -3649,7 +3671,7 @@ function renderTaskList(projet, specificFolder = null) {
     });
     
     // Get required files for this folder
-    const requiredFiles = defaultFolderStructure[folder] || {};
+    const requiredFiles = folderStructure[folder] || {};
     
     if (Object.keys(requiredFiles).length > 0) {
       html += `<div class="task-folder-section">
@@ -3684,7 +3706,7 @@ function renderTaskList(projet, specificFolder = null) {
         const folderEditable = canEditFolder(folder);
         const uploadIcon = !isUploaded
           ? (folderEditable
-            ? `<button class="task-upload-icon" onclick="uploadTaskFile('${projet.id}', '${folder}', '${fileName}')" title="Importer ce fichier">
+            ? `<button class="task-upload-icon" onclick="uploadTaskFile('${projet.id}', decodeURIComponent('${encodeURIComponent(folder)}'), decodeURIComponent('${encodeURIComponent(fileName)}'))" title="Importer ce fichier">
                 <i class="fa-solid fa-cloud-upload-alt"></i>
               </button>`
             : `<div class="task-upload-icon" style="opacity:0;cursor:default;" title="Lecture seule"></div>`)
@@ -3699,7 +3721,7 @@ function renderTaskList(projet, specificFolder = null) {
           <li class="task-item ${uploadedClass}">
             ${uploadIcon}
             <span class="task-label">
-              ${fileName}
+              ${escapeHtml(fileName)}
             </span>
             <span class="task-status ${taskStatusClass}">${taskStatusText}</span>
           </li>`;
@@ -3847,9 +3869,10 @@ function uploadTaskFile(projetId, folder, fileName) {
 
 function renderFileTree(files) {
   const tree = document.getElementById('projet-file-tree');
+  const folderStructure = getProjetFolderStructure(currentPageProjet);
   let html = '';
   
-  Object.keys(defaultFolderStructure).forEach(folder => {
+  Object.keys(folderStructure).forEach(folder => {
     // Get files for this folder from flattened structure
     const folderFiles = {};
     Object.keys(files).forEach(key => {
@@ -3883,6 +3906,9 @@ function renderFileTree(files) {
 
     const folderActions = isManager() ? `
       <div class="tree-node-actions">
+        <button onclick="addRequiredProjectFile('${encodeURIComponent(folder)}')" title="Ajouter un fichier obligatoire">
+          <i class="fa-solid fa-file-circle-plus"></i>
+        </button>
         ${validationKey ? `<button onclick="requestClientFolderValidation('${validationKey}')" title="Demander la validation du client">
           <i class="fa-solid fa-check"></i>
         </button>` : ''}
@@ -3907,8 +3933,8 @@ function renderFileTree(files) {
       <div class="tree-children">`;
     
     // Add required files (even if not uploaded yet)
-    Object.keys(defaultFolderStructure[folder]).forEach(file => {
-      const fileInfo = defaultFolderStructure[folder][file];
+    Object.keys(folderStructure[folder]).forEach(file => {
+      const fileInfo = folderStructure[folder][file];
       
       // Check if file is uploaded (with any extension)
       let uploaded = null;
@@ -3929,8 +3955,17 @@ function renderFileTree(files) {
       html += `<div class="tree-node">
         <div class="tree-node-content">
           <i class="fa-solid ${icon}"></i>
-          <span>${file}${uploaded ? '' : ' <em style="color:var(--muted);font-size:0.75em;">(manquant)</em>'}</span>
+          <span>${escapeHtml(file)}${uploaded ? '' : ' <em style="color:var(--muted);font-size:0.75em;">(manquant)</em>'}</span>
           <div class="tree-node-actions">`;
+
+      if (isManager()) {
+        html += `<button onclick="renameRequiredProjectFile('${encodeURIComponent(folder)}', '${encodeURIComponent(file)}')" title="Renommer ce fichier obligatoire">
+          <i class="fa-solid fa-pen-to-square"></i>
+        </button>
+        <button onclick="deleteRequiredProjectFile('${encodeURIComponent(folder)}', '${encodeURIComponent(file)}')" title="Supprimer ce fichier obligatoire">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>`;
+      }
       
       if (uploaded) {
         html += `<button onclick="downloadFile('${folder}', '${uploaded.filename}')" title="Télécharger">
@@ -3945,7 +3980,7 @@ function renderFileTree(files) {
           </button>`;
         }
       } else if (folderEditable) {
-        html += `<button onclick="uploadRequiredFile('${folder}', '${file}')" title="Ajouter ce fichier obligatoire">
+        html += `<button onclick="uploadRequiredFile(decodeURIComponent('${encodeURIComponent(folder)}'), decodeURIComponent('${encodeURIComponent(file)}'))" title="Ajouter ce fichier obligatoire">
           <i class="fa-solid fa-plus"></i>
         </button>`;
       }
@@ -3964,7 +3999,7 @@ function renderFileTree(files) {
         ? fileData.filename.substring(0, fileData.filename.lastIndexOf('.'))
         : fileData.filename;
       
-      const isRequired = defaultFolderStructure[folder].hasOwnProperty(baseName);
+      const isRequired = Object.prototype.hasOwnProperty.call(folderStructure[folder], baseName);
       
       if (!isRequired) {
         const icon = getFileIcon(fileData.filename);
@@ -4026,6 +4061,88 @@ function renderFileTree(files) {
       }
     });
   });
+}
+
+async function saveRequiredProjectFiles(folder, files) {
+  if (!isManager() || !currentPageProjet) return false;
+  try {
+    const result = await apiRequest(`/api/admin/projets/${currentPageProjet.id}/required-files`, {
+      method: 'PUT',
+      body: JSON.stringify({ folder, files })
+    });
+    currentPageProjet.requiredFiles = result.requiredFiles;
+    const projet = allProjets.find(item => item.id === currentPageProjet.id);
+    if (projet) projet.requiredFiles = result.requiredFiles;
+    renderProjetPageFiles(currentPageProjet);
+    refreshPlanning();
+    return true;
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || 'Erreur lors de la mise à jour des fichiers obligatoires.', 'error');
+    return false;
+  }
+}
+
+async function addRequiredProjectFile(encodedFolder) {
+  if (!isManager() || !currentPageProjet) return;
+  const folder = decodeURIComponent(encodedFolder);
+  const structure = getProjetFolderStructure(currentPageProjet);
+  const currentFiles = Object.keys(structure[folder] || {});
+  const name = window.prompt('Nom du nouveau fichier obligatoire :');
+  if (name === null) return;
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    showToast('Le nom du fichier est obligatoire.', 'error');
+    return;
+  }
+  if (currentFiles.some(file => file.toLocaleLowerCase('fr') === trimmedName.toLocaleLowerCase('fr'))) {
+    showToast('Ce fichier obligatoire existe déjà.', 'error');
+    return;
+  }
+  if (await saveRequiredProjectFiles(folder, [...currentFiles, trimmedName])) {
+    showToast('Fichier obligatoire ajouté.', 'success');
+  }
+}
+
+async function renameRequiredProjectFile(encodedFolder, encodedFile) {
+  if (!isManager() || !currentPageProjet) return;
+  const folder = decodeURIComponent(encodedFolder);
+  const file = decodeURIComponent(encodedFile);
+  const currentFiles = Object.keys(getProjetFolderStructure(currentPageProjet)[folder] || {});
+  const name = window.prompt('Nouveau nom du fichier obligatoire :', file);
+  if (name === null) return;
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    showToast('Le nom du fichier est obligatoire.', 'error');
+    return;
+  }
+  if (currentFiles.some(item => item !== file && item.toLocaleLowerCase('fr') === trimmedName.toLocaleLowerCase('fr'))) {
+    showToast('Ce fichier obligatoire existe déjà.', 'error');
+    return;
+  }
+  const updatedFiles = currentFiles.map(item => item === file ? trimmedName : item);
+  if (await saveRequiredProjectFiles(folder, updatedFiles)) {
+    showToast('Fichier obligatoire renommé.', 'success');
+  }
+}
+
+async function deleteRequiredProjectFile(encodedFolder, encodedFile) {
+  if (!isManager() || !currentPageProjet) return;
+  const folder = decodeURIComponent(encodedFolder);
+  const file = decodeURIComponent(encodedFile);
+  const confirmed = await appConfirm(`Supprimer « ${file} » de la liste des fichiers obligatoires ? Le document téléversé ne sera pas supprimé.`, {
+    title: 'Supprimer un fichier obligatoire',
+    confirmLabel: 'Supprimer',
+    cancelLabel: 'Annuler',
+    icon: 'fa-trash'
+  });
+  if (!confirmed) return;
+  const previousStep = computeProjetStepIndex(currentPageProjet);
+  const currentFiles = Object.keys(getProjetFolderStructure(currentPageProjet)[folder] || {});
+  if (await saveRequiredProjectFiles(folder, currentFiles.filter(item => item !== file))) {
+    notifyClientProjetProgress(currentPageProjet, previousStep, computeProjetStepIndex(currentPageProjet));
+    showToast('Fichier retiré des obligations.', 'success');
+  }
 }
 
 async function requestClientFolderValidation(folderKey) {
