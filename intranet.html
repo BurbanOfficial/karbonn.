@@ -2340,6 +2340,64 @@
       color: var(--text);
     }
 
+    .projet-note-form {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .projet-note-form textarea {
+      flex: 1;
+      min-height: 90px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--page-bg);
+      color: var(--text);
+      padding: 12px;
+      font: inherit;
+    }
+
+    .projet-note-form textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .projet-notes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .projet-note-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--page-bg);
+      padding: 12px 14px;
+    }
+
+    .projet-note-meta {
+      color: var(--muted);
+      font-size: 0.75rem;
+      margin-bottom: 7px;
+    }
+
+    .projet-note-content {
+      color: var(--text);
+      font-size: 0.88rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 700px) {
+      .projet-note-form {
+        align-items: stretch;
+        flex-direction: column;
+      }
+    }
+
     .tree-node {
       user-select: none;
     }
@@ -4515,6 +4573,19 @@
                   <div class="file-tree" id="projet-file-tree">
                     <!-- Dynamically rendered -->
                   </div>
+                </div>
+              </div>
+
+              <div class="detail-section projet-notes-section">
+                <div class="detail-section-title">Bloc-notes</div>
+                <form class="projet-note-form" id="projet-note-form">
+                  <textarea id="projet-note-input" placeholder="Ajouter une note d’information…" maxlength="2000" required></textarea>
+                  <button class="btn-create" type="submit" id="btn-add-projet-note">
+                    <i class="fa-solid fa-plus"></i> Ajouter la note
+                  </button>
+                </form>
+                <div class="projet-notes-list" id="projet-notes-list">
+                  <p class="empty-history">Aucune note pour ce projet.</p>
                 </div>
               </div>
             </div>

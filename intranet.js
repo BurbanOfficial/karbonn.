@@ -736,6 +736,7 @@ auth.onAuthStateChanged(async user => {
     if (unsubscribeProjets) { unsubscribeProjets(); unsubscribeProjets = null; }
     if (unsubscribeSites) { unsubscribeSites(); unsubscribeSites = null; }
     if (unsubscribeSiteHistory) { unsubscribeSiteHistory(); unsubscribeSiteHistory = null; }
+    if (unsubscribeProjetNotes) { unsubscribeProjetNotes(); unsubscribeProjetNotes = null; }
     if (unsubscribeUsers) { unsubscribeUsers(); unsubscribeUsers = null; }
     if (unsubscribeActivity) { unsubscribeActivity(); unsubscribeActivity = null; }
     showLogin();
@@ -948,6 +949,7 @@ function getEffectiveSiteStatus(site) {
 }
 
 function autoUpdateExpiredSites() {
+  if (!isManager()) return;
   allSites.forEach(site => {
     if (site.status === 'Actif' && site.expirationDate) {
       const exp = new Date(site.expirationDate);
@@ -1071,6 +1073,8 @@ function openSitePage(site, loadHistory = true) {
   sitePageDomain.textContent = site.domain || '—';
 
   const canEdit = isManager();
+  const deleteSiteBtn = document.getElementById('btn-delete-site');
+  if (deleteSiteBtn) deleteSiteBtn.style.display = canEdit ? '' : 'none';
 
   const clientOptions = allClients.map(c => {
     const cName = c.entreprise ? `${[c.prenom, c.nom].filter(Boolean).join(' ')} — ${c.entreprise}` : [c.prenom, c.nom].filter(Boolean).join(' ');
@@ -1291,6 +1295,10 @@ siteModal.addEventListener('click', e => { if (e.target === siteModal) closeSite
 
 formSite.addEventListener('submit', async e => {
   e.preventDefault();
+  if (!isManager()) {
+    showToast('Action réservée aux managers.', 'error');
+    return;
+  }
   const errorEl = document.getElementById('modal-error-site');
   errorEl.textContent = '';
 
@@ -1404,7 +1412,6 @@ document.getElementById('btn-delete-site').addEventListener('click', async () =>
 
 document.getElementById('btn-add-site-note').addEventListener('click', async () => {
   if (!currentPageSite) return;
-  if (!isManager()) { showToast('Action réservée aux managers.', 'error'); return; }
   const content = window.prompt('Contenu de la note :');
   if (!content) return;
   try {
@@ -1446,23 +1453,24 @@ function renderSiteHistory(items) {
     siteHistoryList.innerHTML = '<p class="empty-history">Aucune modification enregistrée.</p>';
     return;
   }
-  const canEdit = isManager();
+  const canDelete = isManager();
   siteHistoryList.innerHTML = items.map(item => {
     const date = item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleString('fr-FR') : '—';
     const icon = item.type === 'note' ? 'fa-note-sticky' : 'fa-pen-to-square';
+    const canEditItem = canDelete || item.type === 'note';
     return `<div class="site-history-item" data-history-id="${item.id}">
       <div class="history-meta">
         <span><i class="fa-solid ${icon}"></i> ${escapeHtml(item.createdByName || '—')} · ${date}</span>
-        ${canEdit ? `<span class="history-actions">
-          <button class="history-edit-btn" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
-          <button class="history-delete-btn" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+        ${canEditItem || canDelete ? `<span class="history-actions">
+          ${canEditItem ? `<button class="history-edit-btn" title="Modifier"><i class="fa-solid fa-pencil"></i></button>` : ''}
+          ${canDelete ? `<button class="history-delete-btn" title="Supprimer"><i class="fa-solid fa-trash"></i></button>` : ''}
         </span>` : ''}
       </div>
       <div class="history-content">${escapeHtml(item.content || '')}</div>
     </div>`;
   }).join('');
 
-  if (canEdit && currentPageSite) {
+  if (currentPageSite) {
     siteHistoryList.querySelectorAll('.history-edit-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const itemEl = btn.closest('.site-history-item');
@@ -2692,8 +2700,12 @@ const projetPageTeamDisplay = document.getElementById('projet-page-team-display'
 const projetPageTeamEditList = document.getElementById('projet-page-team-edit-list');
 const projetPageTeamEditBtn = document.getElementById('projet-page-team-edit');
 const projetPageTeamSection = document.getElementById('projet-page-team');
+const projetNoteForm = document.getElementById('projet-note-form');
+const projetNoteInput = document.getElementById('projet-note-input');
+const projetNotesList = document.getElementById('projet-notes-list');
 
 let currentPageProjet = null;
+let unsubscribeProjetNotes = null;
 
 function openProjetPage(projet) {
   currentPageProjet = projet;
@@ -2718,6 +2730,7 @@ function openProjetPage(projet) {
   renderProjetPageResume(projet);
   renderProjetPageTeam(projet);
   renderProjetPageFiles(projet);
+  loadProjetNotes(projet.id);
 }
 
 function closeProjetPage() {
@@ -2725,7 +2738,63 @@ function closeProjetPage() {
   projetsListView.style.display = '';
   projetPageResumeWrapper.classList.remove('editing');
   projetPageTeamSection.classList.remove('editing');
+  if (unsubscribeProjetNotes) {
+    unsubscribeProjetNotes();
+    unsubscribeProjetNotes = null;
+  }
+  if (projetNoteForm) projetNoteForm.reset();
   currentPageProjet = null;
+}
+
+function loadProjetNotes(projetId) {
+  if (!projetNotesList) return;
+  if (unsubscribeProjetNotes) unsubscribeProjetNotes();
+  unsubscribeProjetNotes = db.collection('projets').doc(projetId).collection('notes').orderBy('createdAt', 'desc').onSnapshot(snapshot => {
+    const notes = [];
+    snapshot.forEach(doc => notes.push({ id: doc.id, ...doc.data() }));
+    if (!notes.length) {
+      projetNotesList.innerHTML = '<p class="empty-history">Aucune note pour ce projet.</p>';
+      return;
+    }
+    projetNotesList.innerHTML = notes.map(note => {
+      const date = note.createdAt?.toDate ? note.createdAt.toDate().toLocaleString('fr-FR') : 'À l’instant';
+      return `<div class="projet-note-item">
+        <div class="projet-note-meta"><i class="fa-solid fa-note-sticky"></i> ${escapeHtml(note.createdByName || 'Utilisateur')} · ${date}</div>
+        <div class="projet-note-content">${escapeHtml(note.content || '')}</div>
+      </div>`;
+    }).join('');
+  }, err => {
+    console.error(err);
+    projetNotesList.innerHTML = '<p class="empty-history">Erreur lors du chargement des notes.</p>';
+  });
+}
+
+if (projetNoteForm) {
+  projetNoteForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!currentPageProjet || !auth.currentUser) return;
+    const content = projetNoteInput.value.trim();
+    if (!content) return;
+    const submitBtn = document.getElementById('btn-add-projet-note');
+    submitBtn.disabled = true;
+    try {
+      const user = auth.currentUser;
+      const userName = currentUserProfile?.displayName || [currentUserProfile?.prenom, currentUserProfile?.nom].filter(Boolean).join(' ') || user.displayName || user.email || 'Utilisateur';
+      await db.collection('projets').doc(currentPageProjet.id).collection('notes').add({
+        content,
+        createdBy: user.uid,
+        createdByName: userName,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      projetNoteForm.reset();
+      showToast('Note ajoutée.', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast("Erreur lors de l'ajout de la note.", 'error');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
 }
 
 document.getElementById('projet-back-btn').addEventListener('click', closeProjetPage);
@@ -5553,6 +5622,8 @@ function renderSiteSubscriptionSelector(site) {
   // Remove old listener
   const newSelect = select.cloneNode(true);
   select.parentNode.replaceChild(newSelect, select);
+  newSelect.disabled = !isManager();
+  if (!isManager()) return;
 
   newSelect.addEventListener('change', async () => {
     const val = newSelect.value;

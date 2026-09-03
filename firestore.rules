@@ -59,6 +59,11 @@ service cloud.firestore {
     match /projets/{projetId} {
       allow read: if request.auth != null;
       allow create, update, delete: if request.auth != null;
+
+      match /notes/{noteId} {
+        allow read, create: if request.auth != null;
+        allow update, delete: if false;
+      }
     }
 
     // Collection billings (Facturation & Devis)
@@ -101,11 +106,18 @@ service cloud.firestore {
     // Collection sitesWeb (gestion des sites web)
     match /sitesWeb/{siteId} {
       allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null;
+      allow create, update, delete: if isManager();
 
       match /history/{historyId} {
-        allow read, create: if request.auth != null;
-        allow update, delete: if request.auth != null;
+        allow read: if request.auth != null;
+        allow create: if isManager() ||
+          (request.auth != null && request.resource.data.type == 'note');
+        allow update: if isManager() ||
+          (request.auth != null &&
+            resource.data.type == 'note' &&
+            request.resource.data.type == 'note' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content']));
+        allow delete: if isManager();
       }
     }
   }
