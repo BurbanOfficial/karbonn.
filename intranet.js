@@ -3958,17 +3958,20 @@ function renderFileTree(files) {
           <span>${escapeHtml(file)}${uploaded ? '' : ' <em style="color:var(--muted);font-size:0.75em;">(manquant)</em>'}</span>
           <div class="tree-node-actions">`;
 
-      if (isManager()) {
+      if (isManager() && !uploaded) {
         html += `<button onclick="renameRequiredProjectFile('${encodeURIComponent(folder)}', '${encodeURIComponent(file)}')" title="Renommer ce fichier obligatoire">
           <i class="fa-solid fa-pen-to-square"></i>
         </button>
-        <button onclick="deleteRequiredProjectFile('${encodeURIComponent(folder)}', '${encodeURIComponent(file)}')" title="Supprimer ce fichier obligatoire">
+        <button onclick="deleteRequiredProjectFile('${encodeURIComponent(folder)}', '${encodeURIComponent(file)}')" title="Retirer cette obligation">
           <i class="fa-solid fa-trash-can"></i>
         </button>`;
       }
       
       if (uploaded) {
-        html += `<button onclick="downloadFile('${folder}', '${uploaded.filename}')" title="Télécharger">
+        html += `<button onclick="previewFile('${folder}', '${uploaded.filename}')" title="Aperçu">
+          <i class="fa-solid fa-eye"></i>
+        </button>
+        <button onclick="downloadFile('${folder}', '${uploaded.filename}')" title="Télécharger">
           <i class="fa-solid fa-download"></i>
         </button>`;
         if (folderEditable) {
@@ -4006,8 +4009,11 @@ function renderFileTree(files) {
         html += `<div class="tree-node">
           <div class="tree-node-content">
             <i class="fa-solid ${icon}"></i>
-            <span>${fileData.filename}</span>
+            <span>${escapeHtml(fileData.filename)}</span>
             <div class="tree-node-actions">
+              <button onclick="previewFile('${folder}', '${fileData.filename}')" title="Aperçu">
+                <i class="fa-solid fa-eye"></i>
+              </button>
               <button onclick="downloadFile('${folder}', '${fileData.filename}')" title="Télécharger">
                 <i class="fa-solid fa-download"></i>
               </button>`;
@@ -4560,6 +4566,92 @@ function uploadRequiredFile(folder, filename) {
   setTimeout(() => {
     fileUploadInput.click();
   }, 100);
+}
+
+// Preview file in a modal
+const filePreviewModal = document.getElementById('file-preview-modal');
+const filePreviewTitle = document.getElementById('file-preview-title');
+const filePreviewBody = document.getElementById('file-preview-body');
+const filePreviewClose = document.getElementById('file-preview-close');
+let filePreviewObjectUrl = null;
+
+function closeFilePreviewModal() {
+  filePreviewModal.classList.remove('visible');
+  if (filePreviewObjectUrl) {
+    URL.revokeObjectURL(filePreviewObjectUrl);
+    filePreviewObjectUrl = null;
+  }
+  filePreviewBody.innerHTML = '';
+}
+
+if (filePreviewClose) filePreviewClose.addEventListener('click', closeFilePreviewModal);
+if (filePreviewModal) filePreviewModal.addEventListener('click', e => { if (e.target === filePreviewModal) closeFilePreviewModal(); });
+
+function showFilePreviewError(message) {
+  filePreviewBody.innerHTML = `<div class="file-preview-error"><i class="fa-solid fa-triangle-exclamation"></i><span>${escapeHtml(message)}</span></div>`;
+}
+
+async function previewFile(folder, filename) {
+  if (!currentPageProjet) return;
+  const fileKey = `${folder}|${filename}`;
+  const file = currentPageProjet.files[fileKey];
+  if (!file) return;
+
+  filePreviewTitle.textContent = filename;
+  filePreviewBody.innerHTML = `<div class="file-preview-loading"><i class="fa-solid fa-spinner fa-spin"></i> Chargement de l'aperçu…</div>`;
+  filePreviewModal.classList.add('visible');
+  if (filePreviewObjectUrl) {
+    URL.revokeObjectURL(filePreviewObjectUrl);
+    filePreviewObjectUrl = null;
+  }
+
+  const ext = (filename.split('.').pop() || '').toLowerCase();
+  const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'];
+  const isPdf = ext === 'pdf';
+  const isImage = imageExts.includes(ext);
+
+  if (!isPdf && !isImage) {
+    showFilePreviewError(`Aperçu indisponible pour ce type de fichier (.${ext || '?'}).`);
+    return;
+  }
+
+  try {
+    let data;
+    if (file.isLocal) {
+      const storageKey = `project_files_${currentPageProjet.id}`;
+      const storedFiles = JSON.parse(localStorage.getItem(storageKey) || '{}');
+      const storedFile = storedFiles[fileKey];
+      if (!storedFile || !storedFile.base64) {
+        showFilePreviewError('Aperçu indisponible : fichier local introuvable.');
+        return;
+      }
+      const response = await fetch(storedFile.base64);
+      data = await response.blob();
+    } else if (file.supabasePath) {
+      const { data: supabaseData, error } = await supabaseClient.storage
+        .from('project-files')
+        .download(file.supabasePath);
+      if (error || !supabaseData) {
+        console.error(error);
+        showFilePreviewError("Aperçu indisponible : impossible de récupérer le fichier.");
+        return;
+      }
+      data = supabaseData;
+    } else {
+      showFilePreviewError('Aperçu indisponible : fichier introuvable.');
+      return;
+    }
+
+    filePreviewObjectUrl = URL.createObjectURL(data);
+    if (isImage) {
+      filePreviewBody.innerHTML = `<img src="${filePreviewObjectUrl}" alt="${escapeHtml(filename)}" />`;
+    } else {
+      filePreviewBody.innerHTML = `<iframe src="${filePreviewObjectUrl}" title="${escapeHtml(filename)}"></iframe>`;
+    }
+  } catch (err) {
+    console.error(err);
+    showFilePreviewError("Aperçu indisponible : une erreur est survenue.");
+  }
 }
 
 // Download file
