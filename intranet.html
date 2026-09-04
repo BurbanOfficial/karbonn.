@@ -2712,7 +2712,7 @@
     }
 
     .planning-day.is-today .planning-day-header {
-      background: #3b82f6;
+      background: #0ABAB5;
     }
 
     .planning-day-header h4 {
@@ -3478,14 +3478,24 @@
       color: #2e7d32;
     }
 
-    .detail-resume-wrapper {
-      position: relative;
+    .detail-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
     }
 
-    .detail-resume-wrapper .detail-field-edit {
-      position: absolute;
-      top: 0;
-      right: 0;
+    .detail-section-header .detail-section-title {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .detail-resume-wrapper {
+      position: relative;
     }
 
     .detail-resume-wrapper textarea {
@@ -3512,18 +3522,12 @@
       display: block;
     }
 
-    .detail-resume-wrapper.editing .detail-field-edit {
+    .detail-section:has(.detail-resume-wrapper.editing) .detail-section-header .detail-field-edit {
       color: #2e7d32;
     }
 
     .detail-team-editable {
       position: relative;
-    }
-
-    .detail-team-editable .detail-field-edit {
-      position: absolute;
-      top: -4px;
-      right: 0;
     }
 
     .detail-team-checkboxes {
@@ -3539,7 +3543,7 @@
       display: block;
     }
 
-    .detail-team-editable.editing .detail-field-edit {
+    .detail-section:has(.detail-team-editable.editing) .detail-section-header .detail-field-edit {
       color: #2e7d32;
     }
 
@@ -3588,6 +3592,32 @@
       font-size: 0.9rem;
       color: var(--text);
       font-weight: 500;
+    }
+
+    .detail-info-fullwidth {
+      grid-column: 1 / -1;
+    }
+
+    .btn-client-file {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-sm);
+      color: var(--accent);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .btn-client-file:hover {
+      background: var(--accent);
+      color: #fff;
     }
 
     .detail-resume {
@@ -4647,20 +4677,24 @@
               </div>
 
               <div class="detail-section">
-                <div class="detail-section-title">Résumé</div>
+                <div class="detail-section-header">
+                  <div class="detail-section-title">Résumé</div>
+                  <button class="detail-field-edit" id="projet-page-resume-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
+                </div>
                 <div class="detail-resume-wrapper" id="projet-page-resume">
                   <p class="detail-resume" id="projet-page-resume-text"></p>
                   <textarea id="projet-page-resume-input"></textarea>
-                  <button class="detail-field-edit" id="projet-page-resume-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
                 </div>
               </div>
 
               <div class="detail-section">
-                <div class="detail-section-title">Équipe assignée</div>
+                <div class="detail-section-header">
+                  <div class="detail-section-title">Équipe assignée</div>
+                  <button class="detail-field-edit" id="projet-page-team-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
+                </div>
                 <div class="detail-team-editable" id="projet-page-team">
                   <div class="detail-team-list" id="projet-page-team-display"></div>
                   <div class="detail-team-checkboxes" id="projet-page-team-edit-list"></div>
-                  <button class="detail-field-edit" id="projet-page-team-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>
                 </div>
               </div>
 

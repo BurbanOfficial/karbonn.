@@ -2925,7 +2925,31 @@ function renderProjetPageInfo(projet) {
     ${canEdit ? `<button class="detail-field-edit" title="Modifier"><i class="fa-solid fa-pencil"></i></button>` : ''}
   </div>`;
 
+  // Bouton fiche client
+  html += `<div class="detail-info-item detail-info-fullwidth">
+    <button type="button" class="btn-client-file" id="btn-view-client-file">
+      <i class="fa-solid fa-user"></i> Voir la fiche client
+    </button>
+  </div>`;
+
   projetPageInfo.innerHTML = html;
+
+  // Bouton "Voir la fiche client"
+  const btnViewClientFile = document.getElementById('btn-view-client-file');
+  if (btnViewClientFile) {
+    btnViewClientFile.addEventListener('click', () => {
+      if (!projet.clientId) {
+        showToast('Aucun client associé à ce projet.', 'error');
+        return;
+      }
+      const client = allClients.find(c => c.id === projet.clientId);
+      if (!client) {
+        showToast('Client introuvable dans la liste.', 'error');
+        return;
+      }
+      openClientDetail(client);
+    });
+  }
 
   // Attach edit handlers
   projetPageInfo.querySelectorAll('.detail-info-item-editable').forEach(item => {
@@ -3377,7 +3401,9 @@ function updatePlanningHeader() {
   today.setHours(0, 0, 0, 0);
   Object.entries(weekDates).forEach(([day, date]) => {
     if (!['start', 'end'].includes(day)) {
-      document.querySelector(`.planning-day[data-day="${day}"]`)?.classList.toggle('is-today', date.getTime() === today.getTime());
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      document.querySelector(`.planning-day[data-day="${day}"]`)?.classList.toggle('is-today', d.getTime() === today.getTime());
     }
   });
 }
