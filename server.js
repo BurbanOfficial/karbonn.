@@ -526,6 +526,7 @@ app.post('/api/public/client/:clientId/projets/:projetId/validation', async (req
     const projetRef = db.collection('projets').doc(projetId);
     const historyRef = projetRef.collection('validationHistory').doc();
     let projetName = 'Projet';
+    let projetTeam = [];
     let historyEntry = null;
 
     await db.runTransaction(async transaction => {
@@ -538,6 +539,7 @@ app.post('/api/public/client/:clientId/projets/:projetId/validation', async (req
         throw Object.assign(new Error('This validation request is no longer pending'), { status: 409 });
       }
       projetName = projet.nom || 'Projet';
+      projetTeam = Array.isArray(projet.team) ? projet.team : [];
       historyEntry = {
         requestId,
         folderKey,
@@ -562,7 +564,9 @@ app.post('/api/public/client/:clientId/projets/:projetId/validation', async (req
     });
 
     const managerEmails = await getManagerEmails();
-    if (managerEmails.length) {
+    const designerEmails = await getProjectDesignerEmails(projetTeam);
+    const notificationEmails = [...new Set([...managerEmails, ...designerEmails])];
+    if (notificationEmails.length) {
       const approved = status === 'approved';
       const resultLabel = approved ? 'validée' : 'refusée';
       const lines = [`Projet : ${projetName}`, `Dossier : ${folderName}`, `Décision : Étape ${resultLabel}`];
@@ -576,13 +580,13 @@ app.post('/api/public/client/:clientId/projets/:projetId/validation', async (req
       });
       try {
         await sendEmail({
-          to: managerEmails,
+          to: notificationEmails,
           subject: `[Karbonn] Étape ${resultLabel} – ${projetName}`,
           text: lines.join('\n'),
           html
         });
       } catch (emailErr) {
-        console.error('[Project Validation] Manager notification failed:', emailErr);
+        console.error('[Project Validation] Team notification failed:', emailErr);
       }
     }
     res.json({ success: true, status });
@@ -1218,6 +1222,24 @@ async function getManagerEmails() {
     return emails;
   } catch (err) {
     console.error('[Reminders] Failed to get manager emails:', err);
+    return [];
+  }
+}
+
+async function getProjectDesignerEmails(team) {
+  const teamUids = new Set((team || []).map(member => member?.uid).filter(Boolean));
+  if (!teamUids.size) return [];
+  try {
+    const snap = await db.collection('users').get();
+    const emails = [];
+    snap.forEach(doc => {
+      const user = doc.data();
+      const role = typeof user.role === 'object' ? user.role?.label : user.role;
+      if (role === 'Designer' && (teamUids.has(user.uid) || teamUids.has(doc.id)) && user.email) emails.push(user.email);
+    });
+    return [...new Set(emails)];
+  } catch (err) {
+    console.error('[Project Validation] Failed to get project designer emails:', err);
     return [];
   }
 }
