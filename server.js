@@ -61,93 +61,6 @@ async function sendEmail({ to, subject, text, html }) {
   return result;
 }
 
-// ── Auto-génération de factures Qonto à partir des paiements Stripe ──
-// Karbonn bénéficie du régime de franchise en base de TVA (art. 293 B du CGI) : TVA non applicable.
-const QONTO_INVOICE_VAT_RATE = '0';
-
-async function createQontoInvoiceFromStripeInvoice(stripeInvoice, subscription, siteData) {
-  if (!stripeInvoice.amount_paid || stripeInvoice.amount_paid <= 0) {
-    console.log('[Qonto] Skipping invoice generation: amount_paid is 0 for', stripeInvoice.id);
-    return;
-  }
-
-  const existing = await db.collection('qontoInvoices').doc(stripeInvoice.id).get();
-  if (existing.exists) {
-    console.log('[Qonto] Invoice already generated for Stripe invoice:', stripeInvoice.id);
-    return;
-  }
-
-  const clientDocId = siteData.clientId || subscription.metadata?.clientId;
-  if (!clientDocId) {
-    console.log('[Qonto] No linked client for this site, skipping invoice generation');
-    return;
-  }
-  const clientDoc = await db.collection('clients').doc(clientDocId).get();
-  if (!clientDoc.exists) {
-    console.log('[Qonto] Client not found:', clientDocId);
-    return;
-  }
-  const qontoClientId = clientDoc.data().qontoClientId;
-  if (!qontoClientId) {
-    console.log('[Qonto] Client has no linked Qonto profile:', clientDocId);
-    return;
-  }
-
-  const lines = stripeInvoice.lines?.data || [];
-  const currency = (stripeInvoice.currency || 'eur').toUpperCase();
-  const items = (lines.length > 0
-    ? lines.map(line => ({
-        title: line.description || line.price?.nickname || 'Prestation',
-        quantity: '1',
-        unit_price: { value: (line.amount / 100).toFixed(2), currency },
-        vat_rate: QONTO_INVOICE_VAT_RATE
-      }))
-    : [{
-        title: stripeInvoice.description || 'Prestation',
-        quantity: '1',
-        unit_price: { value: (stripeInvoice.amount_paid / 100).toFixed(2), currency },
-        vat_rate: QONTO_INVOICE_VAT_RATE
-      }]);
-
-  const today = new Date().toISOString().split('T')[0];
-  const created = await qontoRequest('/client_invoices', {
-    method: 'POST',
-    body: JSON.stringify({
-      client_invoice: {
-        client_id: qontoClientId,
-        issue_date: today,
-        due_date: today,
-        currency: 'EUR',
-        payment_methods: { iban: qontoBankIban },
-        items
-      }
-    })
-  });
-  const qontoInvoiceId = created?.client_invoice?.id;
-  if (!qontoInvoiceId) throw new Error('Qonto did not return an invoice id');
-
-  await qontoRequest(`/client_invoices/${qontoInvoiceId}/finalize`, { method: 'POST' });
-
-  const paidAt = stripeInvoice.status_transitions?.paid_at
-    ? new Date(stripeInvoice.status_transitions.paid_at * 1000).toISOString().split('T')[0]
-    : today;
-  await qontoRequest(`/client_invoices/${qontoInvoiceId}/mark_as_paid`, {
-    method: 'POST',
-    body: JSON.stringify({ paid_at: paidAt })
-  });
-
-  await db.collection('qontoInvoices').doc(stripeInvoice.id).set({
-    qontoInvoiceId,
-    clientId: clientDocId,
-    siteId: subscription.metadata?.siteId || null,
-    amount: stripeInvoice.amount_paid,
-    billingReason: stripeInvoice.billing_reason || null,
-    createdAt: admin.firestore.FieldValue.serverTimestamp()
-  });
-
-  console.log('[Qonto] Invoice created and marked as paid:', qontoInvoiceId, 'for Stripe invoice:', stripeInvoice.id);
-}
-
 // Stripe webhook must use raw body to verify signature
 app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   if (!process.env.STRIPE_WEBHOOK_SECRET) {
@@ -213,12 +126,6 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
                 stripeSubscriptionStatus: 'active',
                 reminderEmailsSent: []
               });
-            }
-
-            try {
-              await createQontoInvoiceFromStripeInvoice(invoice, subscription, siteData);
-            } catch (qErr) {
-              console.error('[Qonto] Error creating invoice from Stripe payment:', qErr.message, qErr.data ? JSON.stringify(qErr.data) : '');
             }
           }
         }
