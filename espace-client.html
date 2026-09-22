@@ -69,9 +69,7 @@
     .login-left {
       flex: 1.1;
       position: relative;
-      background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.847) 0%, rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.395) 100%),
-        url('https://geteverest.io/wp-content/uploads/2025/02/Illustrations-Articles-1600x1024-2025-02-27T101531.475-1024x655.jpg') center/cover no-repeat;
+      background: url('https://i.imgur.com/H8cxNVw.jpeg') center/cover no-repeat;
       color: #1d1d1f;
       display: flex;
       flex-direction: column;
@@ -80,9 +78,24 @@
       overflow: hidden;
     }
 
+    .login-left::before {
+      content: '';
+      position: absolute;
+      top: -160px;
+      left: -160px;
+      width: 560px;
+      height: 560px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 65%);
+      filter: blur(70px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
     .login-left .brand {
       position: relative;
-      color: #1d1d1f;
+      color: #fff;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.35);
       text-decoration: none;
       display: inline-flex;
       align-items: center;
@@ -90,11 +103,19 @@
       font-size: 1.4rem;
       font-weight: 700;
       letter-spacing: -0.03em;
+      z-index: 1;
     }
 
     .login-left .welcome-block {
       position: relative;
-      max-width: 380px;
+      max-width: 420px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: 22px;
+      padding: 28px 32px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
     }
 
     .login-left .welcome {
@@ -111,8 +132,8 @@
     .login-left .welcome-sub {
       position: relative;
       font-size: 0.95rem;
-      color: #6b6b6b;
-      line-height: 1.5;
+      color: #4a4a4a;
+      line-height: 1.55;
       max-width: 320px;
     }
 

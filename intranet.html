@@ -450,7 +450,7 @@
     .login-left {
       flex: 1.1;
       position: relative;
-      background: linear-gradient(160deg, #eef0f3 0%, #e2e4e9 55%, #ece2e4 100%);
+      background: url('https://i.imgur.com/m6wO2lb.jpeg') center/cover no-repeat;
       color: var(--text);
       display: flex;
       flex-direction: column;
@@ -462,34 +462,26 @@
     .login-left::before {
       content: '';
       position: absolute;
-      top: -120px;
-      right: -100px;
-      width: 420px;
-      height: 420px;
+      top: -160px;
+      left: -160px;
+      width: 560px;
+      height: 560px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,255,255,0.9), rgba(255,255,255,0) 70%);
-      filter: blur(10px);
-    }
-
-    .login-left::after {
-      content: '';
-      position: absolute;
-      bottom: -160px;
-      left: -80px;
-      width: 380px;
-      height: 380px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(0,113,227,0.12), rgba(0,113,227,0) 70%);
-      filter: blur(20px);
+      background: radial-gradient(circle, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 65%);
+      filter: blur(70px);
+      pointer-events: none;
+      z-index: 0;
     }
 
     .login-left .brand {
       position: relative;
-      color: var(--text);
+      color: #fff;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.35);
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       gap: 12px;
+      z-index: 1;
     }
 
     .brand img {
@@ -508,7 +500,14 @@
 
     .login-left .welcome-block {
       position: relative;
-      max-width: 380px;
+      max-width: 420px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: 22px;
+      padding: 28px 32px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
     }
 
     .login-left .welcome {
@@ -524,8 +523,8 @@
 
     .login-left .welcome-sub {
       font-size: 0.95rem;
-      color: var(--muted);
-      line-height: 1.5;
+      color: #4a4a4a;
+      line-height: 1.55;
       max-width: 320px;
     }
 
@@ -4272,8 +4271,21 @@
 
   <div class="login-overlay" id="login-screen">
     <div class="login-left">
-      <a href="index.html" class="brand login-brand-text">Karbonn.</a>
-      <p class="welcome">Bienvenue sur votre espace.</p>
+      <a href="index.html" class="brand">
+        <img src="https://i.imgur.com/61Dv12I.png" alt="Karbonn." style="height:2.2rem;">
+        <span>Karbonn.</span>
+      </a>
+      <div class="welcome-block">
+        <div class="welcome">Bienvenue sur<br>votre espace intranet<span class="accent-dot">.</span></div>
+        <p class="welcome-sub">Accédez à vos outils, projets et données clients en toute sécurité.</p>
+      </div>
+      <div class="login-security-badge">
+        <i class="fa-solid fa-shield-halved"></i>
+        <div class="login-security-badge-text">
+          <strong>Sécurité &amp; confidentialité</strong>
+          <span>Vos données sont protégées</span>
+        </div>
+      </div>
     </div>
     <div class="login-right">
       <div class="login-card">
