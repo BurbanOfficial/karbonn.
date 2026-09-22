@@ -10,8 +10,9 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY || '');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const QONTO_BASE_URL = 'https://thirdparty.qonto.com/v2';
+const QONTO_BASE_URL = process.env.QONTO_BASE_URL || 'https://thirdparty.qonto.com/v2';
 const QONTO_AUTH = (process.env.QONTO_API_TOKEN || '').replace(/^Bearer\s+/i, '').replace(/['"]/g, '').replace(/\s/g, '').trim();
+const QONTO_STAGING_TOKEN = (process.env.QONTO_STAGING_TOKEN || '').trim();
 
 let qontoBankIban = process.env.QONTO_IBAN ? process.env.QONTO_IBAN.replace(/\s/g, '') : null;
 async function loadQontoBankAccount() {
@@ -845,8 +846,10 @@ app.get('/api/public/client/:clientId/documents/:attachmentId/download', async (
     if (clientSnap.empty) return res.status(404).json({ error: 'Client not found' });
     if (!clientSnap.docs[0].data().qontoClientId) return res.status(404).json({ error: 'Qonto client not linked' });
 
+    const attachHeaders = { 'Authorization': QONTO_AUTH, 'Accept': 'application/pdf' };
+    if (QONTO_STAGING_TOKEN) attachHeaders['X-Qonto-Staging-Token'] = QONTO_STAGING_TOKEN;
     const response = await fetch(`${QONTO_BASE_URL}/attachments/${attachmentId}`, {
-      headers: { 'Authorization': QONTO_AUTH, 'Accept': 'application/pdf' }
+      headers: attachHeaders
     });
     if (!response.ok) {
       const text = await response.text().catch(() => '');
@@ -1654,14 +1657,17 @@ app.post('/api/admin/sync-renewal-prices', async (req, res) => {
 });
 
 async function qontoRequest(path, options = {}) {
+  const headers = {
+    'Authorization': QONTO_AUTH,
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    ...(options.headers || {}),
+  };
+  // En mode sandbox, le header X-Qonto-Staging-Token est obligatoire sur chaque requête
+  if (QONTO_STAGING_TOKEN) headers['X-Qonto-Staging-Token'] = QONTO_STAGING_TOKEN;
   const response = await fetch(`${QONTO_BASE_URL}${path}`, {
     ...options,
-    headers: {
-      'Authorization': QONTO_AUTH,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      ...(options.headers || {}),
-    },
+    headers,
   });
   const text = await response.text();
   let data = null;
