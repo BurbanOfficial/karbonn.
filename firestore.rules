@@ -108,6 +108,12 @@ service cloud.firestore {
       allow create, update, delete: if isManager();
     }
 
+    // Collection qontoInvoices (lien Stripe → Qonto, écrit uniquement par le serveur via Firebase Admin SDK)
+    match /qontoInvoices/{stripeInvoiceId} {
+      allow read: if isManager();
+      allow write: if false;
+    }
+
     // Collection sitesWeb (gestion des sites web)
     match /sitesWeb/{siteId} {
       allow read: if request.auth != null;
