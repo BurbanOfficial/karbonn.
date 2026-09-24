@@ -752,6 +752,9 @@ auth.onAuthStateChanged(async user => {
     if (unsubscribeValidationHistory) { unsubscribeValidationHistory(); unsubscribeValidationHistory = null; }
     if (unsubscribeUsers) { unsubscribeUsers(); unsubscribeUsers = null; }
     if (unsubscribeActivity) { unsubscribeActivity(); unsubscribeActivity = null; }
+    if (unsubscribeMonitoring) { unsubscribeMonitoring(); unsubscribeMonitoring = null; }
+    if (unsubscribeMonitoringAlerts) { unsubscribeMonitoringAlerts(); unsubscribeMonitoringAlerts = null; }
+    if (unsubscribeMonitoringChecks) { unsubscribeMonitoringChecks(); unsubscribeMonitoringChecks = null; }
     showLogin();
     return;
   }
@@ -765,6 +768,7 @@ auth.onAuthStateChanged(async user => {
     setupSitesListener();
     setupUsersListener();
     setupActivityListener();
+    setupMonitoringListeners();
     loadAbonnements();
 
     // Initialize planning after user is logged in
@@ -984,6 +988,7 @@ function setupSitesListener() {
     renderAllSites();
     autoUpdateExpiredSites();
     refreshPlanning();
+    if (typeof renderMonitoringAll === 'function') renderMonitoringAll();
     showSection('sitesweb');
     if (currentPageSite) {
       const updated = allSites.find(s => s.id === currentPageSite.id);
@@ -6266,12 +6271,10 @@ document.querySelectorAll('.sim-calc-btn').forEach(btn => {
 // ── Monitoring des sites clients ──
 let monitoringData = { sites: [], alerts: [], availability: [] };
 let monitoringCharts = {};
-let monitoringLoading = false;
 
 const monElements = {
   lastUpdate: document.getElementById('monitoring-last-update'),
   globalPill: document.getElementById('monitoring-global-pill'),
-  refreshBtn: document.getElementById('monitoring-refresh-btn'),
   onlineVal: document.getElementById('mon-online-val'),
   onlineSub: document.getElementById('mon-online-sub'),
   errorVal: document.getElementById('mon-error-val'),
@@ -6383,6 +6386,8 @@ function renderMonitoringKpis() {
 
 function renderMonitoringCharts() {
   if (typeof ApexCharts === 'undefined') return;
+  const section = document.getElementById('section-monitoring');
+  if (section && !section.classList.contains('active')) return;
   Object.values(monitoringCharts).forEach(c => { try { c.destroy(); } catch {} });
   monitoringCharts = {};
 
@@ -6544,55 +6549,86 @@ function renderMonitoringTable() {
   }).join('');
 }
 
-async function loadMonitoring() {
-  if (monitoringLoading) return;
-  monitoringLoading = true;
-  try {
-    const data = await apiRequest('/api/monitoring/overview');
-    monitoringData = {
-      sites: data.sites || [],
-      alerts: data.alerts || [],
-      availability: data.availability || []
-    };
-    if (monElements.lastUpdate) {
-      monElements.lastUpdate.textContent = 'Dernière mise à jour : ' +
-        new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' +
-        new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    }
-    renderMonitoringKpis();
-    renderMonitoringCharts();
-    renderMonitoringAlerts();
-    renderMonitoringTable();
-  } catch (err) {
-    console.error('[Monitoring] Failed to load:', err);
-    if (monElements.tbody) {
-      monElements.tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Erreur lors du chargement du monitoring.</td></tr>';
-    }
-  } finally {
-    monitoringLoading = false;
-    showSection('monitoring');
-  }
+// ── Temps réel : listeners Firestore ──
+let unsubscribeMonitoring = null;
+let unsubscribeMonitoringAlerts = null;
+let unsubscribeMonitoringChecks = null;
+let monitoringSiteMap = {};
+
+function rebuildMonitoringSites() {
+  monitoringData.sites = allSites.map(s => ({ ...s, monitoring: monitoringSiteMap[s.id] || null }));
 }
 
-if (monElements.refreshBtn) {
-  monElements.refreshBtn.addEventListener('click', async () => {
-    monElements.refreshBtn.disabled = true;
-    monElements.refreshBtn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Vérification…';
-    try {
-      await apiRequest('/api/monitoring/check-now', { method: 'POST' });
-      showToast('Vérification des sites lancée. Résultats dans quelques secondes…', 'success');
-      setTimeout(loadMonitoring, 15000);
-      setTimeout(loadMonitoring, 30000);
-    } catch (err) {
-      console.error('[Monitoring] Check-now failed:', err);
-      showToast('Impossible de lancer la vérification.', 'error');
-    } finally {
-      setTimeout(() => {
-        monElements.refreshBtn.disabled = false;
-        monElements.refreshBtn.innerHTML = '<i class="fa-solid fa-rotate"></i> Actualiser';
-      }, 5000);
-    }
+function monitoringLatestCheckLabel() {
+  let latest = null;
+  Object.values(monitoringSiteMap).forEach(m => {
+    const t = m?.checkedAt?.toDate ? m.checkedAt.toDate().getTime() : null;
+    if (t && (!latest || t > latest)) latest = t;
   });
+  return latest ? monitoringTimeAgo(new Date(latest).toISOString()) : '—';
+}
+
+function renderMonitoringAll() {
+  rebuildMonitoringSites();
+  if (monElements.lastUpdate) {
+    monElements.lastUpdate.textContent = 'Temps réel · dernier check : ' + monitoringLatestCheckLabel();
+  }
+  renderMonitoringKpis();
+  renderMonitoringCharts();
+  renderMonitoringAlerts();
+  renderMonitoringTable();
+  showSection('monitoring');
+}
+
+function setupMonitoringListeners() {
+  if (unsubscribeMonitoring) unsubscribeMonitoring();
+  if (unsubscribeMonitoringAlerts) unsubscribeMonitoringAlerts();
+  if (unsubscribeMonitoringChecks) unsubscribeMonitoringChecks();
+
+  unsubscribeMonitoring = db.collection('siteMonitoring').onSnapshot(snap => {
+    monitoringSiteMap = {};
+    snap.forEach(d => { monitoringSiteMap[d.id] = d.data(); });
+    renderMonitoringAll();
+  }, err => console.error('[Monitoring] siteMonitoring listener error:', err));
+
+  unsubscribeMonitoringAlerts = db.collection('monitoringAlerts')
+    .orderBy('createdAt', 'desc').limit(30)
+    .onSnapshot(snap => {
+      monitoringData.alerts = snap.docs.map(d => ({
+        id: d.id, ...d.data(),
+        createdAt: d.data().createdAt?.toDate?.()?.toISOString() || null
+      }));
+      renderMonitoringAlerts();
+    }, err => console.error('[Monitoring] alerts listener error:', err));
+
+  const sevenDaysAgo = firebase.firestore.Timestamp.fromDate(new Date(Date.now() - 7 * 86400000));
+  unsubscribeMonitoringChecks = db.collection('monitoringChecks')
+    .where('checkedAt', '>=', sevenDaysAgo)
+    .onSnapshot(snap => {
+      const perDay = {};
+      snap.forEach(d => {
+        const c = d.data();
+        const day = c.checkedAt?.toDate?.()?.toISOString()?.split('T')[0];
+        if (!day) return;
+        if (!perDay[day]) perDay[day] = { ok: 0, total: 0 };
+        perDay[day].total++;
+        if (c.status === 'ok') perDay[day].ok++;
+      });
+      monitoringData.availability = [];
+      for (let i = 6; i >= 0; i--) {
+        const day = new Date(Date.now() - i * 86400000).toISOString().split('T')[0];
+        const agg = perDay[day];
+        monitoringData.availability.push({
+          date: day,
+          pct: agg && agg.total ? Math.round((agg.ok / agg.total) * 1000) / 10 : null
+        });
+      }
+      renderMonitoringCharts();
+    }, err => console.error('[Monitoring] checks listener error:', err));
+}
+
+function loadMonitoring() {
+  renderMonitoringAll();
 }
 
 if (monElements.statusFilter) monElements.statusFilter.addEventListener('change', renderMonitoringTable);
