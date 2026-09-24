@@ -815,12 +815,13 @@ async function submitNewCard() {
     return;
   }
 
-  // Si le client n'a pas encore de carte par défaut, définir celle-ci
+  // Si c'est la seule carte du client (ou qu'aucune carte par défaut n'existe), la définir par défaut
   try {
     const pmId = setupIntent?.payment_method;
     const res = await fetch(`${API_BASE_URL}/api/public/client/${encodeURIComponent(currentClient.clientId)}/billing`);
     const data = await res.json();
-    if (pmId && !data.defaultPaymentMethod) {
+    const isOnlyCard = (data.paymentMethods || []).length <= 1;
+    if (pmId && (isOnlyCard || !data.defaultPaymentMethod)) {
       await fetch(`${API_BASE_URL}/api/public/client/${encodeURIComponent(currentClient.clientId)}/billing/payment-methods/${pmId}/default`, { method: 'POST' });
     }
   } catch (e) {

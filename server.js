@@ -1253,7 +1253,19 @@ async function listCustomerCards(customerId) {
     stripe.customers.retrieve(customerId),
     stripe.paymentMethods.list({ customer: customerId, type: 'card' })
   ]);
-  const defaultPm = customer.deleted ? null : (customer.invoice_settings?.default_payment_method || null);
+  let defaultPm = customer.deleted ? null : (customer.invoice_settings?.default_payment_method || null);
+
+  // Garde-fou : une seule carte enregistrée et aucune par défaut → la définir automatiquement
+  if (!defaultPm && pms.data.length === 1) {
+    defaultPm = pms.data[0].id;
+    try {
+      await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: defaultPm } });
+      const subs = await stripe.subscriptions.list({ customer: customerId, status: 'active', limit: 20 });
+      await Promise.all(subs.data.map(sub => stripe.subscriptions.update(sub.id, { default_payment_method: defaultPm })));
+    } catch (e) {
+      console.warn('[Billing] Auto-default single card failed:', e.message);
+    }
+  }
   return {
     defaultPaymentMethod: defaultPm,
     paymentMethods: pms.data.map(pm => ({
