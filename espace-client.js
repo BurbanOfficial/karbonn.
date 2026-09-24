@@ -606,6 +606,7 @@ async function openRenewal(site) {
               <div class="billing-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement...</div>
             </div>
             <div id="sub-msg" class="sub-msg"></div>
+            <p class="sub-note">La souscription à une formule est obligatoire pour bénéficier de nos services. Vous pouvez comparer les formules en détail sur <a href="https://karbonn.fr/formules.html" target="_blank" rel="noopener">karbonn.fr/formules</a>.</p>
           </div>
         </div>`;
     } else {
