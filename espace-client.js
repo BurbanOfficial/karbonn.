@@ -600,7 +600,7 @@ async function openRenewal(site) {
             </div>
             <button id="pm-add-btn" class="billing-btn"><i class="fa-solid fa-plus"></i> Ajouter une carte</button>
           </div>
-          <div class="billing-block">
+          <div class="billing-block" id="sub-block">
             <h4><i class="fa-solid fa-arrows-rotate"></i> Abonnement mensuel</h4>
             <div id="sub-plans" class="sub-plans">
               <div class="billing-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement...</div>
@@ -832,13 +832,18 @@ async function submitNewCard() {
 function renderSubscriptionPlans(site, plans) {
   const plansEl = document.getElementById('sub-plans');
   const msgEl = document.getElementById('sub-msg');
+  const blockEl = document.getElementById('sub-block');
   if (!plansEl) return;
 
-  const currentId = site.abonnementId || 'none';
-  const options = [{ id: 'none', name: 'Aucun abonnement', price: 0 }, ...plans];
+  // Le site n'a pas d'abonnement dans l'intranet : on masque tout le bloc
+  if (!site.abonnementId) {
+    if (blockEl) blockEl.style.display = 'none';
+    return;
+  }
+  if (blockEl) blockEl.style.display = '';
 
-  plansEl.innerHTML = options.map(p => {
-    const selected = p.id === currentId || (p.id === 'none' && !site.abonnementId);
+  plansEl.innerHTML = plans.map(p => {
+    const selected = p.id === site.abonnementId;
     return `
       <button class="sub-plan${selected ? ' selected' : ''}" data-plan="${p.id}">
         <span class="sub-plan-name">${escapeHtml(p.name)}</span>
@@ -856,8 +861,7 @@ function renderSubscriptionPlans(site, plans) {
 async function changeSiteSubscription(site, abonnementId, btn) {
   const msgEl = document.getElementById('sub-msg');
   const plansEl = document.getElementById('sub-plans');
-  const currentId = site.abonnementId || 'none';
-  if (abonnementId === currentId) return;
+  if (abonnementId === site.abonnementId) return;
 
   const planName = btn?.querySelector('.sub-plan-name')?.textContent || abonnementId;
   if (!confirm(`Changer l'abonnement mensuel pour « ${planName} » ?\nLe nouveau tarif s'appliquera au prochain prélèvement.`)) return;
