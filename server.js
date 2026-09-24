@@ -1638,21 +1638,24 @@ function computeSiteStatus(check, sslDaysLeft, domainDaysLeft) {
   return 'ok';
 }
 
-async function createMonitoringAlert(siteId, type, message, dedupKey) {
+// Déduplication sans requête (donc sans index Firestore) : on garde la date
+// de la dernière alerte par type directement dans le doc siteMonitoring.
+async function createMonitoringAlert(siteId, type, message, lastAlertAt = {}) {
   try {
-    const since = new Date(Date.now() - ALERT_DEDUP_MS);
-    const dup = await db.collection('monitoringAlerts')
-      .where('siteId', '==', siteId)
-      .where('type', '==', type)
-      .where('createdAt', '>=', since)
-      .limit(1).get();
-    if (!dup.empty) return;
-    await db.collection('monitoringAlerts').add({
-      siteId,
-      type,
-      message,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    const prev = lastAlertAt?.[type];
+    const prevMs = prev?.toMillis ? prev.toMillis() : (prev?._seconds ? prev._seconds * 1000 : null);
+    if (prevMs && Date.now() - prevMs < ALERT_DEDUP_MS) return;
+    await Promise.all([
+      db.collection('monitoringAlerts').add({
+        siteId,
+        type,
+        message,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      }),
+      db.collection('siteMonitoring').doc(siteId).set({
+        lastAlertAt: { [type]: admin.firestore.Timestamp.now() }
+      }, { merge: true })
+    ]);
   } catch (err) {
     console.error('[Monitoring] Failed to create alert:', err.message);
   }
@@ -1675,7 +1678,9 @@ async function runSiteCheck(site) {
   const status = computeSiteStatus({ domain, ...http }, sslDaysLeft, domainDaysLeft);
 
   const prevDoc = await db.collection('siteMonitoring').doc(site.id).get();
-  const prevStatus = prevDoc.exists ? prevDoc.data().status : null;
+  const prevData = prevDoc.exists ? prevDoc.data() : {};
+  const prevStatus = prevData.status || null;
+  const lastAlertAt = prevData.lastAlertAt || {};
 
   const result = {
     status,
@@ -1700,22 +1705,22 @@ async function runSiteCheck(site) {
 
   // Alertes sur transitions et seuils
   if (status === 'error' && prevStatus !== 'error') {
-    await createMonitoringAlert(site.id, 'down', `Site inaccessible (HTTP ${http.status || 'aucune réponse'})`);
+    await createMonitoringAlert(site.id, 'down', `Site inaccessible (HTTP ${http.status || 'aucune réponse'})`, lastAlertAt);
   }
   if (status === 'ok' && prevStatus === 'error') {
-    await createMonitoringAlert(site.id, 'recovered', 'Site de nouveau accessible');
+    await createMonitoringAlert(site.id, 'recovered', 'Site de nouveau accessible', lastAlertAt);
   }
   if (sslDaysLeft !== null && sslDaysLeft <= MONITORING_SSL_WARN_DAYS) {
-    await createMonitoringAlert(site.id, 'ssl_expiry', `Certificat SSL expire dans ${sslDaysLeft} jour${sslDaysLeft > 1 ? 's' : ''}`);
+    await createMonitoringAlert(site.id, 'ssl_expiry', `Certificat SSL expire dans ${sslDaysLeft} jour${sslDaysLeft > 1 ? 's' : ''}`, lastAlertAt);
   }
   if (domainDaysLeft !== null && domainDaysLeft <= MONITORING_DOMAIN_WARN_DAYS && domainDaysLeft >= 0) {
-    await createMonitoringAlert(site.id, 'domain_expiry', `Domaine expire dans ${domainDaysLeft} jour${domainDaysLeft > 1 ? 's' : ''}`);
+    await createMonitoringAlert(site.id, 'domain_expiry', `Domaine expire dans ${domainDaysLeft} jour${domainDaysLeft > 1 ? 's' : ''}`, lastAlertAt);
   }
   if (domainDaysLeft !== null && domainDaysLeft < 0) {
-    await createMonitoringAlert(site.id, 'domain_expired', `Domaine expiré depuis ${Math.abs(domainDaysLeft)} jour${Math.abs(domainDaysLeft) > 1 ? 's' : ''}`);
+    await createMonitoringAlert(site.id, 'domain_expired', `Domaine expiré depuis ${Math.abs(domainDaysLeft)} jour${Math.abs(domainDaysLeft) > 1 ? 's' : ''}`, lastAlertAt);
   }
   if (status !== 'error' && http.responseMs > MONITORING_SLOW_MS) {
-    await createMonitoringAlert(site.id, 'slow', `Temps de réponse : ${Math.round(http.responseMs)} ms`);
+    await createMonitoringAlert(site.id, 'slow', `Temps de réponse : ${Math.round(http.responseMs)} ms`, lastAlertAt);
   }
 
   return result;

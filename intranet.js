@@ -6309,6 +6309,20 @@ const MON_ALERT_META = {
   slow:          { icon: 'fa-gauge-high',     color: 'blue' }
 };
 
+// Convertit n'importe quel format de timestamp Firestore en millisecondes (0 si invalide)
+function monTsMs(value) {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value.toDate === 'function') return value.toDate().getTime();
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  const t = new Date(value).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
+function monCheckMs(check) {
+  return monTsMs(check?.checkedAt);
+}
+
 function monitoringTimeAgo(value) {
   if (!value) return '—';
   let d = null;
@@ -6677,95 +6691,89 @@ function openMonitoringDetail(site) {
   if (unsubscribeMonDetailChecks) { unsubscribeMonDetailChecks(); unsubscribeMonDetailChecks = null; }
   if (unsubscribeMonDetailAlerts) { unsubscribeMonDetailAlerts(); unsubscribeMonDetailAlerts = null; }
 
-  const m = site.monitoring || {};
-  const st = monSiteStatus(site);
-  const meta = MON_STATUS_META[st];
-
   const domainEl = document.getElementById('mon-detail-domain');
-  const statusEl = document.getElementById('mon-detail-status');
   const visitEl = document.getElementById('mon-detail-visit');
-  const bigStatusEl = document.getElementById('mon-detail-bigstatus');
-  const bigSubEl = document.getElementById('mon-detail-bigsub');
   const clientEl = document.getElementById('mon-detail-client');
-  const httpEl = document.getElementById('mon-detail-http');
-  const sslEl = document.getElementById('mon-detail-ssl');
-  const domEl = document.getElementById('mon-detail-domain-exp');
-
   if (domainEl) domainEl.textContent = site.domain || 'Site';
-  if (statusEl) { statusEl.className = 'mon-badge ' + meta.badge; statusEl.textContent = meta.label; }
   if (visitEl && site.domain) visitEl.href = 'https://' + site.domain;
-  if (bigStatusEl) {
-    bigStatusEl.textContent = st === 'ok' ? 'Tous les systèmes opérationnels'
-      : st === 'warning' ? 'Performance dégradée'
-      : st === 'error' ? 'Incident en cours'
-      : 'Site non configuré';
-    bigStatusEl.style.color = st === 'ok' ? '#16a34a' : st === 'warning' ? '#ea580c' : st === 'error' ? '#dc2626' : 'var(--muted)';
-  }
-  if (bigSubEl) bigSubEl.textContent = 'Dernier check : ' + monitoringTimeAgo(m.checkedAt);
   if (clientEl) clientEl.textContent = site.clientName || '—';
-  if (httpEl) {
-    httpEl.textContent = m.httpStatus ? 'HTTP ' + m.httpStatus : '—';
-    httpEl.className = 'mon-metric-value ' + (!m.httpStatus ? '' : m.httpStatus < 400 ? 'ok' : m.httpStatus < 500 ? 'warn' : 'err');
-  }
-  if (sslEl) {
-    if (m.sslDaysLeft === null || m.sslDaysLeft === undefined) { sslEl.textContent = '—'; sslEl.className = 'mon-metric-value'; }
-    else if (m.sslDaysLeft <= 0) { sslEl.textContent = 'Expiré'; sslEl.className = 'mon-metric-value err'; }
-    else if (m.sslDaysLeft <= 14) { sslEl.textContent = `Expire dans ${m.sslDaysLeft} j`; sslEl.className = 'mon-metric-value warn'; }
-    else { sslEl.textContent = `Valide (${m.sslDaysLeft} j)`; sslEl.className = 'mon-metric-value ok'; }
-  }
-  if (domEl) {
-    const dd = m.domainDaysLeft;
-    if (dd === null || dd === undefined) { domEl.textContent = '—'; domEl.className = 'mon-metric-value'; }
-    else if (dd < 0) { domEl.textContent = `Expiré depuis ${Math.abs(dd)} j`; domEl.className = 'mon-metric-value err'; }
-    else if (dd <= 30) { domEl.textContent = `Expire dans ${dd} j`; domEl.className = 'mon-metric-value warn'; }
-    else { domEl.textContent = `Valide (${dd} j)`; domEl.className = 'mon-metric-value ok'; }
-  }
+
+  renderMonDetailLiveStatus();
 
   if (monOverviewEl) monOverviewEl.style.display = 'none';
   if (monDetailEl) monDetailEl.style.display = '';
 
-  // Listener temps réel : historique des checks du site (30 jours)
-  const thirtyDaysAgo = firebase.firestore.Timestamp.fromDate(new Date(Date.now() - 30 * 86400000));
+  // Listener temps réel : checks du site — égalité simple uniquement (aucun index composite requis)
+  const thirtyDaysAgoMs = Date.now() - 30 * 86400000;
   unsubscribeMonDetailChecks = db.collection('monitoringChecks')
     .where('siteId', '==', site.id)
-    .where('checkedAt', '>=', thirtyDaysAgo)
     .onSnapshot(snap => {
-      const checks = snap.docs.map(d => d.data()).filter(c => c.checkedAt);
+      const checks = snap.docs
+        .map(d => d.data())
+        .filter(c => monCheckMs(c) >= thirtyDaysAgoMs);
       renderMonUptimeBars(checks);
       renderMonResponseChart(checks);
       renderMonAvgMs(checks);
       renderMonDetailLiveStatus();
     }, err => console.error('[Monitoring] detail checks listener error:', err));
 
-  // Listener temps réel : alertes du site
+  // Listener temps réel : alertes du site — égalité simple, tri en mémoire
   unsubscribeMonDetailAlerts = db.collection('monitoringAlerts')
     .where('siteId', '==', site.id)
-    .orderBy('createdAt', 'desc').limit(20)
     .onSnapshot(snap => {
-      const alerts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const alerts = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => monTsMs(b.createdAt) - monTsMs(a.createdAt))
+        .slice(0, 20);
       renderMonIncidents(alerts);
     }, err => console.error('[Monitoring] detail alerts listener error:', err));
 }
 
-// Met à jour le bandeau si le statut du site change pendant que la vue est ouverte
+const MON_HERO_META = {
+  ok:           { icon: 'fa-circle-check',         title: 'Tous les systèmes opérationnels' },
+  warning:      { icon: 'fa-triangle-exclamation', title: 'Performance dégradée' },
+  error:        { icon: 'fa-circle-xmark',         title: 'Incident en cours' },
+  unconfigured: { icon: 'fa-circle-question',      title: 'Site non configuré' }
+};
+
+// Met à jour le bandeau et les tuiles en temps réel
 function renderMonDetailLiveStatus() {
   if (!currentMonSite) return;
-  const m = monitoringSiteMap[currentMonSite.id];
-  if (!m) return;
+  const m = monitoringSiteMap[currentMonSite.id] || currentMonSite.monitoring || {};
   const st = m.status || 'unconfigured';
-  const meta = MON_STATUS_META[st];
-  const statusEl = document.getElementById('mon-detail-status');
+  const hero = MON_HERO_META[st] || MON_HERO_META.unconfigured;
+
+  const heroEl = document.getElementById('mon-hero');
+  const heroIconEl = document.getElementById('mon-hero-icon');
   const bigStatusEl = document.getElementById('mon-detail-bigstatus');
   const bigSubEl = document.getElementById('mon-detail-bigsub');
-  if (statusEl) { statusEl.className = 'mon-badge ' + meta.badge; statusEl.textContent = meta.label; }
-  if (bigStatusEl) {
-    bigStatusEl.textContent = st === 'ok' ? 'Tous les systèmes opérationnels'
-      : st === 'warning' ? 'Performance dégradée'
-      : st === 'error' ? 'Incident en cours'
-      : 'Site non configuré';
-    bigStatusEl.style.color = st === 'ok' ? '#16a34a' : st === 'warning' ? '#ea580c' : st === 'error' ? '#dc2626' : 'var(--muted)';
-  }
+  const httpEl = document.getElementById('mon-detail-http');
+  const sslEl = document.getElementById('mon-detail-ssl');
+  const domEl = document.getElementById('mon-detail-domain-exp');
+
+  if (heroEl) heroEl.className = 'mon-hero ' + st;
+  if (heroIconEl) heroIconEl.innerHTML = `<i class="fa-solid ${hero.icon}"></i>`;
+  if (bigStatusEl) bigStatusEl.textContent = hero.title;
   if (bigSubEl) bigSubEl.textContent = 'Dernier check : ' + monitoringTimeAgo(m.checkedAt);
+
+  if (httpEl) {
+    httpEl.textContent = m.httpStatus ? String(m.httpStatus) : '—';
+    httpEl.className = 'mon-tile-value ' + (!m.httpStatus ? '' : m.httpStatus < 400 ? 'ok' : m.httpStatus < 500 ? 'warn' : 'err');
+  }
+  if (sslEl) {
+    const d = m.sslDaysLeft;
+    if (d === null || d === undefined) { sslEl.textContent = '—'; sslEl.className = 'mon-tile-value'; }
+    else if (d <= 0) { sslEl.textContent = 'Expiré'; sslEl.className = 'mon-tile-value err'; }
+    else if (d <= 14) { sslEl.textContent = `${d} j restants`; sslEl.className = 'mon-tile-value warn'; }
+    else { sslEl.textContent = `Valide · ${d} j`; sslEl.className = 'mon-tile-value ok'; }
+  }
+  if (domEl) {
+    const dd = m.domainDaysLeft;
+    if (dd === null || dd === undefined) { domEl.textContent = '—'; domEl.className = 'mon-tile-value'; }
+    else if (dd < 0) { domEl.textContent = `Expiré (${Math.abs(dd)} j)`; domEl.className = 'mon-tile-value err'; }
+    else if (dd <= 30) { domEl.textContent = `${dd} j restants`; domEl.className = 'mon-tile-value warn'; }
+    else { domEl.textContent = `Valide · ${dd} j`; domEl.className = 'mon-tile-value ok'; }
+  }
 }
 
 // Barres de disponibilité par jour (30 derniers jours) — style githubstatus.com
@@ -6777,9 +6785,9 @@ function renderMonUptimeBars(checks) {
 
   const perDay = {};
   checks.forEach(c => {
-    const d = c.checkedAt?.toDate ? c.checkedAt.toDate() : new Date(c.checkedAt?.seconds ? c.checkedAt.seconds * 1000 : c.checkedAt);
-    if (!d || isNaN(d.getTime())) return;
-    const day = d.toISOString().split('T')[0];
+    const ms = monCheckMs(c);
+    if (!ms) return;
+    const day = new Date(ms).toISOString().split('T')[0];
     if (!perDay[day]) perDay[day] = { ok: 0, warn: 0, err: 0, total: 0 };
     perDay[day].total++;
     if (c.status === 'ok') perDay[day].ok++;
@@ -6809,12 +6817,14 @@ function renderMonUptimeBars(checks) {
   el.innerHTML = bars.join('');
 
   if (rangeEl) {
-    const from = new Date(Date.now() - 29 * 86400000);
-    rangeEl.textContent = `${from.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} → ${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`;
+    rangeEl.textContent = daysWithData
+      ? `${daysUp}/${daysWithData} jour${daysWithData > 1 ? 's' : ''} sans incident`
+      : 'Collecte des données en cours';
   }
   if (pctEl) {
-    pctEl.textContent = daysWithData ? `${Math.round((daysUp / daysWithData) * 100)}% uptime` : '—';
-    pctEl.style.color = daysWithData ? (daysUp / daysWithData >= 0.99 ? '#16a34a' : daysUp / daysWithData >= 0.95 ? '#ea580c' : '#dc2626') : 'var(--muted)';
+    const ratio = daysWithData ? daysUp / daysWithData : null;
+    pctEl.textContent = ratio === null ? '—' : `${Math.round(ratio * 100)}%`;
+    pctEl.style.color = ratio === null ? 'var(--muted)' : ratio >= 0.99 ? '#16a34a' : ratio >= 0.95 ? '#ea580c' : '#dc2626';
   }
 }
 
@@ -6825,14 +6835,8 @@ function renderMonResponseChart(checks) {
 
   const dayAgo = Date.now() - 86400000;
   const points = checks
-    .filter(c => {
-      const t = c.checkedAt?.toDate ? c.checkedAt.toDate().getTime() : (c.checkedAt?.seconds ? c.checkedAt.seconds * 1000 : 0);
-      return t >= dayAgo && c.responseMs !== null && c.responseMs !== undefined;
-    })
-    .map(c => {
-      const t = c.checkedAt.toDate ? c.checkedAt.toDate() : new Date(c.checkedAt.seconds * 1000);
-      return { x: t.getTime(), y: Math.round(c.responseMs) };
-    })
+    .filter(c => monCheckMs(c) >= dayAgo && c.responseMs !== null && c.responseMs !== undefined)
+    .map(c => ({ x: monCheckMs(c), y: Math.round(c.responseMs) }))
     .sort((a, b) => a.x - b.x);
 
   if (monDetailChart) { try { monDetailChart.destroy(); } catch {} }
@@ -6855,13 +6859,12 @@ function renderMonAvgMs(checks) {
   if (!el) return;
   const dayAgo = Date.now() - 86400000;
   const values = checks
-    .map(c => ({ t: c.checkedAt?.toDate ? c.checkedAt.toDate().getTime() : (c.checkedAt?.seconds ? c.checkedAt.seconds * 1000 : 0), ms: c.responseMs }))
-    .filter(c => c.t >= dayAgo && c.ms !== null && c.ms !== undefined)
-    .map(c => c.ms);
-  if (!values.length) { el.textContent = '—'; el.className = 'mon-metric-value'; return; }
+    .filter(c => monCheckMs(c) >= dayAgo && c.responseMs !== null && c.responseMs !== undefined)
+    .map(c => c.responseMs);
+  if (!values.length) { el.textContent = '—'; el.className = 'mon-tile-value'; return; }
   const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
   el.textContent = avg + ' ms';
-  el.className = 'mon-metric-value ' + (avg > 2000 ? 'err' : avg > 800 ? 'warn' : 'ok');
+  el.className = 'mon-tile-value ' + (avg > 2000 ? 'err' : avg > 800 ? 'warn' : 'ok');
 }
 
 function renderMonIncidents(alerts) {

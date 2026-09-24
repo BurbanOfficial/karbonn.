@@ -4087,78 +4087,197 @@
     /* ── Monitoring : vue détail (status page) ── */
     #monitoring-tbody tr { cursor: pointer; }
 
-    .mon-detail-banner {
-      display: flex;
+    #monitoring-detail .monitoring-card { margin-bottom: 18px; }
+
+    .mon-detail-titlebar { display: flex; flex-direction: column; gap: 6px; }
+
+    .mon-back-link {
+      display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: 18px;
-      flex-wrap: wrap;
-      gap: 12px;
+      gap: 7px;
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+      font-size: 0.82rem;
+      color: var(--muted);
+      cursor: pointer;
+      width: fit-content;
+      transition: color 0.15s ease;
     }
 
-    .mon-detail-bigstatus {
+    .mon-back-link:hover { color: var(--accent); }
+
+    .mon-detail-title { display: flex; align-items: center; gap: 12px; }
+    .mon-detail-title h1 { font-size: 1.6rem; }
+
+    .mon-detail-visit {
+      color: var(--muted);
+      font-size: 0.85rem;
+      transition: color 0.15s ease;
+    }
+
+    .mon-detail-visit:hover { color: var(--accent); }
+
+    .mon-detail-client-sub {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    /* Bandeau statut */
+    .mon-hero {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 22px 24px;
+      border-radius: var(--radius-md);
+      border: 1px solid transparent;
+      margin-bottom: 18px;
+    }
+
+    .mon-hero.ok { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.25); }
+    .mon-hero.warning { background: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.25); }
+    .mon-hero.error { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.25); }
+    .mon-hero.unconfigured { background: rgba(148,163,184,0.1); border-color: rgba(148,163,184,0.3); }
+
+    .mon-hero-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.15rem;
+      flex-shrink: 0;
+      background: #fff;
+    }
+
+    .mon-hero.ok .mon-hero-icon { color: #16a34a; }
+    .mon-hero.warning .mon-hero-icon { color: #ea580c; }
+    .mon-hero.error .mon-hero-icon { color: #dc2626; }
+    .mon-hero.unconfigured .mon-hero-icon { color: #64748b; }
+
+    .mon-hero-body { flex: 1; min-width: 0; }
+
+    .mon-hero-title {
       font-size: 1.15rem;
       font-weight: 700;
       color: var(--text);
+      letter-spacing: -0.01em;
     }
 
-    .mon-detail-bigsub {
+    .mon-hero-sub {
       font-size: 0.82rem;
       color: var(--muted);
-      margin-top: 4px;
+      margin-top: 3px;
     }
 
-    .mon-detail-uptime {
-      font-size: 1.6rem;
+    .mon-hero-uptime { text-align: right; flex-shrink: 0; }
+
+    .mon-hero-uptime-val {
+      font-size: 1.5rem;
       font-weight: 700;
+      letter-spacing: -0.02em;
       color: var(--text);
     }
 
+    .mon-hero-uptime-lbl {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    /* Tuiles indicateurs */
+    .mon-tiles {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .mon-tile {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px 18px;
+      box-shadow: var(--shadow-card);
+    }
+
+    .mon-tile-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .mon-tile-value {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .mon-tile-value.ok { color: #16a34a; }
+    .mon-tile-value.warn { color: #ea580c; }
+    .mon-tile-value.err { color: #dc2626; }
+
+    /* Barres de disponibilité */
     .mon-uptime-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      gap: 10px;
     }
 
     .mon-uptime-head h3 { margin: 0; }
 
-    .mon-uptime-bars {
+    .mon-uptime-legend-inline {
       display: flex;
-      gap: 3px;
-      align-items: flex-end;
-      height: 44px;
-    }
-
-    .mon-uptime-bar {
-      flex: 1;
-      height: 100%;
-      border-radius: 3px;
-      cursor: default;
-      min-width: 4px;
-      transition: transform 0.1s ease;
-    }
-
-    .mon-uptime-bar:hover { transform: scaleY(1.12); }
-    .mon-uptime-bar.ok { background: #22c55e; }
-    .mon-uptime-bar.warning { background: #f97316; }
-    .mon-uptime-bar.error { background: #ef4444; }
-    .mon-uptime-bar.nodata { background: rgba(148,163,184,0.35); }
-
-    .mon-uptime-legend {
-      display: flex;
-      gap: 18px;
-      margin-top: 12px;
-      font-size: 0.75rem;
+      gap: 14px;
+      font-size: 0.72rem;
       color: var(--muted);
       flex-wrap: wrap;
     }
 
-    .mon-uptime-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .mon-uptime-legend-inline span { display: inline-flex; align-items: center; gap: 5px; }
+
+    .mon-uptime-bars {
+      display: flex;
+      gap: 3px;
+      align-items: stretch;
+      height: 40px;
+    }
+
+    .mon-uptime-bar {
+      flex: 1;
+      border-radius: 2px;
+      min-width: 3px;
+      transition: opacity 0.12s ease;
+    }
+
+    .mon-uptime-bar:hover { opacity: 0.7; }
+    .mon-uptime-bar.ok { background: #22c55e; }
+    .mon-uptime-bar.warning { background: #f97316; }
+    .mon-uptime-bar.error { background: #ef4444; }
+    .mon-uptime-bar.nodata { background: rgba(148,163,184,0.25); }
+
+    .mon-uptime-axis {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .mon-uptime-axis-mid { color: var(--muted); }
 
     .mon-uptime-dot {
-      width: 9px;
-      height: 9px;
+      width: 8px;
+      height: 8px;
       border-radius: 2px;
       display: inline-block;
     }
@@ -4166,35 +4285,16 @@
     .mon-uptime-dot.ok { background: #22c55e; }
     .mon-uptime-dot.warning { background: #f97316; }
     .mon-uptime-dot.error { background: #ef4444; }
-    .mon-uptime-dot.nodata { background: rgba(148,163,184,0.35); }
+    .mon-uptime-dot.nodata { background: rgba(148,163,184,0.25); }
 
-    .monitoring-detail-grid {
-      display: grid;
-      grid-template-columns: 1.6fr 1fr;
-      gap: 18px;
-      margin: 18px 0;
+    @media (max-width: 1100px) {
+      .mon-tiles { grid-template-columns: repeat(2, 1fr); }
     }
 
-    .mon-detail-metrics { display: flex; flex-direction: column; }
-
-    .mon-metric {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.85rem;
-    }
-
-    .mon-metric:last-child { border-bottom: none; }
-    .mon-metric-label { color: var(--muted); }
-    .mon-metric-value { font-weight: 600; color: var(--text); }
-    .mon-metric-value.ok { color: #16a34a; }
-    .mon-metric-value.warn { color: #ea580c; }
-    .mon-metric-value.err { color: #dc2626; }
-
-    @media (max-width: 900px) {
-      .monitoring-detail-grid { grid-template-columns: 1fr; }
+    @media (max-width: 640px) {
+      .mon-tiles { grid-template-columns: 1fr; }
+      .mon-hero { flex-wrap: wrap; }
+      .mon-hero-uptime { text-align: left; }
     }
 
     @media (max-width: 1200px) {
@@ -5365,55 +5465,82 @@
           <!-- Vue détaillée d'un site (style status page) -->
           <div id="monitoring-detail" style="display:none;">
             <div class="section-header">
-              <div class="section-header-left">
-                <h1 id="mon-detail-domain">—</h1>
-                <span class="mon-badge ok" id="mon-detail-status">—</span>
-              </div>
-              <div class="monitoring-header-right">
-                <a class="btn-icon mon-detail-visit" id="mon-detail-visit" href="#" target="_blank" rel="noopener" title="Ouvrir le site"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
-                <button class="btn-create" id="monitoring-detail-back"><i class="fa-solid fa-arrow-left"></i> Retour</button>
+              <div class="mon-detail-titlebar">
+                <button class="mon-back-link" id="monitoring-detail-back"><i class="fa-solid fa-arrow-left"></i> Monitoring</button>
+                <div class="mon-detail-title">
+                  <h1 id="mon-detail-domain">—</h1>
+                  <a class="mon-detail-visit" id="mon-detail-visit" href="#" target="_blank" rel="noopener" title="Ouvrir le site"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+                <div class="mon-detail-client-sub" id="mon-detail-client">—</div>
               </div>
             </div>
 
-            <div class="monitoring-card mon-detail-banner">
-              <div class="mon-detail-banner-inner">
-                <div class="mon-detail-bigstatus" id="mon-detail-bigstatus">Tous les systèmes opérationnels</div>
-                <div class="mon-detail-bigsub" id="mon-detail-bigsub">Dernier check : —</div>
+            <!-- Bandeau statut principal -->
+            <div class="mon-hero" id="mon-hero">
+              <div class="mon-hero-icon" id="mon-hero-icon"><i class="fa-solid fa-circle-check"></i></div>
+              <div class="mon-hero-body">
+                <div class="mon-hero-title" id="mon-detail-bigstatus">Tous les systèmes opérationnels</div>
+                <div class="mon-hero-sub" id="mon-detail-bigsub">Dernier check : —</div>
               </div>
-              <div class="mon-detail-uptime" id="mon-detail-uptime-pct">—</div>
+              <div class="mon-hero-uptime">
+                <div class="mon-hero-uptime-val" id="mon-detail-uptime-pct">—</div>
+                <div class="mon-hero-uptime-lbl">sur 30 jours</div>
+              </div>
             </div>
 
-            <div class="monitoring-card">
+            <!-- Tuiles indicateurs -->
+            <div class="mon-tiles">
+              <div class="mon-tile">
+                <div class="mon-tile-label"><i class="fa-solid fa-lock"></i> HTTPS / SSL</div>
+                <div class="mon-tile-value" id="mon-detail-ssl">—</div>
+              </div>
+              <div class="mon-tile">
+                <div class="mon-tile-label"><i class="fa-solid fa-globe"></i> Nom de domaine</div>
+                <div class="mon-tile-value" id="mon-detail-domain-exp">—</div>
+              </div>
+              <div class="mon-tile">
+                <div class="mon-tile-label"><i class="fa-solid fa-gauge-high"></i> Réponse moyenne (24 h)</div>
+                <div class="mon-tile-value" id="mon-detail-avg-ms">—</div>
+              </div>
+              <div class="mon-tile">
+                <div class="mon-tile-label"><i class="fa-solid fa-server"></i> Statut HTTP</div>
+                <div class="mon-tile-value" id="mon-detail-http">—</div>
+              </div>
+            </div>
+
+            <!-- Disponibilité 30 jours -->
+            <div class="monitoring-card mon-uptime-card">
               <div class="mon-uptime-head">
-                <h3>Disponibilité — 30 derniers jours</h3>
-                <span class="mon-muted" id="mon-uptime-range"></span>
+                <h3>Disponibilité</h3>
+                <span class="mon-uptime-legend-inline">
+                  <span><span class="mon-uptime-dot ok"></span>Opérationnel</span>
+                  <span><span class="mon-uptime-dot warning"></span>Partiel</span>
+                  <span><span class="mon-uptime-dot error"></span>Incident</span>
+                  <span><span class="mon-uptime-dot nodata"></span>Aucune donnée</span>
+                </span>
               </div>
               <div class="mon-uptime-bars" id="mon-uptime-bars"></div>
-              <div class="mon-uptime-legend">
-                <span><span class="mon-uptime-dot ok"></span> Opérationnel</span>
-                <span><span class="mon-uptime-dot warning"></span> Partiel</span>
-                <span><span class="mon-uptime-dot error"></span> Incident</span>
-                <span><span class="mon-uptime-dot nodata"></span> Aucune donnée</span>
+              <div class="mon-uptime-axis">
+                <span id="mon-uptime-from">il y a 30 jours</span>
+                <span class="mon-uptime-axis-mid" id="mon-uptime-range"></span>
+                <span>aujourd'hui</span>
               </div>
             </div>
 
-            <div class="monitoring-detail-grid">
-              <div class="monitoring-card">
-                <h3>Temps de réponse <span class="monitoring-card-sub">(24 dernières heures)</span></h3>
-                <div class="monitoring-chart" id="chart-mon-response"></div>
-              </div>
-              <div class="monitoring-card mon-detail-metrics">
-                <h3>Indicateurs</h3>
-                <div class="mon-metric"><span class="mon-metric-label">HTTPS / SSL</span><span class="mon-metric-value" id="mon-detail-ssl">—</span></div>
-                <div class="mon-metric"><span class="mon-metric-label">Domaine</span><span class="mon-metric-value" id="mon-detail-domain-exp">—</span></div>
-                <div class="mon-metric"><span class="mon-metric-label">Temps de réponse moyen</span><span class="mon-metric-value" id="mon-detail-avg-ms">—</span></div>
-                <div class="mon-metric"><span class="mon-metric-label">Statut HTTP</span><span class="mon-metric-value" id="mon-detail-http">—</span></div>
-                <div class="mon-metric"><span class="mon-metric-label">Client</span><span class="mon-metric-value" id="mon-detail-client">—</span></div>
-              </div>
-            </div>
-
+            <!-- Temps de réponse -->
             <div class="monitoring-card">
-              <h3>Historique des incidents</h3>
+              <div class="mon-uptime-head">
+                <h3>Temps de réponse</h3>
+                <span class="mon-muted">24 dernières heures</span>
+              </div>
+              <div class="monitoring-chart" id="chart-mon-response"></div>
+            </div>
+
+            <!-- Incidents -->
+            <div class="monitoring-card">
+              <div class="mon-uptime-head">
+                <h3>Historique des incidents</h3>
+              </div>
               <div class="monitoring-alerts-list" id="mon-detail-incidents"></div>
             </div>
           </div>
