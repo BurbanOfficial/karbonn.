@@ -723,7 +723,9 @@ function renderPaymentMethods(methods, defaultPmId) {
         ${pm.isDefault
           ? '<span class="pm-badge">Par défaut</span>'
           : `<button class="pm-action" data-action="default" data-pm="${pm.id}" title="Définir par défaut"><i class="fa-solid fa-star"></i></button>`}
-        <button class="pm-action danger" data-action="delete" data-pm="${pm.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+        ${methods.length > 1
+          ? `<button class="pm-action danger" data-action="delete" data-pm="${pm.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>`
+          : ''}
       </div>`;
   }).join('');
 

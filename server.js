@@ -1345,6 +1345,9 @@ app.delete('/api/public/client/:clientId/billing/payment-methods/:pmId', async (
     const pm = await stripe.paymentMethods.retrieve(req.params.pmId);
     if (pm.customer !== customerId) return res.status(403).json({ error: 'Payment method does not belong to this customer' });
 
+    const allPms = await stripe.paymentMethods.list({ customer: customerId, type: 'card' });
+    if (allPms.data.length <= 1) return res.status(400).json({ error: 'Impossible de supprimer le dernier moyen de paiement' });
+
     const customer = await stripe.customers.retrieve(customerId);
     const wasDefault = customer.invoice_settings?.default_payment_method === pm.id;
     await stripe.paymentMethods.detach(pm.id);
