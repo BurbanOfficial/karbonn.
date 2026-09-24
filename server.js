@@ -1070,6 +1070,16 @@ app.get('/api/public/pay/:token', async (req, res) => {
     if (!doc.exists) return res.status(404).json({ error: 'Lien de paiement invalide' });
     const p = doc.data();
     const expired = p.expiresAt && p.expiresAt.toMillis() < Date.now();
+
+    // Statut réel du PaymentIntent pour afficher directement le bon écran
+    let piStatus = null;
+    if (p.stripePaymentIntentId && process.env.STRIPE_SECRET_KEY) {
+      try {
+        const pi = await stripe.paymentIntents.retrieve(p.stripePaymentIntentId);
+        piStatus = pi.status;
+      } catch {}
+    }
+
     res.json({
       status: expired && p.status === 'pending' ? 'expired' : p.status,
       invoiceNumber: p.invoiceNumber,
@@ -1078,7 +1088,8 @@ app.get('/api/public/pay/:token', async (req, res) => {
       clientName: p.clientName,
       clientId: p.clientPublicId,
       expiresAt: p.expiresAt?.toDate?.()?.toISOString() || null,
-      hasPaymentIntent: Boolean(p.stripePaymentIntentId)
+      hasPaymentIntent: Boolean(p.stripePaymentIntentId),
+      paymentIntentStatus: piStatus
     });
   } catch (err) {
     console.error('[Pay] Error fetching pay link:', err);
