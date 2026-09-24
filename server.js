@@ -948,7 +948,24 @@ app.get('/api/public/client/:clientId/documents', async (req, res) => {
         quote_url: q.quote_url
       }));
 
-    const documents = [...invoices, ...quotes].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    // Annoter les factures ayant un paiement en cours (payLinks avec PaymentIntent actif)
+    const pendingMap = {};
+    try {
+      const plSnap = await db.collection('payLinks').where('clientPublicId', '==', clientId).get();
+      plSnap.forEach(d => {
+        const p = d.data();
+        if (p.status === 'pending' && p.stripePaymentIntentId) {
+          const expired = p.expiresAt && p.expiresAt.toMillis() < Date.now();
+          if (!expired) pendingMap[p.qontoInvoiceId] = d.id;
+        }
+      });
+    } catch (e) {
+      console.warn('[Public API] Could not fetch pay links:', e.message);
+    }
+
+    const documents = [...invoices, ...quotes]
+      .map(d => pendingMap[d.id] ? { ...d, payPending: true, payToken: pendingMap[d.id] } : d)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     console.log('[Public API] Returning', documents.length, 'documents for clientId:', clientId);
     res.json({ documents, iban: qontoBankIban || '' });
   } catch (err) {
@@ -1010,6 +1027,18 @@ app.post('/api/public/client/:clientId/documents/:docId/pay-link', async (req, r
     if (inv.client?.id !== client.qontoClientId) return res.status(403).json({ error: 'Invoice does not belong to this client' });
     if (inv.status === 'paid') return res.status(400).json({ error: 'Invoice already paid' });
     if (inv.status === 'canceled' || inv.status === 'draft') return res.status(400).json({ error: 'Invoice not payable' });
+
+    // Réutiliser un lien actif existant pour cette facture (évite les doublons)
+    const existingSnap = await db.collection('payLinks')
+      .where('qontoInvoiceId', '==', inv.id)
+      .get();
+    for (const d of existingSnap.docs) {
+      const p = d.data();
+      const expired = p.expiresAt && p.expiresAt.toMillis() < Date.now();
+      if (p.status === 'pending' && !expired) {
+        return res.json({ url: `${PAY_LINK_BASE_URL}/?t=${d.id}`, reused: true });
+      }
+    }
 
     const token = crypto.randomBytes(24).toString('base64url');
     const expiresAt = new Date(Date.now() + PAY_LINK_TTL_DAYS * 86400000);
