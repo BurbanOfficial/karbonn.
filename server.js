@@ -358,6 +358,10 @@ const allowedOriginsCors = cors({
     const allowed = process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
       : ['*'];
+    // La page de paiement publique est toujours autorisée
+    if (!allowed.includes('*') && !allowed.includes('https://pay.karbonn.fr')) {
+      allowed.push('https://pay.karbonn.fr');
+    }
     if (!origin || origin === 'null' || allowed.includes('*') || allowed.includes(origin)) callback(null, origin || '*');
     else callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
