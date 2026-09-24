@@ -2192,6 +2192,81 @@
       transition: border-color 0.2s ease;
     }
 
+    .detail-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 0;
+    }
+
+    .detail-toggle-text {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .detail-toggle-label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .detail-toggle-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 46px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .switch-slider {
+      position: absolute;
+      inset: 0;
+      background: #d1d5db;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .switch-slider::before {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      left: 3px;
+      top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    .switch input:checked + .switch-slider {
+      background: var(--primary);
+    }
+
+    .switch input:checked + .switch-slider::before {
+      transform: translateX(20px);
+    }
+
+    .switch input:disabled + .switch-slider {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .detail-field-input:focus {
       border-color: var(--text);
     }
@@ -6386,6 +6461,19 @@
       <div class="detail-section">
         <div class="detail-section-title">Informations</div>
         <div id="detail-fields"></div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Facturation</div>
+        <div class="detail-toggle-row">
+          <div class="detail-toggle-text">
+            <span class="detail-toggle-label">Autoriser le paiement via Stripe</span>
+            <span class="detail-toggle-desc">Le client peut régler ses factures en ligne depuis son espace (pay.karbonn.fr)</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="detail-stripe-pay">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
       </div>
       <div class="detail-section">
         <div class="detail-section-title">Projets associés</div>

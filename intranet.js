@@ -2531,10 +2531,43 @@ function openClientDetail(client) {
   detailClientIdEl.textContent = client.clientId || '—';
 
   updateDetailBlockButton(client);
+  updateDetailStripeToggle(client);
   renderDetailFields(client);
   loadClientProjets(client.id);
   loadClientSites(client.id);
   clientDetailModal.classList.add('visible');
+}
+
+const detailStripePayToggle = document.getElementById('detail-stripe-pay');
+
+function updateDetailStripeToggle(client) {
+  if (!detailStripePayToggle) return;
+  detailStripePayToggle.checked = client?.stripePaymentEnabled !== false;
+  detailStripePayToggle.disabled = !isManager();
+  detailStripePayToggle.closest('.switch').title = isManager() ? '' : 'Réservé aux managers';
+}
+
+if (detailStripePayToggle) {
+  detailStripePayToggle.addEventListener('change', async () => {
+    if (!currentDetailClient) return;
+    if (!isManager()) {
+      detailStripePayToggle.checked = !detailStripePayToggle.checked;
+      showToast('Accès réservé aux managers.', 'error');
+      return;
+    }
+    const enabled = detailStripePayToggle.checked;
+    try {
+      await db.collection('clients').doc(currentDetailClient.id).update({ stripePaymentEnabled: enabled });
+      currentDetailClient.stripePaymentEnabled = enabled;
+      const idx = allClients.findIndex(c => c.id === currentDetailClient.id);
+      if (idx !== -1) allClients[idx].stripePaymentEnabled = enabled;
+      showToast(enabled ? 'Paiement en ligne activé pour ce client.' : 'Paiement en ligne désactivé pour ce client.', 'success');
+    } catch (err) {
+      console.error(err);
+      detailStripePayToggle.checked = !enabled;
+      showToast('Erreur lors de la mise à jour : ' + err.message, 'error');
+    }
+  });
 }
 
 function updateDetailBlockButton(client) {

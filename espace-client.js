@@ -1590,7 +1590,7 @@ function renderDocumentCard(doc) {
         <span class="document-card-status ${getDocumentStatusClass(doc.status)}">${statusLabel}</span>
       </div>
       <div class="document-card-actions">
-        ${doc.type === 'invoice' && doc.status === 'unpaid'
+        ${doc.type === 'invoice' && doc.status === 'unpaid' && currentClient?.stripePaymentEnabled !== false
           ? `<button class="btn-doc-pay" data-doc-id="${escapeHtml(doc.id)}"><i class="fa-solid fa-bolt"></i> Payer maintenant</button>` : ''}
         ${downloadUrl ? `<a class="btn-doc-download" href="${downloadUrl}" target="_blank" download><i class="fa-solid fa-download"></i> Télécharger</a>` : ''}
         ${viewUrl ? `<a class="btn-doc-view" href="${viewUrl}" target="_blank"><i class="fa-solid fa-eye"></i> Voir</a>` : ''}
