@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const crypto = require('crypto');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const FormData = require('form-data');
@@ -311,6 +312,38 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
         console.log('[Stripe webhook] Subscription marked canceled for site:', siteId);
       } catch (err) {
         console.error('[Stripe webhook] Error marking subscription canceled:', err);
+      }
+    }
+  }
+
+  // Virement bancaire reçu (pay.karbonn.fr) → marquer la facture Qonto payée
+  if (event.type === 'payment_intent.succeeded') {
+    const pi = event.data.object;
+    const payToken = pi.metadata?.payToken;
+    if (payToken) {
+      try {
+        const ref = db.collection('payLinks').doc(payToken);
+        const doc = await ref.get();
+        if (doc.exists && doc.data().status !== 'paid') {
+          const p = doc.data();
+          const paidAt = new Date().toISOString().split('T')[0];
+          try {
+            await qontoRequest(`/client_invoices/${p.qontoInvoiceId}/mark_as_paid`, {
+              method: 'POST',
+              body: JSON.stringify({ paid_at: paidAt })
+            });
+            console.log(`[Pay] Qonto invoice ${p.qontoInvoiceId} marked as paid via bank transfer`);
+          } catch (qErr) {
+            console.error('[Pay] Failed to mark Qonto invoice paid:', qErr.message);
+          }
+          await ref.update({
+            status: 'paid',
+            paidAt: admin.firestore.FieldValue.serverTimestamp(),
+            stripePaymentIntentId: pi.id
+          });
+        }
+      } catch (err) {
+        console.error('[Stripe webhook] Error processing pay link payment:', err);
       }
     }
   }
@@ -865,6 +898,142 @@ app.get('/api/public/client/:clientId/documents/:attachmentId/download', async (
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── Paiement de facture par virement bancaire via Stripe (pay.karbonn.fr) ──
+const PAY_LINK_TTL_DAYS = 7;
+const PAY_LINK_BASE_URL = process.env.PAY_LINK_BASE_URL || 'https://pay.karbonn.fr';
+
+function publicClientName(c) {
+  return [c.prenom, c.nom].filter(Boolean).join(' ') || c.entreprise || c.raisonSociale || 'Client';
+}
+
+// 1. Le client clique "Payer maintenant" → création d'un lien sécurisé à usage unique
+app.post('/api/public/client/:clientId/documents/:docId/pay-link', async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
+  try {
+    const clientDoc = await resolveClientDocByPublicId(req.params.clientId);
+    if (!clientDoc) return res.status(404).json({ error: 'Client not found' });
+    const client = clientDoc.data() || {};
+    if (!client.qontoClientId) return res.status(404).json({ error: 'Qonto client not linked' });
+
+    // Vérifier que la facture existe et appartient bien à ce client
+    const invData = await qontoRequest(`/client_invoices/${req.params.docId}`);
+    const inv = invData?.client_invoice;
+    if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+    if (inv.client?.id !== client.qontoClientId) return res.status(403).json({ error: 'Invoice does not belong to this client' });
+    if (inv.status === 'paid') return res.status(400).json({ error: 'Invoice already paid' });
+    if (inv.status === 'canceled' || inv.status === 'draft') return res.status(400).json({ error: 'Invoice not payable' });
+
+    const token = crypto.randomBytes(24).toString('base64url');
+    const expiresAt = new Date(Date.now() + PAY_LINK_TTL_DAYS * 86400000);
+    await db.collection('payLinks').doc(token).set({
+      clientDocId: clientDoc.id,
+      clientPublicId: client.clientId || '',
+      clientName: publicClientName(client),
+      qontoInvoiceId: inv.id,
+      invoiceNumber: inv.number || '',
+      amount: parseFloat(inv.total_amount?.value || '0'),
+      currency: inv.total_amount?.currency || 'EUR',
+      status: 'pending',
+      stripePaymentIntentId: null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: admin.firestore.Timestamp.fromDate(expiresAt)
+    });
+
+    res.json({ url: `${PAY_LINK_BASE_URL}/?t=${token}` });
+  } catch (err) {
+    console.error('[Pay] Error creating pay link:', err);
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// 2. La page publique récupère les infos (sans données sensibles)
+app.get('/api/public/pay/:token', async (req, res) => {
+  try {
+    const doc = await db.collection('payLinks').doc(req.params.token).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Lien de paiement invalide' });
+    const p = doc.data();
+    const expired = p.expiresAt && p.expiresAt.toMillis() < Date.now();
+    res.json({
+      status: expired && p.status === 'pending' ? 'expired' : p.status,
+      invoiceNumber: p.invoiceNumber,
+      amount: p.amount,
+      currency: p.currency || 'EUR',
+      clientName: p.clientName,
+      clientId: p.clientPublicId,
+      expiresAt: p.expiresAt?.toDate?.()?.toISOString() || null,
+      hasBankTransfer: Boolean(p.stripePaymentIntentId)
+    });
+  } catch (err) {
+    console.error('[Pay] Error fetching pay link:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Génère (ou renvoie) les instructions de virement Stripe
+app.post('/api/public/pay/:token/bank-transfer', async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
+  try {
+    const ref = db.collection('payLinks').doc(req.params.token);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Lien de paiement invalide' });
+    const p = doc.data();
+    if (p.status === 'paid') return res.status(400).json({ error: 'Facture déjà payée' });
+    if (p.expiresAt && p.expiresAt.toMillis() < Date.now()) return res.status(410).json({ error: 'Lien expiré' });
+
+    // Réutiliser le PaymentIntent existant si déjà généré
+    if (p.stripePaymentIntentId) {
+      const existing = await stripe.paymentIntents.retrieve(p.stripePaymentIntentId);
+      const inst = existing.next_action?.display_bank_transfer_instructions;
+      if (inst) return res.json(extractBankInstructions(inst));
+    }
+
+    const clientDoc = await db.collection('clients').doc(p.clientDocId).get();
+    if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+    const customerId = await ensureStripeCustomer(clientDoc);
+
+    const pi = await stripe.paymentIntents.create({
+      amount: Math.round((p.amount || 0) * 100),
+      currency: (p.currency || 'EUR').toLowerCase(),
+      customer: customerId,
+      payment_method_types: ['customer_balance'],
+      payment_method_data: { type: 'customer_balance' },
+      payment_method_options: {
+        customer_balance: {
+          funding_type: 'bank_transfer',
+          bank_transfer: { type: 'eu_bank_transfer', eu_bank_transfer: { country: 'FR' } }
+        }
+      },
+      confirm: true,
+      description: `Facture ${p.invoiceNumber} — ${p.clientName}`,
+      metadata: { payToken: req.params.token, qontoInvoiceId: p.qontoInvoiceId, clientId: p.clientPublicId }
+    });
+
+    await ref.update({ stripePaymentIntentId: pi.id });
+
+    const inst = pi.next_action?.display_bank_transfer_instructions;
+    if (!inst) return res.status(502).json({ error: 'Stripe n\'a pas retourné d\'instructions de virement' });
+    res.json(extractBankInstructions(inst));
+  } catch (err) {
+    console.error('[Pay] Bank transfer error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+function extractBankInstructions(inst) {
+  const ibanAddr = (inst.financial_addresses || []).find(a => a.type === 'iban') || {};
+  const iban = ibanAddr.iban || {};
+  return {
+    iban: iban.iban || '',
+    bic: iban.bic || '',
+    accountHolder: iban.account_holder_name || 'Stripe',
+    bankCountry: iban.country || '',
+    reference: inst.reference || '',
+    amountRemaining: inst.amount_remaining,
+    currency: inst.currency || 'eur',
+    hostedInstructionsUrl: inst.hosted_instructions_url || ''
+  };
+}
 
 // Public endpoint for client space: edit own pending note
 app.patch('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {

@@ -128,6 +128,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Liens de paiement pay.karbonn.fr (gérés uniquement par le serveur)
+    match /payLinks/{token} {
+      allow read, write: if false;
+    }
+
     // Collection sitesWeb (gestion des sites web)
     match /sitesWeb/{siteId} {
       allow read: if request.auth != null;
