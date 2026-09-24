@@ -51,12 +51,13 @@ const mg = mailgun.client({
   url: process.env.MAILGUN_URL || 'https://api.eu.mailgun.net'
 });
 
-async function sendEmail({ to, subject, text, html }) {
+async function sendEmail({ to, subject, text, html, attachments }) {
   const from = process.env.MAILGUN_FROM || 'Karbonn Intranet <postmaster@mg.karbonn.fr>';
   const domain = process.env.MAILGUN_DOMAIN || 'mg.karbonn.fr';
   const data = { from, to, subject };
   if (text) data.text = text;
   if (html) data.html = html;
+  if (attachments && attachments.length) data.attachment = attachments;
   console.log(`[EMAIL] Sending email to ${to.join(', ')} from ${from} | subject: ${subject}`);
   const result = await mg.messages.create(domain, data);
   console.log(`[EMAIL] Sent successfully. Mailgun id: ${result.id}`);
@@ -155,6 +156,86 @@ async function createQontoInvoiceFromStripeInvoice(stripeInvoice, subscription, 
   });
 
   console.log('[Qonto] Invoice created and marked as paid:', qontoInvoiceId, 'for Stripe invoice:', stripeInvoice.id);
+
+  // 5. Email de confirmation au client avec la facture en pièce jointe
+  await sendPaymentConfirmationEmail(clientDocId, qontoInvoiceId, paidAt);
+}
+
+// Télécharge le PDF d'une facture Qonto (attachment) — réessaie une fois si pas encore généré
+async function downloadQontoInvoicePdf(qontoInvoiceId) {
+  let invoice = null;
+  try {
+    const data = await qontoRequest(`/client_invoices/${qontoInvoiceId}`);
+    invoice = data?.client_invoice;
+  } catch (e) {
+    console.warn('[Email] Could not fetch Qonto invoice:', e.message);
+    return { invoice: null, buffer: null };
+  }
+  let attachmentId = invoice?.attachment_id;
+  if (!attachmentId) {
+    await new Promise(r => setTimeout(r, 2500));
+    try {
+      const retry = await qontoRequest(`/client_invoices/${qontoInvoiceId}`);
+      invoice = retry?.client_invoice || invoice;
+      attachmentId = invoice?.attachment_id;
+    } catch {}
+  }
+  if (!attachmentId) return { invoice, buffer: null };
+  try {
+    const headers = { 'Authorization': QONTO_AUTH, 'Accept': 'application/pdf' };
+    if (QONTO_STAGING_TOKEN) headers['X-Qonto-Staging-Token'] = QONTO_STAGING_TOKEN;
+    const resp = await fetch(`${QONTO_BASE_URL}/attachments/${attachmentId}`, { headers });
+    if (!resp.ok) return { invoice, buffer: null };
+    return { invoice, buffer: Buffer.from(await resp.arrayBuffer()) };
+  } catch (e) {
+    console.warn('[Email] Could not download invoice PDF:', e.message);
+    return { invoice, buffer: null };
+  }
+}
+
+// Email automatique de confirmation de paiement (facture Qonto en pièce jointe)
+async function sendPaymentConfirmationEmail(clientDocId, qontoInvoiceId, paidAt = null) {
+  try {
+    if (!process.env.MAILGUN_API_KEY) return;
+    const clientDoc = await db.collection('clients').doc(clientDocId).get();
+    const client = clientDoc.exists ? clientDoc.data() : {};
+    if (!client.email) {
+      console.log('[Email] No client email, skipping payment confirmation for', clientDocId);
+      return;
+    }
+
+    const { invoice, buffer } = await downloadQontoInvoicePdf(qontoInvoiceId);
+    const invoiceNumber = invoice?.number || qontoInvoiceId;
+    const amount = parseFloat(invoice?.total_amount?.value || '0');
+    const currency = invoice?.total_amount?.currency || 'EUR';
+    const amountStr = amount.toLocaleString('fr-FR', { style: 'currency', currency });
+    const clientName = publicClientName(client);
+    const paidDate = paidAt ? new Date(paidAt).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR');
+
+    const intro = `${clientName}, nous confirmons la bonne réception de votre paiement. Vous trouverez votre facture en pièce jointe — elle reste également disponible dans votre espace client.`;
+    const html = buildRenewalEmailHtml({
+      title: 'Paiement reçu',
+      intro,
+      lines: [
+        `Facture : ${invoiceNumber}`,
+        `Montant réglé : ${amountStr}`,
+        `Date de paiement : ${paidDate}`
+      ],
+      buttonText: 'Accéder à mon espace client',
+      buttonHref: 'https://karbonn.fr/espace-client'
+    });
+
+    await sendEmail({
+      to: [client.email],
+      subject: `[Karbonn] Paiement reçu — Facture ${invoiceNumber}`,
+      text: `Paiement reçu\n\n${intro}\n\nFacture : ${invoiceNumber}\nMontant réglé : ${amountStr}\nDate de paiement : ${paidDate}\n\nhttps://karbonn.fr/espace-client`,
+      html,
+      attachments: buffer ? [{ filename: `Facture-${invoiceNumber}.pdf`, data: buffer }] : []
+    });
+    console.log('[Email] Payment confirmation sent to', client.email, '| invoice:', invoiceNumber);
+  } catch (err) {
+    console.error('[Email] Failed to send payment confirmation:', err.message);
+  }
 }
 
 // Stripe webhook must use raw body to verify signature
@@ -341,6 +422,7 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
             paidAt: admin.firestore.FieldValue.serverTimestamp(),
             stripePaymentIntentId: pi.id
           });
+          await sendPaymentConfirmationEmail(p.clientDocId, p.qontoInvoiceId, paidAt);
         }
       } catch (err) {
         console.error('[Stripe webhook] Error processing pay link payment:', err);
