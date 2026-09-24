@@ -6730,7 +6730,7 @@ function openMonitoringDetail(site) {
 }
 
 const MON_HERO_META = {
-  ok:           { icon: 'fa-circle-check',         title: 'Tous les systèmes opérationnels' },
+  ok:           { icon: 'fa-circle-check',         title: 'Tous les systèmes sont opérationnels' },
   warning:      { icon: 'fa-triangle-exclamation', title: 'Performance dégradée' },
   error:        { icon: 'fa-circle-xmark',         title: 'Incident en cours' },
   unconfigured: { icon: 'fa-circle-question',      title: 'Site non configuré' }

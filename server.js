@@ -1638,9 +1638,74 @@ function computeSiteStatus(check, sslDaysLeft, domainDaysLeft) {
   return 'ok';
 }
 
+// Emails d'incident envoyés à tous les managers et développeurs
+const INCIDENT_EMAIL_TYPES = new Set(['down', 'recovered', 'domain_expired']);
+
+async function getIncidentAlertEmails() {
+  try {
+    const snap = await db.collection('users').get();
+    const emails = [];
+    snap.forEach(d => {
+      const u = d.data();
+      const role = typeof u.role === 'object' ? u.role?.label : u.role;
+      if ((role === 'Manager' || role === 'Développeur') && u.email) emails.push(u.email);
+    });
+    return [...new Set(emails)];
+  } catch (err) {
+    console.error('[Monitoring] Failed to get incident alert emails:', err.message);
+    return [];
+  }
+}
+
+async function sendMonitoringIncidentEmail(site, type, message) {
+  try {
+    if (!process.env.MAILGUN_API_KEY) {
+      console.error('[Monitoring] MAILGUN_API_KEY missing — incident email not sent');
+      return;
+    }
+    const recipients = await getIncidentAlertEmails();
+    if (!recipients.length) {
+      console.log('[Monitoring] No manager/developer email for incident alert');
+      return;
+    }
+    const domain = (site?.domain || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').trim() || '—';
+    const clientName = site?.clientName || '—';
+    const recovered = type === 'recovered';
+    const title = recovered ? 'Site rétabli' : 'Incident détecté sur un site client';
+    const intro = recovered
+      ? `Bonne nouvelle : le site ${domain} est de nouveau accessible.`
+      : `Un incident a été détecté sur le site ${domain} (${clientName}).`;
+    const lines = [
+      `Site : ${domain}`,
+      `Client : ${clientName}`,
+      `Détail : ${message}`,
+      `Détecté le : ${new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })}`
+    ];
+    const html = buildRenewalEmailHtml({
+      title,
+      intro,
+      lines,
+      buttonText: 'Ouvrir le monitoring',
+      buttonHref: 'https://karbonn.fr/intranet'
+    });
+    const subject = recovered
+      ? `[Karbonn] Site rétabli – ${domain}`
+      : `[Karbonn] Incident – ${domain}`;
+    await sendEmail({
+      to: recipients,
+      subject,
+      text: `${title}\n\n${intro}\n\n${lines.join('\n')}\n\nhttps://karbonn.fr/intranet`,
+      html
+    });
+    console.log(`[Monitoring] Incident email sent to ${recipients.length} recipient(s) | ${type} | ${domain}`);
+  } catch (err) {
+    console.error('[Monitoring] Failed to send incident email:', err.message);
+  }
+}
+
 // Déduplication sans requête (donc sans index Firestore) : on garde la date
 // de la dernière alerte par type directement dans le doc siteMonitoring.
-async function createMonitoringAlert(siteId, type, message, lastAlertAt = {}) {
+async function createMonitoringAlert(siteId, type, message, lastAlertAt = {}, site = null) {
   try {
     const prev = lastAlertAt?.[type];
     const prevMs = prev?.toMillis ? prev.toMillis() : (prev?._seconds ? prev._seconds * 1000 : null);
@@ -1656,6 +1721,9 @@ async function createMonitoringAlert(siteId, type, message, lastAlertAt = {}) {
         lastAlertAt: { [type]: admin.firestore.Timestamp.now() }
       }, { merge: true })
     ]);
+    if (INCIDENT_EMAIL_TYPES.has(type)) {
+      await sendMonitoringIncidentEmail(site, type, message);
+    }
   } catch (err) {
     console.error('[Monitoring] Failed to create alert:', err.message);
   }
@@ -1705,22 +1773,22 @@ async function runSiteCheck(site) {
 
   // Alertes sur transitions et seuils
   if (status === 'error' && prevStatus !== 'error') {
-    await createMonitoringAlert(site.id, 'down', `Site inaccessible (HTTP ${http.status || 'aucune réponse'})`, lastAlertAt);
+    await createMonitoringAlert(site.id, 'down', `Site inaccessible (HTTP ${http.status || 'aucune réponse'})`, lastAlertAt, site);
   }
   if (status === 'ok' && prevStatus === 'error') {
-    await createMonitoringAlert(site.id, 'recovered', 'Site de nouveau accessible', lastAlertAt);
+    await createMonitoringAlert(site.id, 'recovered', 'Site de nouveau accessible', lastAlertAt, site);
   }
   if (sslDaysLeft !== null && sslDaysLeft <= MONITORING_SSL_WARN_DAYS) {
-    await createMonitoringAlert(site.id, 'ssl_expiry', `Certificat SSL expire dans ${sslDaysLeft} jour${sslDaysLeft > 1 ? 's' : ''}`, lastAlertAt);
+    await createMonitoringAlert(site.id, 'ssl_expiry', `Certificat SSL expire dans ${sslDaysLeft} jour${sslDaysLeft > 1 ? 's' : ''}`, lastAlertAt, site);
   }
   if (domainDaysLeft !== null && domainDaysLeft <= MONITORING_DOMAIN_WARN_DAYS && domainDaysLeft >= 0) {
-    await createMonitoringAlert(site.id, 'domain_expiry', `Domaine expire dans ${domainDaysLeft} jour${domainDaysLeft > 1 ? 's' : ''}`, lastAlertAt);
+    await createMonitoringAlert(site.id, 'domain_expiry', `Domaine expire dans ${domainDaysLeft} jour${domainDaysLeft > 1 ? 's' : ''}`, lastAlertAt, site);
   }
   if (domainDaysLeft !== null && domainDaysLeft < 0) {
-    await createMonitoringAlert(site.id, 'domain_expired', `Domaine expiré depuis ${Math.abs(domainDaysLeft)} jour${Math.abs(domainDaysLeft) > 1 ? 's' : ''}`, lastAlertAt);
+    await createMonitoringAlert(site.id, 'domain_expired', `Domaine expiré depuis ${Math.abs(domainDaysLeft)} jour${Math.abs(domainDaysLeft) > 1 ? 's' : ''}`, lastAlertAt, site);
   }
   if (status !== 'error' && http.responseMs > MONITORING_SLOW_MS) {
-    await createMonitoringAlert(site.id, 'slow', `Temps de réponse : ${Math.round(http.responseMs)} ms`, lastAlertAt);
+    await createMonitoringAlert(site.id, 'slow', `Temps de réponse : ${Math.round(http.responseMs)} ms`, lastAlertAt, site);
   }
 
   return result;
