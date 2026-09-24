@@ -114,6 +114,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Monitoring des sites (écrit uniquement par le serveur via Firebase Admin SDK)
+    match /siteMonitoring/{siteId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /monitoringChecks/{checkId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /monitoringAlerts/{alertId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // Collection sitesWeb (gestion des sites web)
     match /sitesWeb/{siteId} {
       allow read: if request.auth != null;

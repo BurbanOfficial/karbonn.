@@ -1595,6 +1595,7 @@ const sectionMap = [
   'section-taches',
   'section-projets',
   'section-sitesweb',
+  'section-monitoring',
   'section-finances',
   'section-simulations',
   'section-equipe',
@@ -1625,6 +1626,11 @@ navItems.forEach((item, index) => {
     // Load finances data when opening the finances section
     if (sectionId === 'section-finances') {
       loadFinances();
+    }
+
+    // Load monitoring data when opening the monitoring section
+    if (sectionId === 'section-monitoring') {
+      loadMonitoring();
     }
 
     // Load simulations when opening the section
@@ -6256,3 +6262,338 @@ document.querySelectorAll('.sim-calc-btn').forEach(btn => {
   });
 });
 
+
+// ── Monitoring des sites clients ──
+let monitoringData = { sites: [], alerts: [], availability: [] };
+let monitoringCharts = {};
+let monitoringLoading = false;
+
+const monElements = {
+  lastUpdate: document.getElementById('monitoring-last-update'),
+  globalPill: document.getElementById('monitoring-global-pill'),
+  refreshBtn: document.getElementById('monitoring-refresh-btn'),
+  onlineVal: document.getElementById('mon-online-val'),
+  onlineSub: document.getElementById('mon-online-sub'),
+  errorVal: document.getElementById('mon-error-val'),
+  errorSub: document.getElementById('mon-error-sub'),
+  sslVal: document.getElementById('mon-ssl-val'),
+  sslSub: document.getElementById('mon-ssl-sub'),
+  domainVal: document.getElementById('mon-domain-val'),
+  domainSub: document.getElementById('mon-domain-sub'),
+  alertsList: document.getElementById('monitoring-alerts-list'),
+  tbody: document.getElementById('monitoring-tbody'),
+  statusFilter: document.getElementById('monitoring-status-filter'),
+  search: document.getElementById('monitoring-search'),
+  navBadge: document.getElementById('monitoring-nav-badge'),
+  donutLegend: document.getElementById('monitoring-donut-legend')
+};
+
+const MON_STATUS_META = {
+  ok:           { label: 'En ligne',      badge: 'ok',           dot: 'ok' },
+  warning:      { label: 'Avertissement', badge: 'warning',      dot: 'warning' },
+  error:        { label: 'Erreur',        badge: 'error',        dot: 'error' },
+  unconfigured: { label: 'Non configuré', badge: 'unconfigured', dot: 'unconfigured' }
+};
+
+const MON_ALERT_META = {
+  down:          { icon: 'fa-circle-xmark',   color: 'red' },
+  recovered:     { icon: 'fa-circle-check',   color: 'green' },
+  ssl_expiry:    { icon: 'fa-lock',           color: 'orange' },
+  domain_expiry: { icon: 'fa-globe',          color: 'orange' },
+  domain_expired:{ icon: 'fa-globe',          color: 'red' },
+  slow:          { icon: 'fa-gauge-high',     color: 'blue' }
+};
+
+function monitoringTimeAgo(isoDate) {
+  if (!isoDate) return '—';
+  const diff = Math.floor((Date.now() - new Date(isoDate).getTime()) / 1000);
+  if (diff < 60) return "À l'instant";
+  if (diff < 3600) return `Il y a ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)} h`;
+  return new Date(isoDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
+function monSiteStatus(site) {
+  const m = site.monitoring;
+  if (!m || !m.status) return 'unconfigured';
+  return m.status;
+}
+
+function renderMonitoringKpis() {
+  const sites = monitoringData.sites;
+  const total = sites.length || 0;
+  let online = 0, error = 0, warning = 0, unconf = 0;
+  let sslOk = 0, sslExpiring = 0, sslTotal = 0;
+  let domOk = 0, domExpiring = 0, domTotal = 0;
+
+  sites.forEach(s => {
+    const st = monSiteStatus(s);
+    if (st === 'ok') online++;
+    else if (st === 'error') error++;
+    else if (st === 'warning') warning++;
+    else unconf++;
+
+    const m = s.monitoring;
+    if (m && m.sslDaysLeft !== null && m.sslDaysLeft !== undefined) {
+      sslTotal++;
+      if (m.sslDaysLeft > 14) sslOk++;
+      else sslExpiring++;
+    }
+    if (m && m.domainDaysLeft !== null && m.domainDaysLeft !== undefined) {
+      domTotal++;
+      if (m.domainDaysLeft > 30) domOk++;
+      else domExpiring++;
+    }
+  });
+
+  const pct = total ? Math.round((online / total) * 1000) / 10 : 0;
+  if (monElements.onlineVal) monElements.onlineVal.textContent = `${online} / ${total}`;
+  if (monElements.onlineSub) monElements.onlineSub.innerHTML = `${pct}% de disponibilité`;
+  if (monElements.errorVal) monElements.errorVal.textContent = String(error);
+  if (monElements.errorSub) {
+    const errPct = total ? Math.round((error / total) * 1000) / 10 : 0;
+    monElements.errorSub.innerHTML = `${errPct}% des sites`;
+  }
+  if (monElements.sslVal) monElements.sslVal.textContent = `${sslOk} / ${sslTotal}`;
+  if (monElements.sslSub) {
+    monElements.sslSub.innerHTML = sslExpiring
+      ? `<span class="kpi-trend warn">${sslExpiring} expire${sslExpiring > 1 ? 'nt' : ''} bientôt</span>`
+      : 'Tous valides';
+  }
+  if (monElements.domainVal) monElements.domainVal.textContent = `${domOk} / ${domTotal}`;
+  if (monElements.domainSub) {
+    monElements.domainSub.innerHTML = domExpiring
+      ? `<span class="kpi-trend warn">${domExpiring} expire${domExpiring > 1 ? 'nt' : ''} bientôt</span>`
+      : 'Tous valides';
+  }
+
+  if (monElements.globalPill) {
+    const pill = monElements.globalPill;
+    pill.classList.remove('ok', 'warning', 'error');
+    if (error > 0) { pill.classList.add('error'); pill.textContent = `${error} site${error > 1 ? 's' : ''} en erreur`; }
+    else if (warning > 0) { pill.classList.add('warning'); pill.textContent = `${warning} avertissement${warning > 1 ? 's' : ''}`; }
+    else { pill.classList.add('ok'); pill.textContent = 'Tout fonctionne'; }
+  }
+
+  if (monElements.navBadge) {
+    if (error > 0 || warning > 0) monElements.navBadge.classList.add('visible');
+    else monElements.navBadge.classList.remove('visible');
+  }
+}
+
+function renderMonitoringCharts() {
+  if (typeof ApexCharts === 'undefined') return;
+  Object.values(monitoringCharts).forEach(c => { try { c.destroy(); } catch {} });
+  monitoringCharts = {};
+
+  // Area chart: disponibilité 7 jours
+  const availEl = document.getElementById('chart-monitoring-availability');
+  if (availEl) {
+    const days = monitoringData.availability.map(a => {
+      const d = new Date(a.date);
+      return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    });
+    const values = monitoringData.availability.map(a => a.pct);
+    monitoringCharts.avail = new ApexCharts(availEl, {
+      chart: { type: 'area', height: 220, toolbar: { show: false }, fontFamily: 'Space Grotesk, sans-serif' },
+      series: [{ name: 'Disponibilité', data: values }],
+      xaxis: { categories: days, labels: { style: { fontSize: '11px', colors: '#8e8e93' } } },
+      yaxis: { min: 90, max: 100, labels: { formatter: v => v + '%', style: { fontSize: '11px', colors: '#8e8e93' } } },
+      stroke: { curve: 'smooth', width: 2 },
+      fill: { type: 'gradient', gradient: { opacityFrom: 0.25, opacityTo: 0.02 } },
+      colors: ['#6366f1'],
+      dataLabels: { enabled: false },
+      tooltip: { y: { formatter: v => (v === null ? 'Pas de données' : v + '%') } },
+      noData: { text: 'Aucune donnée encore — les checks démarrent.' }
+    });
+    monitoringCharts.avail.render();
+  }
+
+  // Donut: état global
+  const donutEl = document.getElementById('chart-monitoring-donut');
+  if (donutEl) {
+    const counts = { ok: 0, warning: 0, error: 0, unconfigured: 0 };
+    monitoringData.sites.forEach(s => { counts[monSiteStatus(s)]++; });
+    const series = [counts.ok, counts.warning, counts.error, counts.unconfigured];
+    const total = series.reduce((a, b) => a + b, 0);
+    const pct = total ? Math.round((counts.ok / total) * 1000) / 10 : 0;
+
+    monitoringCharts.donut = new ApexCharts(donutEl, {
+      chart: { type: 'donut', height: 190, fontFamily: 'Space Grotesk, sans-serif' },
+      series,
+      labels: ['En ligne', 'Avertissement', 'Erreur', 'Non configuré'],
+      colors: ['#22c55e', '#f97316', '#ef4444', '#94a3b8'],
+      legend: { show: false },
+      dataLabels: { enabled: false },
+      plotOptions: {
+        pie: {
+          donut: {
+            size: '72%',
+            labels: {
+              show: true,
+              name: { show: false },
+              value: { show: false },
+              total: { show: true, label: 'disponibilité', fontSize: '11px', color: '#8e8e93', formatter: () => pct + '%' }
+            }
+          }
+        }
+      },
+      noData: { text: 'Aucune donnée' }
+    });
+    monitoringCharts.donut.render();
+
+    if (monElements.donutLegend) {
+      const meta = [
+        ['En ligne', '#22c55e', counts.ok],
+        ['Avertissement', '#f97316', counts.warning],
+        ['Erreur', '#ef4444', counts.error],
+        ['Non configuré', '#94a3b8', counts.unconfigured]
+      ];
+      monElements.donutLegend.innerHTML = meta.map(([label, color, n]) =>
+        `<div class="monitoring-legend-item"><span class="dot" style="background:${color}"></span>${label}<span class="count">${n}</span></div>`
+      ).join('');
+    }
+  }
+}
+
+function renderMonitoringAlerts() {
+  if (!monElements.alertsList) return;
+  const alerts = monitoringData.alerts || [];
+  if (!alerts.length) {
+    monElements.alertsList.innerHTML = '<div class="monitoring-empty">Aucune alerte récente.</div>';
+    return;
+  }
+  const siteMap = {};
+  monitoringData.sites.forEach(s => { siteMap[s.id] = s; });
+  monElements.alertsList.innerHTML = alerts.map(a => {
+    const meta = MON_ALERT_META[a.type] || { icon: 'fa-circle-info', color: 'blue' };
+    const site = siteMap[a.siteId];
+    const siteName = site?.domain || 'Site inconnu';
+    return `
+      <div class="monitoring-alert-item">
+        <div class="monitoring-alert-icon ${meta.color}"><i class="fa-solid ${meta.icon}"></i></div>
+        <div class="monitoring-alert-body">
+          <div class="monitoring-alert-site">${escapeHtml(siteName)}</div>
+          <div class="monitoring-alert-msg">${escapeHtml(a.message || '')}</div>
+        </div>
+        <div class="monitoring-alert-time">${monitoringTimeAgo(a.createdAt)}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderMonitoringTable() {
+  if (!monElements.tbody) return;
+  const query = (monElements.search?.value || '').toLowerCase().trim();
+  const statusFilter = monElements.statusFilter?.value || '';
+
+  let sites = monitoringData.sites;
+  if (statusFilter) sites = sites.filter(s => monSiteStatus(s) === statusFilter);
+  if (query) {
+    sites = sites.filter(s =>
+      (s.domain || '').toLowerCase().includes(query) ||
+      (s.clientName || '').toLowerCase().includes(query)
+    );
+  }
+
+  if (!sites.length) {
+    monElements.tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Aucun site correspondant.</td></tr>';
+    return;
+  }
+
+  monElements.tbody.innerHTML = sites.map(s => {
+    const m = s.monitoring || {};
+    const st = monSiteStatus(s);
+    const meta = MON_STATUS_META[st];
+
+    let httpsCell;
+    if (m.sslDaysLeft === null || m.sslDaysLeft === undefined) httpsCell = '<span class="mon-muted">—</span>';
+    else if (m.sslDaysLeft <= 0) httpsCell = `<span class="mon-https-err"><i class="fa-solid fa-xmark"></i> Expiré</span>`;
+    else if (m.sslDaysLeft <= 14) httpsCell = `<span class="mon-https-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${m.sslDaysLeft} j</span>`;
+    else httpsCell = `<span class="mon-https-ok"><i class="fa-solid fa-check"></i></span>`;
+
+    let domCell;
+    const dd = m.domainDaysLeft;
+    if (dd === null || dd === undefined) domCell = '<span class="mon-muted">—</span>';
+    else if (dd < 0) domCell = `<span class="mon-domain-err">Expiré</span>`;
+    else if (dd <= 30) domCell = `<span class="mon-domain-warn">● ${dd} j</span>`;
+    else domCell = `<span class="mon-domain-ok">● ${dd} j</span>`;
+
+    const responseCell = (m.responseMs !== null && m.responseMs !== undefined)
+      ? `${Math.round(m.responseMs)} ms` : '<span class="mon-muted">—</span>';
+
+    const checkedLabel = m.checkedAt?.toDate
+      ? monitoringTimeAgo(m.checkedAt.toDate().toISOString())
+      : (m.checkedAt ? monitoringTimeAgo(m.checkedAt) : '—');
+
+    return `
+      <tr>
+        <td><div class="mon-site-cell"><span class="mon-site-dot ${meta.dot}"></span>${escapeHtml(s.domain || '—')}</div></td>
+        <td>${escapeHtml(s.clientName || '—')}</td>
+        <td><span class="mon-badge ${meta.badge}">${meta.label}</span></td>
+        <td>${httpsCell}</td>
+        <td>${domCell}</td>
+        <td>${responseCell}</td>
+        <td>${checkedLabel}</td>
+        <td>
+          <div class="actions">
+            <a class="btn-icon" href="https://${escapeHtml(s.domain || '')}" target="_blank" rel="noopener" title="Ouvrir le site"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+            <button class="btn-icon" data-site-id="${s.id}" title="Voir le site" onclick="document.querySelector('#nav-sites-web').click()"><i class="fa-solid fa-eye"></i></button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+async function loadMonitoring() {
+  if (monitoringLoading) return;
+  monitoringLoading = true;
+  try {
+    const data = await apiRequest('/api/monitoring/overview');
+    monitoringData = {
+      sites: data.sites || [],
+      alerts: data.alerts || [],
+      availability: data.availability || []
+    };
+    if (monElements.lastUpdate) {
+      monElements.lastUpdate.textContent = 'Dernière mise à jour : ' +
+        new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' +
+        new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
+    renderMonitoringKpis();
+    renderMonitoringCharts();
+    renderMonitoringAlerts();
+    renderMonitoringTable();
+  } catch (err) {
+    console.error('[Monitoring] Failed to load:', err);
+    if (monElements.tbody) {
+      monElements.tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Erreur lors du chargement du monitoring.</td></tr>';
+    }
+  } finally {
+    monitoringLoading = false;
+    showSection('monitoring');
+  }
+}
+
+if (monElements.refreshBtn) {
+  monElements.refreshBtn.addEventListener('click', async () => {
+    monElements.refreshBtn.disabled = true;
+    monElements.refreshBtn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Vérification…';
+    try {
+      await apiRequest('/api/monitoring/check-now', { method: 'POST' });
+      showToast('Vérification des sites lancée. Résultats dans quelques secondes…', 'success');
+      setTimeout(loadMonitoring, 15000);
+      setTimeout(loadMonitoring, 30000);
+    } catch (err) {
+      console.error('[Monitoring] Check-now failed:', err);
+      showToast('Impossible de lancer la vérification.', 'error');
+    } finally {
+      setTimeout(() => {
+        monElements.refreshBtn.disabled = false;
+        monElements.refreshBtn.innerHTML = '<i class="fa-solid fa-rotate"></i> Actualiser';
+      }, 5000);
+    }
+  });
+}
+
+if (monElements.statusFilter) monElements.statusFilter.addEventListener('change', renderMonitoringTable);
+if (monElements.search) monElements.search.addEventListener('input', renderMonitoringTable);

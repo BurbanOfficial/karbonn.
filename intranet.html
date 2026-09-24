@@ -3809,6 +3809,292 @@
       }
     }
 
+    /* ── Monitoring ── */
+    .monitoring-subtitle {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .monitoring-header-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .monitoring-last-update {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .monitoring-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 20px;
+    }
+
+    .monitoring-status-pill::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .monitoring-status-pill.ok { background: rgba(34,197,94,0.12); color: #16a34a; }
+    .monitoring-status-pill.warning { background: rgba(249,115,22,0.12); color: #ea580c; }
+    .monitoring-status-pill.error { background: rgba(239,68,68,0.12); color: #dc2626; }
+
+    .monitoring-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+
+    .monitoring-kpi { padding-bottom: 18px; }
+
+    .monitoring-kpi-label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .monitoring-kpi-sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .monitoring-kpi-sub .kpi-trend { font-weight: 600; }
+    .monitoring-kpi-sub .kpi-trend.up { color: #16a34a; }
+    .monitoring-kpi-sub .kpi-trend.down { color: #dc2626; }
+    .monitoring-kpi-sub .kpi-trend.warn { color: #ea580c; }
+
+    .stat-card-icon.kpi-green { background: rgba(34,197,94,0.12); color: #16a34a; }
+    .stat-card-icon.kpi-red { background: rgba(239,68,68,0.12); color: #dc2626; }
+    .stat-card-icon.kpi-orange { background: rgba(249,115,22,0.12); color: #ea580c; }
+    .stat-card-icon.kpi-blue { background: rgba(59,130,246,0.12); color: #2563eb; }
+
+    .monitoring-grid {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr 1fr;
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+
+    .monitoring-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+      padding: 20px;
+    }
+
+    .monitoring-card h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+
+    .monitoring-card-sub {
+      font-weight: 400;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .monitoring-chart { min-height: 220px; }
+
+    .monitoring-donut-card { display: flex; flex-direction: column; }
+
+    .monitoring-donut-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .monitoring-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--text);
+    }
+
+    .monitoring-legend-item .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .monitoring-legend-item .count {
+      margin-left: auto;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .monitoring-alerts-card { max-height: 340px; overflow: hidden; display: flex; flex-direction: column; }
+
+    .monitoring-alerts-list {
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .monitoring-alert-item {
+      display: flex;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--page-bg);
+      border: 1px solid var(--border);
+    }
+
+    .monitoring-alert-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .monitoring-alert-icon.red { background: rgba(239,68,68,0.12); color: #dc2626; }
+    .monitoring-alert-icon.orange { background: rgba(249,115,22,0.12); color: #ea580c; }
+    .monitoring-alert-icon.green { background: rgba(34,197,94,0.12); color: #16a34a; }
+    .monitoring-alert-icon.blue { background: rgba(59,130,246,0.12); color: #2563eb; }
+
+    .monitoring-alert-body { min-width: 0; flex: 1; }
+
+    .monitoring-alert-site {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .monitoring-alert-msg {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .monitoring-alert-time {
+      font-size: 0.7rem;
+      color: var(--muted);
+      white-space: nowrap;
+      align-self: flex-start;
+    }
+
+    .monitoring-table-card { padding: 0; overflow: hidden; }
+    .monitoring-table-card .table-wrapper { border: none; border-radius: 0; box-shadow: none; }
+
+    .monitoring-table-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .monitoring-table-header h3 { margin: 0; }
+
+    .monitoring-table-tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .monitoring-table-tools .search-bar { min-width: 220px; padding: 8px 14px; }
+
+    .monitoring-select {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.85rem;
+      font-family: inherit;
+    }
+
+    .mon-site-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+    }
+
+    .mon-site-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .mon-site-dot.ok { background: #22c55e; }
+    .mon-site-dot.warning { background: #f97316; }
+    .mon-site-dot.error { background: #ef4444; }
+    .mon-site-dot.unconfigured { background: #94a3b8; }
+
+    .mon-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .mon-badge.ok { background: rgba(34,197,94,0.12); color: #16a34a; }
+    .mon-badge.warning { background: rgba(249,115,22,0.12); color: #ea580c; }
+    .mon-badge.error { background: rgba(239,68,68,0.12); color: #dc2626; }
+    .mon-badge.unconfigured { background: rgba(148,163,184,0.15); color: #64748b; }
+
+    .mon-https-ok { color: #16a34a; }
+    .mon-https-warn { color: #ea580c; font-weight: 600; }
+    .mon-https-err { color: #dc2626; }
+    .mon-muted { color: var(--muted); }
+
+    .mon-domain-ok { color: #16a34a; font-weight: 600; }
+    .mon-domain-warn { color: #ea580c; font-weight: 600; }
+    .mon-domain-err { color: #dc2626; font-weight: 600; }
+
+    .monitoring-empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 24px 12px;
+      font-size: 0.82rem;
+    }
+
+    @media (max-width: 1200px) {
+      .monitoring-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .monitoring-grid { grid-template-columns: 1fr 1fr; }
+      .monitoring-chart-card { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 768px) {
+      .monitoring-kpi-grid { grid-template-columns: 1fr; }
+      .monitoring-grid { grid-template-columns: 1fr; }
+    }
+
     /* ── Finances ── */
     .finances-tabs {
       display: flex;
@@ -4359,6 +4645,11 @@
           <span class="nav-label">Sites Web</span>
           <span class="nav-badge" id="sites-web-nav-badge"></span>
         </a>
+        <a href="#" class="nav-item" data-label="Monitoring" id="nav-monitoring">
+          <i class="fa-solid fa-heart-pulse"></i>
+          <span class="nav-label">Monitoring</span>
+          <span class="nav-badge" id="monitoring-nav-badge"></span>
+        </a>
         <a href="#" class="nav-item" data-label="Finances">
           <i class="fa-solid fa-euro-sign"></i>
           <span class="nav-label">Finances</span>
@@ -4838,6 +5129,124 @@
               </div>
             </div>
           </div>
+          </div>
+        </section>
+
+        <!-- Monitoring -->
+        <section class="section-page" id="section-monitoring">
+          <div class="section-loader" id="loader-monitoring"><div class="loader"></div></div>
+          <div class="section-content" id="content-monitoring">
+            <div class="section-header">
+              <div class="section-header-left">
+                <h1>Monitoring des sites</h1>
+                <p class="monitoring-subtitle">Surveillez la disponibilité et la performance de tous les sites clients en temps réel.</p>
+              </div>
+              <div class="monitoring-header-right">
+                <span class="monitoring-last-update" id="monitoring-last-update">Dernière mise à jour : —</span>
+                <span class="monitoring-status-pill ok" id="monitoring-global-pill">Tout fonctionne</span>
+                <button class="btn-create" id="monitoring-refresh-btn"><i class="fa-solid fa-rotate"></i> Actualiser</button>
+              </div>
+            </div>
+
+            <!-- KPI cards -->
+            <div class="monitoring-kpi-grid">
+              <div class="stat-card monitoring-kpi">
+                <div class="stat-card-top">
+                  <div class="stat-card-icon kpi-green"><i class="fa-solid fa-circle-check"></i></div>
+                  <div class="stat-card-body">
+                    <div class="monitoring-kpi-label">Sites en ligne</div>
+                    <div class="stat-card-value" id="mon-online-val">—</div>
+                  </div>
+                </div>
+                <div class="monitoring-kpi-sub" id="mon-online-sub">—</div>
+              </div>
+              <div class="stat-card monitoring-kpi">
+                <div class="stat-card-top">
+                  <div class="stat-card-icon kpi-red"><i class="fa-solid fa-circle-xmark"></i></div>
+                  <div class="stat-card-body">
+                    <div class="monitoring-kpi-label">Sites en erreur</div>
+                    <div class="stat-card-value" id="mon-error-val">—</div>
+                  </div>
+                </div>
+                <div class="monitoring-kpi-sub" id="mon-error-sub">—</div>
+              </div>
+              <div class="stat-card monitoring-kpi">
+                <div class="stat-card-top">
+                  <div class="stat-card-icon kpi-orange"><i class="fa-solid fa-lock"></i></div>
+                  <div class="stat-card-body">
+                    <div class="monitoring-kpi-label">Certificats HTTPS</div>
+                    <div class="stat-card-value" id="mon-ssl-val">—</div>
+                  </div>
+                </div>
+                <div class="monitoring-kpi-sub" id="mon-ssl-sub">—</div>
+              </div>
+              <div class="stat-card monitoring-kpi">
+                <div class="stat-card-top">
+                  <div class="stat-card-icon kpi-blue"><i class="fa-solid fa-globe"></i></div>
+                  <div class="stat-card-body">
+                    <div class="monitoring-kpi-label">Domaines</div>
+                    <div class="stat-card-value" id="mon-domain-val">—</div>
+                  </div>
+                </div>
+                <div class="monitoring-kpi-sub" id="mon-domain-sub">—</div>
+              </div>
+            </div>
+
+            <!-- Charts + alerts -->
+            <div class="monitoring-grid">
+              <div class="monitoring-card monitoring-chart-card">
+                <h3>Disponibilité des sites <span class="monitoring-card-sub">(7 derniers jours)</span></h3>
+                <div class="monitoring-chart" id="chart-monitoring-availability"></div>
+              </div>
+              <div class="monitoring-card monitoring-donut-card">
+                <h3>État global</h3>
+                <div class="monitoring-chart" id="chart-monitoring-donut"></div>
+                <div class="monitoring-donut-legend" id="monitoring-donut-legend"></div>
+              </div>
+              <div class="monitoring-card monitoring-alerts-card">
+                <h3>Alertes récentes</h3>
+                <div class="monitoring-alerts-list" id="monitoring-alerts-list"></div>
+              </div>
+            </div>
+
+            <!-- Table -->
+            <div class="monitoring-card monitoring-table-card">
+              <div class="monitoring-table-header">
+                <h3>Tous les sites clients</h3>
+                <div class="monitoring-table-tools">
+                  <select id="monitoring-status-filter" class="monitoring-select">
+                    <option value="">Tous les statuts</option>
+                    <option value="ok">En ligne</option>
+                    <option value="warning">Avertissement</option>
+                    <option value="error">Erreur</option>
+                    <option value="unconfigured">Non configuré</option>
+                  </select>
+                  <div class="search-bar">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="monitoring-search" placeholder="Rechercher un site..." />
+                  </div>
+                </div>
+              </div>
+              <div class="table-wrapper">
+                <table class="data-table" id="monitoring-table">
+                  <thead>
+                    <tr>
+                      <th>Site</th>
+                      <th>Client</th>
+                      <th>Statut</th>
+                      <th>HTTPS</th>
+                      <th>Domaine</th>
+                      <th>Réponse</th>
+                      <th>Dernier check</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="monitoring-tbody">
+                    <tr class="empty-row"><td colspan="8">Chargement du monitoring...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </section>
 

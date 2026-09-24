@@ -1559,7 +1559,242 @@ app.use('/api', (req, res, next) => {
 }, (req, res, next) => {
   if (req.path === '/chat') return next();
   if (req.path.startsWith('/finances')) return next(); // Finances visible to all authenticated users
+  if (req.path.startsWith('/monitoring')) return next(); // Monitoring visible to all authenticated users
   requireManager(req, res, next);
+});
+
+// ── Monitoring des sites clients ──
+const tls = require('tls');
+
+const MONITORING_HTTP_TIMEOUT_MS = 10000;
+const MONITORING_SLOW_MS = 2000;
+const MONITORING_SSL_WARN_DAYS = 14;
+const MONITORING_DOMAIN_WARN_DAYS = 30;
+const MONITORING_INTERVAL_MS = 10 * 60 * 1000;
+const ALERT_DEDUP_MS = 24 * 60 * 60 * 1000;
+
+function monitoringFetchOnce(url) {
+  return new Promise(resolve => {
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), MONITORING_HTTP_TIMEOUT_MS);
+    fetch(url, { signal: controller.signal, redirect: 'follow' })
+      .then(res => {
+        clearTimeout(timer);
+        resolve({ status: res.status, responseMs: Date.now() - startedAt });
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve({ status: 0, responseMs: Date.now() - startedAt });
+      });
+  });
+}
+
+async function checkSiteHttp(domain) {
+  const https = await monitoringFetchOnce(`https://${domain}`);
+  if (https.status > 0) return https;
+  // Fallback HTTP si le HTTPS ne répond pas
+  return monitoringFetchOnce(`http://${domain}`);
+}
+
+function getSslDaysLeft(domain) {
+  return new Promise(resolve => {
+    let socket;
+    try {
+      socket = tls.connect({
+        host: domain,
+        servername: domain,
+        port: 443,
+        timeout: 8000,
+        rejectUnauthorized: false
+      }, () => {
+        try {
+          const cert = socket.getPeerCertificate();
+          socket.destroy();
+          if (!cert || !cert.valid_to) return resolve(null);
+          resolve(Math.floor((new Date(cert.valid_to).getTime() - Date.now()) / 86400000));
+        } catch { resolve(null); }
+      });
+      socket.on('error', () => resolve(null));
+      socket.on('timeout', () => { try { socket.destroy(); } catch {} resolve(null); });
+    } catch { resolve(null); }
+  });
+}
+
+function monitoringDaysUntil(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  return Math.ceil((d.getTime() - Date.now()) / 86400000);
+}
+
+function computeSiteStatus(check, sslDaysLeft, domainDaysLeft) {
+  if (!check.domain) return 'unconfigured';
+  if (check.status === 0 || check.status >= 500) return 'error';
+  if (check.status >= 400) return 'warning';
+  if (check.responseMs > MONITORING_SLOW_MS) return 'warning';
+  if (sslDaysLeft !== null && sslDaysLeft <= MONITORING_SSL_WARN_DAYS) return 'warning';
+  if (domainDaysLeft !== null && domainDaysLeft <= MONITORING_DOMAIN_WARN_DAYS) return 'warning';
+  return 'ok';
+}
+
+async function createMonitoringAlert(siteId, type, message, dedupKey) {
+  try {
+    const since = new Date(Date.now() - ALERT_DEDUP_MS);
+    const dup = await db.collection('monitoringAlerts')
+      .where('siteId', '==', siteId)
+      .where('type', '==', type)
+      .where('createdAt', '>=', since)
+      .limit(1).get();
+    if (!dup.empty) return;
+    await db.collection('monitoringAlerts').add({
+      siteId,
+      type,
+      message,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (err) {
+    console.error('[Monitoring] Failed to create alert:', err.message);
+  }
+}
+
+async function runSiteCheck(site) {
+  const domain = (site.domain || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').trim();
+  if (!domain) {
+    const result = { status: 'unconfigured', httpStatus: null, responseMs: null, sslDaysLeft: null, domainDaysLeft: monitoringDaysUntil(site.expirationDate), checkedAt: admin.firestore.FieldValue.serverTimestamp() };
+    await db.collection('siteMonitoring').doc(site.id).set(result, { merge: true });
+    return result;
+  }
+
+  const domainDaysLeft = monitoringDaysUntil(site.expirationDate);
+  const [http, sslDaysLeft] = await Promise.all([
+    checkSiteHttp(domain),
+    getSslDaysLeft(domain)
+  ]);
+
+  const status = computeSiteStatus({ domain, ...http }, sslDaysLeft, domainDaysLeft);
+
+  const prevDoc = await db.collection('siteMonitoring').doc(site.id).get();
+  const prevStatus = prevDoc.exists ? prevDoc.data().status : null;
+
+  const result = {
+    status,
+    httpStatus: http.status,
+    responseMs: http.responseMs,
+    sslDaysLeft,
+    domainDaysLeft,
+    checkedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+
+  await Promise.all([
+    db.collection('siteMonitoring').doc(site.id).set(result, { merge: true }),
+    db.collection('monitoringChecks').add({
+      siteId: site.id,
+      domain,
+      status,
+      httpStatus: http.status,
+      responseMs: http.responseMs,
+      checkedAt: admin.firestore.FieldValue.serverTimestamp()
+    })
+  ]);
+
+  // Alertes sur transitions et seuils
+  if (status === 'error' && prevStatus !== 'error') {
+    await createMonitoringAlert(site.id, 'down', `Site inaccessible (HTTP ${http.status || 'aucune réponse'})`);
+  }
+  if (status === 'ok' && prevStatus === 'error') {
+    await createMonitoringAlert(site.id, 'recovered', 'Site de nouveau accessible');
+  }
+  if (sslDaysLeft !== null && sslDaysLeft <= MONITORING_SSL_WARN_DAYS) {
+    await createMonitoringAlert(site.id, 'ssl_expiry', `Certificat SSL expire dans ${sslDaysLeft} jour${sslDaysLeft > 1 ? 's' : ''}`);
+  }
+  if (domainDaysLeft !== null && domainDaysLeft <= MONITORING_DOMAIN_WARN_DAYS && domainDaysLeft >= 0) {
+    await createMonitoringAlert(site.id, 'domain_expiry', `Domaine expire dans ${domainDaysLeft} jour${domainDaysLeft > 1 ? 's' : ''}`);
+  }
+  if (domainDaysLeft !== null && domainDaysLeft < 0) {
+    await createMonitoringAlert(site.id, 'domain_expired', `Domaine expiré depuis ${Math.abs(domainDaysLeft)} jour${Math.abs(domainDaysLeft) > 1 ? 's' : ''}`);
+  }
+  if (status !== 'error' && http.responseMs > MONITORING_SLOW_MS) {
+    await createMonitoringAlert(site.id, 'slow', `Temps de réponse : ${Math.round(http.responseMs)} ms`);
+  }
+
+  return result;
+}
+
+async function runAllSiteChecks() {
+  const sitesSnap = await db.collection('sitesWeb').get();
+  const sites = sitesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  console.log(`[Monitoring] Checking ${sites.length} sites...`);
+  // 5 checks en parallèle max
+  for (let i = 0; i < sites.length; i += 5) {
+    await Promise.allSettled(sites.slice(i, i + 5).map(runSiteCheck));
+  }
+  console.log('[Monitoring] Check cycle done');
+  return sites;
+}
+
+app.get('/api/monitoring/overview', async (req, res) => {
+  try {
+    const sitesSnap = await db.collection('sitesWeb').orderBy('createdAt', 'desc').get();
+    const monSnap = await db.collection('siteMonitoring').get();
+    const monMap = {};
+    monSnap.forEach(d => { monMap[d.id] = d.data(); });
+
+    const sites = sitesSnap.docs.map(d => {
+      const s = d.data();
+      const m = monMap[d.id] || null;
+      return {
+        id: d.id,
+        domain: s.domain || '',
+        clientName: s.clientName || '',
+        clientId: s.clientId || '',
+        expirationDate: s.expirationDate || null,
+        status: s.status || '',
+        monitoring: m
+      };
+    });
+
+    const alertsSnap = await db.collection('monitoringAlerts')
+      .orderBy('createdAt', 'desc').limit(30).get();
+    const alerts = alertsSnap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate?.()?.toISOString() || null }));
+
+    // Disponibilité par jour sur 7 jours
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
+    const checksSnap = await db.collection('monitoringChecks')
+      .where('checkedAt', '>=', sevenDaysAgo).get();
+    const perDay = {};
+    checksSnap.forEach(d => {
+      const c = d.data();
+      const day = c.checkedAt?.toDate?.()?.toISOString()?.split('T')[0];
+      if (!day) return;
+      if (!perDay[day]) perDay[day] = { ok: 0, total: 0 };
+      perDay[day].total++;
+      if (c.status === 'ok') perDay[day].ok++;
+    });
+    const availability = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = new Date(Date.now() - i * 86400000).toISOString().split('T')[0];
+      const agg = perDay[day];
+      availability.push({
+        date: day,
+        pct: agg && agg.total ? Math.round((agg.ok / agg.total) * 1000) / 10 : null
+      });
+    }
+
+    res.json({ sites, alerts, availability });
+  } catch (err) {
+    console.error('[Monitoring] Overview error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/monitoring/check-now', async (req, res) => {
+  try {
+    res.json({ started: true });
+    runAllSiteChecks().catch(err => console.error('[Monitoring] Check cycle failed:', err.message));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Delete a Firebase Auth user (manager only, handled by /api middleware)
@@ -2530,6 +2765,10 @@ app.listen(PORT, () => {
 
   // Scheduled maintenance windows (client space / intranet)
   setInterval(() => { processScheduledMaintenance(); }, 60 * 1000);
+
+  // Monitoring des sites clients — check complet toutes les 10 min + premier check après 30 s
+  setTimeout(() => { runAllSiteChecks().catch(e => console.error('[Monitoring] Initial check failed:', e.message)); }, 30 * 1000);
+  setInterval(() => { runAllSiteChecks().catch(e => console.error('[Monitoring] Check cycle failed:', e.message)); }, MONITORING_INTERVAL_MS);
 
   // Auto-sync Bunq transactions every 5 minutes
   if (bunq.isConfigured()) {
