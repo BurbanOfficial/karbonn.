@@ -4084,6 +4084,119 @@
       font-size: 0.82rem;
     }
 
+    /* ── Monitoring : vue détail (status page) ── */
+    #monitoring-tbody tr { cursor: pointer; }
+
+    .mon-detail-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .mon-detail-bigstatus {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .mon-detail-bigsub {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .mon-detail-uptime {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .mon-uptime-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .mon-uptime-head h3 { margin: 0; }
+
+    .mon-uptime-bars {
+      display: flex;
+      gap: 3px;
+      align-items: flex-end;
+      height: 44px;
+    }
+
+    .mon-uptime-bar {
+      flex: 1;
+      height: 100%;
+      border-radius: 3px;
+      cursor: default;
+      min-width: 4px;
+      transition: transform 0.1s ease;
+    }
+
+    .mon-uptime-bar:hover { transform: scaleY(1.12); }
+    .mon-uptime-bar.ok { background: #22c55e; }
+    .mon-uptime-bar.warning { background: #f97316; }
+    .mon-uptime-bar.error { background: #ef4444; }
+    .mon-uptime-bar.nodata { background: rgba(148,163,184,0.35); }
+
+    .mon-uptime-legend {
+      display: flex;
+      gap: 18px;
+      margin-top: 12px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    .mon-uptime-legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+    .mon-uptime-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    .mon-uptime-dot.ok { background: #22c55e; }
+    .mon-uptime-dot.warning { background: #f97316; }
+    .mon-uptime-dot.error { background: #ef4444; }
+    .mon-uptime-dot.nodata { background: rgba(148,163,184,0.35); }
+
+    .monitoring-detail-grid {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 18px;
+      margin: 18px 0;
+    }
+
+    .mon-detail-metrics { display: flex; flex-direction: column; }
+
+    .mon-metric {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+
+    .mon-metric:last-child { border-bottom: none; }
+    .mon-metric-label { color: var(--muted); }
+    .mon-metric-value { font-weight: 600; color: var(--text); }
+    .mon-metric-value.ok { color: #16a34a; }
+    .mon-metric-value.warn { color: #ea580c; }
+    .mon-metric-value.err { color: #dc2626; }
+
+    @media (max-width: 900px) {
+      .monitoring-detail-grid { grid-template-columns: 1fr; }
+    }
+
     @media (max-width: 1200px) {
       .monitoring-kpi-grid { grid-template-columns: repeat(2, 1fr); }
       .monitoring-grid { grid-template-columns: 1fr 1fr; }
@@ -5136,6 +5249,7 @@
         <section class="section-page" id="section-monitoring">
           <div class="section-loader" id="loader-monitoring"><div class="loader"></div></div>
           <div class="section-content" id="content-monitoring">
+          <div id="monitoring-overview">
             <div class="section-header">
               <div class="section-header-left">
                 <h1>Monitoring des sites</h1>
@@ -5246,6 +5360,63 @@
                 </table>
               </div>
             </div>
+          </div>
+
+          <!-- Vue détaillée d'un site (style status page) -->
+          <div id="monitoring-detail" style="display:none;">
+            <div class="section-header">
+              <div class="section-header-left">
+                <h1 id="mon-detail-domain">—</h1>
+                <span class="mon-badge ok" id="mon-detail-status">—</span>
+              </div>
+              <div class="monitoring-header-right">
+                <a class="btn-icon mon-detail-visit" id="mon-detail-visit" href="#" target="_blank" rel="noopener" title="Ouvrir le site"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                <button class="btn-create" id="monitoring-detail-back"><i class="fa-solid fa-arrow-left"></i> Retour</button>
+              </div>
+            </div>
+
+            <div class="monitoring-card mon-detail-banner">
+              <div class="mon-detail-banner-inner">
+                <div class="mon-detail-bigstatus" id="mon-detail-bigstatus">Tous les systèmes opérationnels</div>
+                <div class="mon-detail-bigsub" id="mon-detail-bigsub">Dernier check : —</div>
+              </div>
+              <div class="mon-detail-uptime" id="mon-detail-uptime-pct">—</div>
+            </div>
+
+            <div class="monitoring-card">
+              <div class="mon-uptime-head">
+                <h3>Disponibilité — 30 derniers jours</h3>
+                <span class="mon-muted" id="mon-uptime-range"></span>
+              </div>
+              <div class="mon-uptime-bars" id="mon-uptime-bars"></div>
+              <div class="mon-uptime-legend">
+                <span><span class="mon-uptime-dot ok"></span> Opérationnel</span>
+                <span><span class="mon-uptime-dot warning"></span> Partiel</span>
+                <span><span class="mon-uptime-dot error"></span> Incident</span>
+                <span><span class="mon-uptime-dot nodata"></span> Aucune donnée</span>
+              </div>
+            </div>
+
+            <div class="monitoring-detail-grid">
+              <div class="monitoring-card">
+                <h3>Temps de réponse <span class="monitoring-card-sub">(24 dernières heures)</span></h3>
+                <div class="monitoring-chart" id="chart-mon-response"></div>
+              </div>
+              <div class="monitoring-card mon-detail-metrics">
+                <h3>Indicateurs</h3>
+                <div class="mon-metric"><span class="mon-metric-label">HTTPS / SSL</span><span class="mon-metric-value" id="mon-detail-ssl">—</span></div>
+                <div class="mon-metric"><span class="mon-metric-label">Domaine</span><span class="mon-metric-value" id="mon-detail-domain-exp">—</span></div>
+                <div class="mon-metric"><span class="mon-metric-label">Temps de réponse moyen</span><span class="mon-metric-value" id="mon-detail-avg-ms">—</span></div>
+                <div class="mon-metric"><span class="mon-metric-label">Statut HTTP</span><span class="mon-metric-value" id="mon-detail-http">—</span></div>
+                <div class="mon-metric"><span class="mon-metric-label">Client</span><span class="mon-metric-value" id="mon-detail-client">—</span></div>
+              </div>
+            </div>
+
+            <div class="monitoring-card">
+              <h3>Historique des incidents</h3>
+              <div class="monitoring-alerts-list" id="mon-detail-incidents"></div>
+            </div>
+          </div>
           </div>
         </section>
 

@@ -755,6 +755,8 @@ auth.onAuthStateChanged(async user => {
     if (unsubscribeMonitoring) { unsubscribeMonitoring(); unsubscribeMonitoring = null; }
     if (unsubscribeMonitoringAlerts) { unsubscribeMonitoringAlerts(); unsubscribeMonitoringAlerts = null; }
     if (unsubscribeMonitoringChecks) { unsubscribeMonitoringChecks(); unsubscribeMonitoringChecks = null; }
+    if (unsubscribeMonDetailChecks) { unsubscribeMonDetailChecks(); unsubscribeMonDetailChecks = null; }
+    if (unsubscribeMonDetailAlerts) { unsubscribeMonDetailAlerts(); unsubscribeMonDetailAlerts = null; }
     showLogin();
     return;
   }
@@ -6307,13 +6309,19 @@ const MON_ALERT_META = {
   slow:          { icon: 'fa-gauge-high',     color: 'blue' }
 };
 
-function monitoringTimeAgo(isoDate) {
-  if (!isoDate) return '—';
-  const diff = Math.floor((Date.now() - new Date(isoDate).getTime()) / 1000);
+function monitoringTimeAgo(value) {
+  if (!value) return '—';
+  let d = null;
+  if (value instanceof Date) d = value;
+  else if (typeof value.toDate === 'function') d = value.toDate();
+  else if (typeof value.seconds === 'number') d = new Date(value.seconds * 1000);
+  else d = new Date(value);
+  if (!d || isNaN(d.getTime())) return '—';
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
   if (diff < 60) return "À l'instant";
   if (diff < 3600) return `Il y a ${Math.floor(diff / 60)} min`;
   if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)} h`;
-  return new Date(isoDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 
 function monSiteStatus(site) {
@@ -6526,12 +6534,10 @@ function renderMonitoringTable() {
     const responseCell = (m.responseMs !== null && m.responseMs !== undefined)
       ? `${Math.round(m.responseMs)} ms` : '<span class="mon-muted">—</span>';
 
-    const checkedLabel = m.checkedAt?.toDate
-      ? monitoringTimeAgo(m.checkedAt.toDate().toISOString())
-      : (m.checkedAt ? monitoringTimeAgo(m.checkedAt) : '—');
+    const checkedLabel = monitoringTimeAgo(m.checkedAt);
 
     return `
-      <tr>
+      <tr data-mon-site="${s.id}">
         <td><div class="mon-site-cell"><span class="mon-site-dot ${meta.dot}"></span>${escapeHtml(s.domain || '—')}</div></td>
         <td>${escapeHtml(s.clientName || '—')}</td>
         <td><span class="mon-badge ${meta.badge}">${meta.label}</span></td>
@@ -6542,7 +6548,7 @@ function renderMonitoringTable() {
         <td>
           <div class="actions">
             <a class="btn-icon" href="https://${escapeHtml(s.domain || '')}" target="_blank" rel="noopener" title="Ouvrir le site"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
-            <button class="btn-icon" data-site-id="${s.id}" title="Voir le site" onclick="document.querySelector('#nav-sites-web').click()"><i class="fa-solid fa-eye"></i></button>
+            <button class="btn-icon" data-mon-open="${s.id}" title="Statut détaillé"><i class="fa-solid fa-chart-line"></i></button>
           </div>
         </td>
       </tr>`;
@@ -6589,6 +6595,7 @@ function setupMonitoringListeners() {
     monitoringSiteMap = {};
     snap.forEach(d => { monitoringSiteMap[d.id] = d.data(); });
     renderMonitoringAll();
+    renderMonDetailLiveStatus();
   }, err => console.error('[Monitoring] siteMonitoring listener error:', err));
 
   unsubscribeMonitoringAlerts = db.collection('monitoringAlerts')
@@ -6633,3 +6640,246 @@ function loadMonitoring() {
 
 if (monElements.statusFilter) monElements.statusFilter.addEventListener('change', renderMonitoringTable);
 if (monElements.search) monElements.search.addEventListener('input', renderMonitoringTable);
+
+// ── Vue détaillée d'un site (style status page) ──
+const monOverviewEl = document.getElementById('monitoring-overview');
+const monDetailEl = document.getElementById('monitoring-detail');
+const monDetailBackBtn = document.getElementById('monitoring-detail-back');
+let currentMonSite = null;
+let unsubscribeMonDetailChecks = null;
+let unsubscribeMonDetailAlerts = null;
+let monDetailChart = null;
+
+function closeMonitoringDetail() {
+  currentMonSite = null;
+  if (unsubscribeMonDetailChecks) { unsubscribeMonDetailChecks(); unsubscribeMonDetailChecks = null; }
+  if (unsubscribeMonDetailAlerts) { unsubscribeMonDetailAlerts(); unsubscribeMonDetailAlerts = null; }
+  if (monDetailChart) { try { monDetailChart.destroy(); } catch {} monDetailChart = null; }
+  if (monDetailEl) monDetailEl.style.display = 'none';
+  if (monOverviewEl) monOverviewEl.style.display = '';
+}
+
+if (monDetailBackBtn) monDetailBackBtn.addEventListener('click', closeMonitoringDetail);
+
+// Clic sur une ligne du tableau → vue détaillée (ignore les liens/boutons)
+if (monElements.tbody) {
+  monElements.tbody.addEventListener('click', e => {
+    if (e.target.closest('a')) return;
+    const row = e.target.closest('tr[data-mon-site]');
+    if (!row) return;
+    const site = monitoringData.sites.find(s => s.id === row.dataset.monSite);
+    if (site) openMonitoringDetail(site);
+  });
+}
+
+function openMonitoringDetail(site) {
+  currentMonSite = site;
+  if (unsubscribeMonDetailChecks) { unsubscribeMonDetailChecks(); unsubscribeMonDetailChecks = null; }
+  if (unsubscribeMonDetailAlerts) { unsubscribeMonDetailAlerts(); unsubscribeMonDetailAlerts = null; }
+
+  const m = site.monitoring || {};
+  const st = monSiteStatus(site);
+  const meta = MON_STATUS_META[st];
+
+  const domainEl = document.getElementById('mon-detail-domain');
+  const statusEl = document.getElementById('mon-detail-status');
+  const visitEl = document.getElementById('mon-detail-visit');
+  const bigStatusEl = document.getElementById('mon-detail-bigstatus');
+  const bigSubEl = document.getElementById('mon-detail-bigsub');
+  const clientEl = document.getElementById('mon-detail-client');
+  const httpEl = document.getElementById('mon-detail-http');
+  const sslEl = document.getElementById('mon-detail-ssl');
+  const domEl = document.getElementById('mon-detail-domain-exp');
+
+  if (domainEl) domainEl.textContent = site.domain || 'Site';
+  if (statusEl) { statusEl.className = 'mon-badge ' + meta.badge; statusEl.textContent = meta.label; }
+  if (visitEl && site.domain) visitEl.href = 'https://' + site.domain;
+  if (bigStatusEl) {
+    bigStatusEl.textContent = st === 'ok' ? 'Tous les systèmes opérationnels'
+      : st === 'warning' ? 'Performance dégradée'
+      : st === 'error' ? 'Incident en cours'
+      : 'Site non configuré';
+    bigStatusEl.style.color = st === 'ok' ? '#16a34a' : st === 'warning' ? '#ea580c' : st === 'error' ? '#dc2626' : 'var(--muted)';
+  }
+  if (bigSubEl) bigSubEl.textContent = 'Dernier check : ' + monitoringTimeAgo(m.checkedAt);
+  if (clientEl) clientEl.textContent = site.clientName || '—';
+  if (httpEl) {
+    httpEl.textContent = m.httpStatus ? 'HTTP ' + m.httpStatus : '—';
+    httpEl.className = 'mon-metric-value ' + (!m.httpStatus ? '' : m.httpStatus < 400 ? 'ok' : m.httpStatus < 500 ? 'warn' : 'err');
+  }
+  if (sslEl) {
+    if (m.sslDaysLeft === null || m.sslDaysLeft === undefined) { sslEl.textContent = '—'; sslEl.className = 'mon-metric-value'; }
+    else if (m.sslDaysLeft <= 0) { sslEl.textContent = 'Expiré'; sslEl.className = 'mon-metric-value err'; }
+    else if (m.sslDaysLeft <= 14) { sslEl.textContent = `Expire dans ${m.sslDaysLeft} j`; sslEl.className = 'mon-metric-value warn'; }
+    else { sslEl.textContent = `Valide (${m.sslDaysLeft} j)`; sslEl.className = 'mon-metric-value ok'; }
+  }
+  if (domEl) {
+    const dd = m.domainDaysLeft;
+    if (dd === null || dd === undefined) { domEl.textContent = '—'; domEl.className = 'mon-metric-value'; }
+    else if (dd < 0) { domEl.textContent = `Expiré depuis ${Math.abs(dd)} j`; domEl.className = 'mon-metric-value err'; }
+    else if (dd <= 30) { domEl.textContent = `Expire dans ${dd} j`; domEl.className = 'mon-metric-value warn'; }
+    else { domEl.textContent = `Valide (${dd} j)`; domEl.className = 'mon-metric-value ok'; }
+  }
+
+  if (monOverviewEl) monOverviewEl.style.display = 'none';
+  if (monDetailEl) monDetailEl.style.display = '';
+
+  // Listener temps réel : historique des checks du site (30 jours)
+  const thirtyDaysAgo = firebase.firestore.Timestamp.fromDate(new Date(Date.now() - 30 * 86400000));
+  unsubscribeMonDetailChecks = db.collection('monitoringChecks')
+    .where('siteId', '==', site.id)
+    .where('checkedAt', '>=', thirtyDaysAgo)
+    .onSnapshot(snap => {
+      const checks = snap.docs.map(d => d.data()).filter(c => c.checkedAt);
+      renderMonUptimeBars(checks);
+      renderMonResponseChart(checks);
+      renderMonAvgMs(checks);
+      renderMonDetailLiveStatus();
+    }, err => console.error('[Monitoring] detail checks listener error:', err));
+
+  // Listener temps réel : alertes du site
+  unsubscribeMonDetailAlerts = db.collection('monitoringAlerts')
+    .where('siteId', '==', site.id)
+    .orderBy('createdAt', 'desc').limit(20)
+    .onSnapshot(snap => {
+      const alerts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderMonIncidents(alerts);
+    }, err => console.error('[Monitoring] detail alerts listener error:', err));
+}
+
+// Met à jour le bandeau si le statut du site change pendant que la vue est ouverte
+function renderMonDetailLiveStatus() {
+  if (!currentMonSite) return;
+  const m = monitoringSiteMap[currentMonSite.id];
+  if (!m) return;
+  const st = m.status || 'unconfigured';
+  const meta = MON_STATUS_META[st];
+  const statusEl = document.getElementById('mon-detail-status');
+  const bigStatusEl = document.getElementById('mon-detail-bigstatus');
+  const bigSubEl = document.getElementById('mon-detail-bigsub');
+  if (statusEl) { statusEl.className = 'mon-badge ' + meta.badge; statusEl.textContent = meta.label; }
+  if (bigStatusEl) {
+    bigStatusEl.textContent = st === 'ok' ? 'Tous les systèmes opérationnels'
+      : st === 'warning' ? 'Performance dégradée'
+      : st === 'error' ? 'Incident en cours'
+      : 'Site non configuré';
+    bigStatusEl.style.color = st === 'ok' ? '#16a34a' : st === 'warning' ? '#ea580c' : st === 'error' ? '#dc2626' : 'var(--muted)';
+  }
+  if (bigSubEl) bigSubEl.textContent = 'Dernier check : ' + monitoringTimeAgo(m.checkedAt);
+}
+
+// Barres de disponibilité par jour (30 derniers jours) — style githubstatus.com
+function renderMonUptimeBars(checks) {
+  const el = document.getElementById('mon-uptime-bars');
+  const rangeEl = document.getElementById('mon-uptime-range');
+  const pctEl = document.getElementById('mon-detail-uptime-pct');
+  if (!el) return;
+
+  const perDay = {};
+  checks.forEach(c => {
+    const d = c.checkedAt?.toDate ? c.checkedAt.toDate() : new Date(c.checkedAt?.seconds ? c.checkedAt.seconds * 1000 : c.checkedAt);
+    if (!d || isNaN(d.getTime())) return;
+    const day = d.toISOString().split('T')[0];
+    if (!perDay[day]) perDay[day] = { ok: 0, warn: 0, err: 0, total: 0 };
+    perDay[day].total++;
+    if (c.status === 'ok') perDay[day].ok++;
+    else if (c.status === 'warning') perDay[day].warn++;
+    else if (c.status === 'error') perDay[day].err++;
+  });
+
+  const bars = [];
+  let daysUp = 0, daysWithData = 0;
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date(Date.now() - i * 86400000);
+    const day = date.toISOString().split('T')[0];
+    const agg = perDay[day];
+    let cls = 'nodata';
+    let title = `${date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} — aucune donnée`;
+    if (agg) {
+      daysWithData++;
+      const pctOk = Math.round((agg.ok / agg.total) * 100);
+      if (pctOk === 100) cls = 'ok';
+      else if (agg.err === 0) cls = 'warning';
+      else cls = 'error';
+      if (cls === 'ok') daysUp++;
+      title = `${date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} — ${pctOk}% opérationnel (${agg.total} check${agg.total > 1 ? 's' : ''})`;
+    }
+    bars.push(`<div class="mon-uptime-bar ${cls}" title="${title}"></div>`);
+  }
+  el.innerHTML = bars.join('');
+
+  if (rangeEl) {
+    const from = new Date(Date.now() - 29 * 86400000);
+    rangeEl.textContent = `${from.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} → ${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`;
+  }
+  if (pctEl) {
+    pctEl.textContent = daysWithData ? `${Math.round((daysUp / daysWithData) * 100)}% uptime` : '—';
+    pctEl.style.color = daysWithData ? (daysUp / daysWithData >= 0.99 ? '#16a34a' : daysUp / daysWithData >= 0.95 ? '#ea580c' : '#dc2626') : 'var(--muted)';
+  }
+}
+
+// Graphique temps de réponse (24 dernières heures)
+function renderMonResponseChart(checks) {
+  const el = document.getElementById('chart-mon-response');
+  if (!el || typeof ApexCharts === 'undefined') return;
+
+  const dayAgo = Date.now() - 86400000;
+  const points = checks
+    .filter(c => {
+      const t = c.checkedAt?.toDate ? c.checkedAt.toDate().getTime() : (c.checkedAt?.seconds ? c.checkedAt.seconds * 1000 : 0);
+      return t >= dayAgo && c.responseMs !== null && c.responseMs !== undefined;
+    })
+    .map(c => {
+      const t = c.checkedAt.toDate ? c.checkedAt.toDate() : new Date(c.checkedAt.seconds * 1000);
+      return { x: t.getTime(), y: Math.round(c.responseMs) };
+    })
+    .sort((a, b) => a.x - b.x);
+
+  if (monDetailChart) { try { monDetailChart.destroy(); } catch {} }
+  monDetailChart = new ApexCharts(el, {
+    chart: { type: 'line', height: 220, toolbar: { show: false }, fontFamily: 'Space Grotesk, sans-serif' },
+    series: [{ name: 'Temps de réponse', data: points }],
+    xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '11px', colors: '#8e8e93' } } },
+    yaxis: { labels: { formatter: v => Math.round(v) + ' ms', style: { fontSize: '11px', colors: '#8e8e93' } } },
+    stroke: { curve: 'smooth', width: 2 },
+    colors: ['#0071e3'],
+    dataLabels: { enabled: false },
+    tooltip: { x: { format: 'HH:mm' }, y: { formatter: v => v + ' ms' } },
+    noData: { text: 'Pas encore assez de données (checks toutes les 10 min)' }
+  });
+  monDetailChart.render();
+}
+
+function renderMonAvgMs(checks) {
+  const el = document.getElementById('mon-detail-avg-ms');
+  if (!el) return;
+  const dayAgo = Date.now() - 86400000;
+  const values = checks
+    .map(c => ({ t: c.checkedAt?.toDate ? c.checkedAt.toDate().getTime() : (c.checkedAt?.seconds ? c.checkedAt.seconds * 1000 : 0), ms: c.responseMs }))
+    .filter(c => c.t >= dayAgo && c.ms !== null && c.ms !== undefined)
+    .map(c => c.ms);
+  if (!values.length) { el.textContent = '—'; el.className = 'mon-metric-value'; return; }
+  const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+  el.textContent = avg + ' ms';
+  el.className = 'mon-metric-value ' + (avg > 2000 ? 'err' : avg > 800 ? 'warn' : 'ok');
+}
+
+function renderMonIncidents(alerts) {
+  const el = document.getElementById('mon-detail-incidents');
+  if (!el) return;
+  if (!alerts.length) {
+    el.innerHTML = '<div class="monitoring-empty">Aucun incident signalé sur ce site.</div>';
+    return;
+  }
+  el.innerHTML = alerts.map(a => {
+    const meta = MON_ALERT_META[a.type] || { icon: 'fa-circle-info', color: 'blue' };
+    return `
+      <div class="monitoring-alert-item">
+        <div class="monitoring-alert-icon ${meta.color}"><i class="fa-solid ${meta.icon}"></i></div>
+        <div class="monitoring-alert-body">
+          <div class="monitoring-alert-msg">${escapeHtml(a.message || '')}</div>
+        </div>
+        <div class="monitoring-alert-time">${monitoringTimeAgo(a.createdAt)}</div>
+      </div>`;
+  }).join('');
+}
