@@ -2008,6 +2008,238 @@
       line-height: 1.6;
     }
 
+    /* ── Module billing : moyens de paiement & abonnement ── */
+    .billing-module {
+      margin-top: 24px;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .billing-block {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .billing-block h4 {
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+    }
+
+    .billing-block h4 i {
+      color: var(--primary);
+    }
+
+    .billing-loading,
+    .billing-empty,
+    .billing-error {
+      font-size: 0.82rem;
+      color: var(--muted);
+      padding: 8px 0;
+    }
+
+    .billing-error { color: #dc2626; }
+
+    .pm-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .pm-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .pm-item.is-default {
+      border-color: var(--primary);
+      background: rgba(67, 97, 238, 0.04);
+    }
+
+    .pm-brand {
+      font-size: 1.5rem;
+      color: var(--text);
+    }
+
+    .pm-info {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .pm-number {
+      font-size: 0.88rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .pm-exp {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .pm-badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--primary);
+      background: rgba(67, 97, 238, 0.1);
+      padding: 3px 8px;
+      border-radius: 999px;
+    }
+
+    .pm-action {
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 6px;
+      border-radius: 6px;
+      transition: all 0.15s;
+    }
+
+    .pm-action:hover {
+      background: rgba(0, 0, 0, 0.05);
+      color: var(--text);
+    }
+
+    .pm-action.danger:hover {
+      color: #dc2626;
+      background: rgba(220, 38, 38, 0.08);
+    }
+
+    .pm-action:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .billing-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+
+    .billing-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .billing-btn.primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .billing-btn.primary:hover {
+      opacity: 0.9;
+      color: #fff;
+    }
+
+    .billing-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pm-add-form {
+      margin-bottom: 10px;
+    }
+
+    .pm-add-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .sub-plans {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sub-plan {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      text-align: left;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+      position: relative;
+    }
+
+    .sub-plan:hover {
+      border-color: var(--primary);
+    }
+
+    .sub-plan.selected {
+      border-color: var(--primary);
+      background: rgba(67, 97, 238, 0.05);
+    }
+
+    .sub-plan:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .sub-plan-name {
+      flex: 1;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .sub-plan-price {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .sub-plan-check {
+      color: var(--primary);
+      font-size: 0.95rem;
+    }
+
+    .sub-msg {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 10px;
+      min-height: 1em;
+    }
+
+    .sub-msg.success { color: #16a34a; }
+    .sub-msg.error { color: #dc2626; }
+
     .renewal-loading {
       text-align: center;
       padding: 40px 20px;

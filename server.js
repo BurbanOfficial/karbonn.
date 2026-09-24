@@ -1228,6 +1228,195 @@ app.get('/api/public/sites/:siteId/stripe-subscription-status', async (req, res)
   }
 });
 
+// ── Espace client : moyens de paiement & changement d'abonnement ──
+
+async function resolveClientDocByPublicId(clientId) {
+  const snap = await db.collection('clients').where('clientId', '==', clientId).limit(1).get();
+  return snap.empty ? null : snap.docs[0];
+}
+
+async function ensureStripeCustomer(clientDoc) {
+  const c = clientDoc.data() || {};
+  if (c.stripeCustomerId) return c.stripeCustomerId;
+  const name = [c.prenom, c.nom].filter(Boolean).join(' ') || c.entreprise || c.raisonSociale || 'Client Karbonn';
+  const customer = await stripe.customers.create({
+    email: c.email || undefined,
+    name,
+    metadata: { clientId: c.clientId || '', clientDocId: clientDoc.id }
+  });
+  await clientDoc.ref.update({ stripeCustomerId: customer.id });
+  return customer.id;
+}
+
+async function listCustomerCards(customerId) {
+  const [customer, pms] = await Promise.all([
+    stripe.customers.retrieve(customerId),
+    stripe.paymentMethods.list({ customer: customerId, type: 'card' })
+  ]);
+  const defaultPm = customer.deleted ? null : (customer.invoice_settings?.default_payment_method || null);
+  return {
+    defaultPaymentMethod: defaultPm,
+    paymentMethods: pms.data.map(pm => ({
+      id: pm.id,
+      brand: pm.card?.brand || 'card',
+      last4: pm.card?.last4 || '••••',
+      expMonth: pm.card?.exp_month || null,
+      expYear: pm.card?.exp_year || null,
+      isDefault: pm.id === defaultPm
+    }))
+  };
+}
+
+async function getAbonnementPlans() {
+  const snap = await db.collection('abonnements').get();
+  return snap.docs
+    .map(d => ({ id: d.id, name: d.data().name || 'Abonnement', price: parseFloat(d.data().price) || 0 }))
+    .sort((a, b) => a.price - b.price);
+}
+
+app.get('/api/public/client/:clientId/billing', async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
+  try {
+    const clientDoc = await resolveClientDocByPublicId(req.params.clientId);
+    if (!clientDoc) return res.status(404).json({ error: 'Client not found' });
+    const plans = await getAbonnementPlans();
+    const customerId = clientDoc.data().stripeCustomerId || null;
+    if (!customerId) return res.json({ paymentMethods: [], defaultPaymentMethod: null, plans });
+    const cards = await listCustomerCards(customerId);
+    res.json({ ...cards, plans });
+  } catch (err) {
+    console.error('[Billing] Error fetching billing info:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/public/client/:clientId/billing/setup-intent', async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
+  try {
+    const clientDoc = await resolveClientDocByPublicId(req.params.clientId);
+    if (!clientDoc) return res.status(404).json({ error: 'Client not found' });
+    const customerId = await ensureStripeCustomer(clientDoc);
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      usage: 'off_session'
+    });
+    res.json({ clientSecret: setupIntent.client_secret });
+  } catch (err) {
+    console.error('[Billing] SetupIntent error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/public/client/:clientId/billing/payment-methods/:pmId/default', async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
+  try {
+    const clientDoc = await resolveClientDocByPublicId(req.params.clientId);
+    if (!clientDoc) return res.status(404).json({ error: 'Client not found' });
+    const customerId = clientDoc.data().stripeCustomerId;
+    if (!customerId) return res.status(400).json({ error: 'No Stripe customer' });
+
+    const pm = await stripe.paymentMethods.retrieve(req.params.pmId);
+    if (pm.customer !== customerId) return res.status(403).json({ error: 'Payment method does not belong to this customer' });
+
+    await stripe.customers.update(customerId, {
+      invoice_settings: { default_payment_method: pm.id }
+    });
+    // Propager aux abonnements actifs pour être sûr que le prélèvement utilise cette carte
+    const subs = await stripe.subscriptions.list({ customer: customerId, status: 'active', limit: 20 });
+    await Promise.all(subs.data.map(sub =>
+      stripe.subscriptions.update(sub.id, { default_payment_method: pm.id })
+    ));
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Billing] Set default PM error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/public/client/:clientId/billing/payment-methods/:pmId', async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
+  try {
+    const clientDoc = await resolveClientDocByPublicId(req.params.clientId);
+    if (!clientDoc) return res.status(404).json({ error: 'Client not found' });
+    const customerId = clientDoc.data().stripeCustomerId;
+    if (!customerId) return res.status(400).json({ error: 'No Stripe customer' });
+
+    const pm = await stripe.paymentMethods.retrieve(req.params.pmId);
+    if (pm.customer !== customerId) return res.status(403).json({ error: 'Payment method does not belong to this customer' });
+
+    const customer = await stripe.customers.retrieve(customerId);
+    const wasDefault = customer.invoice_settings?.default_payment_method === pm.id;
+    await stripe.paymentMethods.detach(pm.id);
+
+    // Si la carte supprimée était par défaut, promouvoir une autre carte
+    if (wasDefault) {
+      const remaining = await stripe.paymentMethods.list({ customer: customerId, type: 'card' });
+      if (remaining.data.length) {
+        const next = remaining.data[0].id;
+        await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: next } });
+        const subs = await stripe.subscriptions.list({ customer: customerId, status: 'active', limit: 20 });
+        await Promise.all(subs.data.map(sub => stripe.subscriptions.update(sub.id, { default_payment_method: next })));
+      }
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Billing] Delete PM error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/public/sites/:siteId/change-subscription', async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
+  try {
+    const { siteId } = req.params;
+    const { abonnementId } = req.body || {};
+    if (!abonnementId) return res.status(400).json({ error: 'Missing abonnementId' });
+
+    const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+    if (!siteDoc.exists) return res.status(404).json({ error: 'Site not found' });
+    const siteData = siteDoc.data() || {};
+
+    // Valider le plan (ou "none" pour retirer l'abonnement mensuel)
+    const plans = await getAbonnementPlans();
+    let newName = null;
+    let newPrice = 0;
+    if (abonnementId !== 'none') {
+      const plan = plans.find(p => p.id === abonnementId);
+      if (!plan) return res.status(400).json({ error: 'Abonnement inconnu' });
+      newName = plan.name;
+      newPrice = plan.price;
+    }
+
+    // Mettre à jour le site
+    const update = abonnementId === 'none'
+      ? { abonnementId: admin.firestore.FieldValue.delete(), abonnementCustomPrice: admin.firestore.FieldValue.delete() }
+      : { abonnementId, abonnementCustomPrice: admin.firestore.FieldValue.delete() };
+    await siteDoc.ref.update(update);
+
+    // Synchroniser l'item mensuel sur l'abonnement Stripe actif
+    const latestRenewal = (siteData.renewals || [])
+      .filter(r => r.subscriptionId)
+      .sort((a, b) => new Date(b.paidAt || 0) - new Date(a.paidAt || 0))[0];
+    let synced = false;
+    if (latestRenewal) {
+      const subscription = await stripe.subscriptions.retrieve(latestRenewal.subscriptionId);
+      if (['active', 'trialing', 'past_due'].includes(subscription.status)) {
+        const abonnementsSnap = await db.collection('abonnements').get();
+        const abonnementsMap = {};
+        abonnementsSnap.forEach(d => { abonnementsMap[d.id] = d.data(); });
+        const newSiteData = { ...siteData, abonnementId: abonnementId === 'none' ? null : abonnementId, abonnementCustomPrice: null };
+        synced = await syncMonthlySubscriptionItem(subscription, newSiteData, abonnementsMap);
+      }
+    }
+    console.log(`[Billing] Subscription plan changed for site ${siteId}: ${abonnementId} (stripe synced: ${synced})`);
+    res.json({ success: true, synced, monthlySubscriptionName: newName, monthlySubscriptionPrice: newPrice });
+  } catch (err) {
+    console.error('[Billing] Change subscription error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---- Renewal reminder emails ----
 function escapeHtml(str) {
   if (str == null) return '';

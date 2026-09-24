@@ -583,7 +583,30 @@ async function openRenewal(site) {
           <h3>Renouvellement automatique activé</h3>
           <p>Ce domaine est en renouvellement automatique via Stripe Billing.</p>
           <p>Le prélèvement annuel aura lieu <strong>15 jours avant la date d'expiration</strong>.</p>
-          <p style="margin-top:12px;font-size:0.8rem;">Aucune action n'est nécessaire de votre part. Pour modifier vos coordonnées bancaires, contactez <a href="mailto:hello@karbonn.fr">hello@karbonn.fr</a> ou appelez au <a href="tel:+33776691606">+33 7 76 69 16 06</a>.</p>
+        </div>
+        <div class="billing-module">
+          <div class="billing-block">
+            <h4><i class="fa-solid fa-credit-card"></i> Moyens de paiement</h4>
+            <div id="pm-list" class="pm-list">
+              <div class="billing-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement...</div>
+            </div>
+            <div id="pm-add-form" class="pm-add-form" style="display:none;">
+              <div id="pm-element" class="renewal-stripe-element"></div>
+              <div class="pm-add-actions">
+                <button id="pm-save-btn" class="billing-btn primary" disabled><i class="fa-solid fa-lock"></i> Enregistrer la carte</button>
+                <button id="pm-cancel-btn" class="billing-btn">Annuler</button>
+              </div>
+              <div id="pm-error" class="renewal-pay-error"></div>
+            </div>
+            <button id="pm-add-btn" class="billing-btn"><i class="fa-solid fa-plus"></i> Ajouter une carte</button>
+          </div>
+          <div class="billing-block">
+            <h4><i class="fa-solid fa-arrows-rotate"></i> Abonnement mensuel</h4>
+            <div id="sub-plans" class="sub-plans">
+              <div class="billing-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement...</div>
+            </div>
+            <div id="sub-msg" class="sub-msg"></div>
+          </div>
         </div>`;
     } else {
       rightHtml = `
@@ -624,8 +647,254 @@ async function openRenewal(site) {
   if (showForm) {
     initStripePaymentElement(site);
   }
+  if (!showForm && hasStripeSubscription(site)) {
+    loadBillingModule(site);
+  }
 
   showSection('section-renouveler');
+}
+
+// ── Moyens de paiement & abonnement (Stripe Billing) ──
+
+const CARD_BRAND_ICONS = {
+  visa: 'fa-cc-visa',
+  mastercard: 'fa-cc-mastercard',
+  amex: 'fa-cc-amex',
+  discover: 'fa-cc-discover',
+  diners: 'fa-cc-diners-club',
+  jcb: 'fa-cc-jcb',
+  unionpay: 'fa-cc-visa'
+};
+
+let pmElements = null;
+let pmElement = null;
+let billingSite = null;
+
+async function loadBillingModule(site) {
+  billingSite = site;
+  const listEl = document.getElementById('pm-list');
+  const plansEl = document.getElementById('sub-plans');
+  const addBtn = document.getElementById('pm-add-btn');
+  if (!listEl || !plansEl) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${encodeURIComponent(currentClient.clientId)}/billing`);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    renderPaymentMethods(data.paymentMethods || [], data.defaultPaymentMethod);
+    renderSubscriptionPlans(site, data.plans || []);
+    if (addBtn) addBtn.style.display = '';
+  } catch (err) {
+    console.error('[Billing] Load error:', err);
+    listEl.innerHTML = '<p class="billing-error">Impossible de charger les moyens de paiement.</p>';
+    plansEl.innerHTML = '';
+  }
+
+  if (addBtn && !addBtn.dataset.bound) {
+    addBtn.dataset.bound = '1';
+    addBtn.addEventListener('click', () => initAddCardForm());
+  }
+  const cancelBtn = document.getElementById('pm-cancel-btn');
+  if (cancelBtn && !cancelBtn.dataset.bound) {
+    cancelBtn.dataset.bound = '1';
+    cancelBtn.addEventListener('click', hideAddCardForm);
+  }
+}
+
+function renderPaymentMethods(methods, defaultPmId) {
+  const listEl = document.getElementById('pm-list');
+  if (!listEl) return;
+  if (!methods.length) {
+    listEl.innerHTML = '<p class="billing-empty">Aucune carte enregistrée.</p>';
+    return;
+  }
+  listEl.innerHTML = methods.map(pm => {
+    const icon = CARD_BRAND_ICONS[(pm.brand || '').toLowerCase()] || 'fa-credit-card';
+    const exp = pm.expMonth && pm.expYear ? `${String(pm.expMonth).padStart(2, '0')}/${String(pm.expYear).slice(-2)}` : '';
+    const expired = pm.expYear && (pm.expYear < new Date().getFullYear() || (pm.expYear === new Date().getFullYear() && pm.expMonth < new Date().getMonth() + 1));
+    return `
+      <div class="pm-item${pm.isDefault ? ' is-default' : ''}">
+        <i class="fa-brands ${icon} pm-brand"></i>
+        <div class="pm-info">
+          <span class="pm-number">•••• ${escapeHtml(pm.last4)}</span>
+          <span class="pm-exp">${expired ? 'Expirée' : `Expire ${exp}`}</span>
+        </div>
+        ${pm.isDefault
+          ? '<span class="pm-badge">Par défaut</span>'
+          : `<button class="pm-action" data-action="default" data-pm="${pm.id}" title="Définir par défaut"><i class="fa-solid fa-star"></i></button>`}
+        <button class="pm-action danger" data-action="delete" data-pm="${pm.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+      </div>`;
+  }).join('');
+
+  listEl.querySelectorAll('.pm-action').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pmId = btn.dataset.pm;
+      const action = btn.dataset.action;
+      if (action === 'delete' && !confirm('Supprimer cette carte ?')) return;
+      btn.disabled = true;
+      try {
+        const url = `${API_BASE_URL}/api/public/client/${encodeURIComponent(currentClient.clientId)}/billing/payment-methods/${pmId}${action === 'default' ? '/default' : ''}`;
+        const res = await fetch(url, { method: action === 'default' ? 'POST' : 'DELETE' });
+        if (!res.ok) throw new Error(await res.text());
+        await loadBillingModule(billingSite);
+      } catch (err) {
+        console.error('[Billing] PM action error:', err);
+        alert('Erreur : ' + err.message);
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+async function initAddCardForm() {
+  const pubKey = getStripePublicKey();
+  const form = document.getElementById('pm-add-form');
+  const elContainer = document.getElementById('pm-element');
+  const saveBtn = document.getElementById('pm-save-btn');
+  const errEl = document.getElementById('pm-error');
+  if (!pubKey || !form || !elContainer) return;
+
+  if (!stripeInstance) stripeInstance = Stripe(pubKey);
+  form.style.display = '';
+  document.getElementById('pm-add-btn').style.display = 'none';
+  elContainer.innerHTML = '<div class="billing-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Chargement...</div>';
+  if (errEl) errEl.style.display = 'none';
+  saveBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${encodeURIComponent(currentClient.clientId)}/billing/setup-intent`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    const { clientSecret } = await res.json();
+
+    pmElements = stripeInstance.elements({ clientSecret, appearance: { theme: 'stripe' } });
+    pmElement = pmElements.create('payment');
+    elContainer.innerHTML = '';
+    pmElement.mount(elContainer);
+    pmElement.on('ready', () => { saveBtn.disabled = false; });
+
+    if (!saveBtn.dataset.bound) {
+      saveBtn.dataset.bound = '1';
+      saveBtn.addEventListener('click', submitNewCard);
+    }
+  } catch (err) {
+    console.error('[Billing] SetupIntent error:', err);
+    elContainer.innerHTML = `<p class="billing-error">Erreur : ${err.message}</p>`;
+  }
+}
+
+function hideAddCardForm() {
+  const form = document.getElementById('pm-add-form');
+  const addBtn = document.getElementById('pm-add-btn');
+  if (form) form.style.display = 'none';
+  if (addBtn) addBtn.style.display = '';
+  if (pmElement) { try { pmElement.unmount(); } catch {} pmElement = null; }
+  pmElements = null;
+}
+
+async function submitNewCard() {
+  const saveBtn = document.getElementById('pm-save-btn');
+  const errEl = document.getElementById('pm-error');
+  if (!stripeInstance || !pmElements) return;
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Enregistrement...';
+  if (errEl) errEl.style.display = 'none';
+
+  const { error, setupIntent } = await stripeInstance.confirmSetup({
+    elements: pmElements,
+    confirmParams: { return_url: window.location.href },
+    redirect: 'if_required'
+  });
+
+  if (error) {
+    if (errEl) { errEl.textContent = error.message; errEl.style.display = ''; }
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<i class="fa-solid fa-lock"></i> Enregistrer la carte';
+    return;
+  }
+
+  // Si le client n'a pas encore de carte par défaut, définir celle-ci
+  try {
+    const pmId = setupIntent?.payment_method;
+    const res = await fetch(`${API_BASE_URL}/api/public/client/${encodeURIComponent(currentClient.clientId)}/billing`);
+    const data = await res.json();
+    if (pmId && !data.defaultPaymentMethod) {
+      await fetch(`${API_BASE_URL}/api/public/client/${encodeURIComponent(currentClient.clientId)}/billing/payment-methods/${pmId}/default`, { method: 'POST' });
+    }
+  } catch (e) {
+    console.warn('[Billing] Auto-default failed:', e);
+  }
+
+  hideAddCardForm();
+  saveBtn.innerHTML = '<i class="fa-solid fa-lock"></i> Enregistrer la carte';
+  await loadBillingModule(billingSite);
+}
+
+function renderSubscriptionPlans(site, plans) {
+  const plansEl = document.getElementById('sub-plans');
+  const msgEl = document.getElementById('sub-msg');
+  if (!plansEl) return;
+
+  const currentId = site.abonnementId || 'none';
+  const options = [{ id: 'none', name: 'Aucun abonnement', price: 0 }, ...plans];
+
+  plansEl.innerHTML = options.map(p => {
+    const selected = p.id === currentId || (p.id === 'none' && !site.abonnementId);
+    return `
+      <button class="sub-plan${selected ? ' selected' : ''}" data-plan="${p.id}">
+        <span class="sub-plan-name">${escapeHtml(p.name)}</span>
+        <span class="sub-plan-price">${p.price > 0 ? `${p.price.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/mois` : '—'}</span>
+        ${selected ? '<i class="fa-solid fa-circle-check sub-plan-check"></i>' : ''}
+      </button>`;
+  }).join('');
+
+  plansEl.querySelectorAll('.sub-plan').forEach(btn => {
+    btn.addEventListener('click', () => changeSiteSubscription(site, btn.dataset.plan, btn));
+  });
+  if (msgEl) msgEl.textContent = '';
+}
+
+async function changeSiteSubscription(site, abonnementId, btn) {
+  const msgEl = document.getElementById('sub-msg');
+  const plansEl = document.getElementById('sub-plans');
+  const currentId = site.abonnementId || 'none';
+  if (abonnementId === currentId) return;
+
+  const planName = btn?.querySelector('.sub-plan-name')?.textContent || abonnementId;
+  if (!confirm(`Changer l'abonnement mensuel pour « ${planName} » ?\nLe nouveau tarif s'appliquera au prochain prélèvement.`)) return;
+
+  plansEl.querySelectorAll('.sub-plan').forEach(b => b.disabled = true);
+  if (msgEl) { msgEl.className = 'sub-msg'; msgEl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Mise à jour...'; }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/public/sites/${site.id}/change-subscription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ abonnementId })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+
+    site.abonnementId = abonnementId === 'none' ? null : abonnementId;
+    site.monthlySubscriptionName = data.monthlySubscriptionName;
+    site.monthlySubscriptionPrice = data.monthlySubscriptionPrice;
+
+    const res2 = await fetch(`${API_BASE_URL}/api/public/client/${encodeURIComponent(currentClient.clientId)}/billing`);
+    if (res2.ok) {
+      const d = await res2.json();
+      renderSubscriptionPlans(site, d.plans || []);
+    }
+    if (msgEl) {
+      msgEl.className = 'sub-msg success';
+      msgEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> Abonnement mis à jour. Le nouveau tarif s\'appliquera au prochain prélèvement.';
+    }
+  } catch (err) {
+    console.error('[Billing] Change subscription error:', err);
+    if (msgEl) {
+      msgEl.className = 'sub-msg error';
+      msgEl.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Erreur : ' + escapeHtml(err.message);
+    }
+    plansEl.querySelectorAll('.sub-plan').forEach(b => b.disabled = false);
+  }
 }
 
 let stripeInstance = null;
