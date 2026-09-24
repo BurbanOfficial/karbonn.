@@ -1001,6 +1001,7 @@ app.post('/api/public/client/:clientId/documents/:docId/pay-link', async (req, r
     if (!clientDoc) return res.status(404).json({ error: 'Client not found' });
     const client = clientDoc.data() || {};
     if (!client.qontoClientId) return res.status(404).json({ error: 'Qonto client not linked' });
+    if (client.stripePaymentEnabled === false) return res.status(403).json({ error: 'Le paiement en ligne est désactivé pour ce compte' });
 
     // Vérifier que la facture existe et appartient bien à ce client
     const invData = await qontoRequest(`/client_invoices/${req.params.docId}`);
@@ -1079,6 +1080,7 @@ app.post('/api/public/pay/:token/sepa-debit', async (req, res) => {
 
     const clientDoc = await db.collection('clients').doc(p.clientDocId).get();
     if (!clientDoc.exists) return res.status(404).json({ error: 'Client not found' });
+    if (clientDoc.data().stripePaymentEnabled === false) return res.status(403).json({ error: 'Le paiement en ligne est désactivé pour ce compte' });
     const customerId = await ensureStripeCustomer(clientDoc);
 
     const pi = await stripe.paymentIntents.create({
