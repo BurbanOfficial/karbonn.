@@ -1048,7 +1048,7 @@ app.get('/api/public/pay/:token', async (req, res) => {
       clientName: p.clientName,
       clientId: p.clientPublicId,
       expiresAt: p.expiresAt?.toDate?.()?.toISOString() || null,
-      hasBankTransfer: Boolean(p.stripePaymentIntentId)
+      hasPaymentIntent: Boolean(p.stripePaymentIntentId)
     });
   } catch (err) {
     console.error('[Pay] Error fetching pay link:', err);
@@ -1056,8 +1056,8 @@ app.get('/api/public/pay/:token', async (req, res) => {
   }
 });
 
-// 3. Génère (ou renvoie) les instructions de virement Stripe
-app.post('/api/public/pay/:token/bank-transfer', async (req, res) => {
+// 3. Prélèvement SEPA : le client saisit son IBAN, Stripe débite son compte
+app.post('/api/public/pay/:token/sepa-debit', async (req, res) => {
   if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
   try {
     const ref = db.collection('payLinks').doc(req.params.token);
@@ -1070,8 +1070,11 @@ app.post('/api/public/pay/:token/bank-transfer', async (req, res) => {
     // Réutiliser le PaymentIntent existant si déjà généré
     if (p.stripePaymentIntentId) {
       const existing = await stripe.paymentIntents.retrieve(p.stripePaymentIntentId);
-      const inst = existing.next_action?.display_bank_transfer_instructions;
-      if (inst) return res.json(extractBankInstructions(inst));
+      if (existing.status === 'processing') return res.json({ processing: true });
+      if (existing.status === 'succeeded') return res.json({ processing: true });
+      if (existing.status === 'requires_payment_method' || existing.status === 'requires_confirmation') {
+        return res.json({ clientSecret: existing.client_secret });
+      }
     }
 
     const clientDoc = await db.collection('clients').doc(p.clientDocId).get();
@@ -1082,44 +1085,19 @@ app.post('/api/public/pay/:token/bank-transfer', async (req, res) => {
       amount: Math.round((p.amount || 0) * 100),
       currency: (p.currency || 'EUR').toLowerCase(),
       customer: customerId,
-      payment_method_types: ['customer_balance'],
-      payment_method_data: { type: 'customer_balance' },
-      payment_method_options: {
-        customer_balance: {
-          funding_type: 'bank_transfer',
-          bank_transfer: { type: 'eu_bank_transfer', eu_bank_transfer: { country: 'FR' } }
-        }
-      },
-      confirm: true,
+      payment_method_types: ['sepa_debit'],
       description: `Facture ${p.invoiceNumber} — ${p.clientName}`,
-      metadata: { payToken: req.params.token, qontoInvoiceId: p.qontoInvoiceId, clientId: p.clientPublicId }
+      metadata: { payToken: req.params.token, qontoInvoiceId: p.qontoInvoiceId, clientId: p.clientPublicId },
+      setup_future_usage: 'off_session'
     });
 
     await ref.update({ stripePaymentIntentId: pi.id });
-
-    const inst = pi.next_action?.display_bank_transfer_instructions;
-    if (!inst) return res.status(502).json({ error: 'Stripe n\'a pas retourné d\'instructions de virement' });
-    res.json(extractBankInstructions(inst));
+    res.json({ clientSecret: pi.client_secret });
   } catch (err) {
-    console.error('[Pay] Bank transfer error:', err);
+    console.error('[Pay] SEPA debit error:', err);
     res.status(500).json({ error: err.message });
   }
 });
-
-function extractBankInstructions(inst) {
-  const ibanAddr = (inst.financial_addresses || []).find(a => a.type === 'iban') || {};
-  const iban = ibanAddr.iban || {};
-  return {
-    iban: iban.iban || '',
-    bic: iban.bic || '',
-    accountHolder: iban.account_holder_name || 'Stripe',
-    bankCountry: iban.country || '',
-    reference: inst.reference || '',
-    amountRemaining: inst.amount_remaining,
-    currency: inst.currency || 'eur',
-    hostedInstructionsUrl: inst.hosted_instructions_url || ''
-  };
-}
 
 // Public endpoint for client space: edit own pending note
 app.patch('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {
