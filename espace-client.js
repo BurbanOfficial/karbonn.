@@ -1535,6 +1535,7 @@ loginIdInput.addEventListener('input', () => {
 
 // ── Client documents (factures & devis) ──
 let clientDocuments = [];
+let clientIban = '';
 
 const quotesList = document.getElementById('quotes-list');
 const invoicesList = document.getElementById('invoices-list');
@@ -1590,12 +1591,59 @@ function renderDocumentCard(doc) {
         <span class="document-card-status ${getDocumentStatusClass(doc.status)}">${statusLabel}</span>
       </div>
       <div class="document-card-actions">
+        ${doc.type === 'invoice' && doc.status === 'unpaid' && clientIban
+          ? `<button class="btn-doc-pay" data-doc-id="${escapeHtml(doc.id)}"><i class="fa-solid fa-qrcode"></i> Payer</button>` : ''}
         ${downloadUrl ? `<a class="btn-doc-download" href="${downloadUrl}" target="_blank" download><i class="fa-solid fa-download"></i> Télécharger</a>` : ''}
         ${viewUrl ? `<a class="btn-doc-view" href="${viewUrl}" target="_blank"><i class="fa-solid fa-eye"></i> Voir</a>` : ''}
       </div>
     </div>
   `;
 }
+
+// ── Paiement par QR SEPA (EPC069-12) — desktop uniquement ──
+
+function buildEpcPayload(doc) {
+  const amount = `EUR${Number(doc.total_amount || 0).toFixed(2)}`;
+  const remittance = `Facture ${doc.number || ''}`.trim();
+  // BIC laissé vide : optionnel pour les virements SEPA depuis 2016
+  return ['BCD', '002', '1', 'SCT', '', 'Karbonn.', clientIban, amount, '', '', remittance].join('\n');
+}
+
+function openPayModal(doc) {
+  const modal = document.getElementById('pay-modal');
+  if (!modal || !clientIban) return;
+
+  document.getElementById('pay-modal-number').textContent = doc.number || '—';
+  document.getElementById('pay-modal-amount').textContent = formatAmount(doc.total_amount, doc.currency);
+  document.getElementById('pay-modal-iban').textContent = clientIban.replace(/(.{4})/g, '$1 ').trim();
+
+  const qrEl = document.getElementById('pay-modal-qr');
+  qrEl.innerHTML = '';
+  if (typeof QRCode !== 'undefined') {
+    new QRCode(qrEl, {
+      text: buildEpcPayload(doc),
+      width: 200,
+      height: 200,
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } else {
+    qrEl.innerHTML = '<p class="billing-error">Impossible de générer le QR code.</p>';
+  }
+
+  modal.classList.add('visible');
+}
+
+function closePayModal() {
+  document.getElementById('pay-modal')?.classList.remove('visible');
+}
+
+document.getElementById('pay-modal-close')?.addEventListener('click', closePayModal);
+document.getElementById('pay-modal')?.addEventListener('click', e => {
+  if (e.target.id === 'pay-modal') closePayModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePayModal();
+});
 
 function renderDocuments() {
   if (!quotesList || !invoicesList) return;
@@ -1606,6 +1654,13 @@ function renderDocuments() {
   if (invoicesCount) invoicesCount.textContent = invoices.length;
   quotesList.innerHTML = quotes.length ? quotes.map(renderDocumentCard).join('') : '<div class="documents-empty">Aucun devis.</div>';
   invoicesList.innerHTML = invoices.length ? invoices.map(renderDocumentCard).join('') : '<div class="documents-empty">Aucune facture.</div>';
+
+  document.querySelectorAll('.btn-doc-pay').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const doc = clientDocuments.find(d => d.id === btn.dataset.docId);
+      if (doc) openPayModal(doc);
+    });
+  });
 }
 
 async function loadClientDocuments() {
@@ -1615,6 +1670,7 @@ async function loadClientDocuments() {
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     clientDocuments = data.documents || [];
+    clientIban = (data.iban || '').replace(/\s/g, '');
     if (bankIbanEl) bankIbanEl.textContent = data.iban || '—';
     if (bankDetailsEl) bankDetailsEl.style.display = data.iban ? 'flex' : 'none';
     renderDocuments();

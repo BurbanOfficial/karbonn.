@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <script src="https://js.stripe.com/v3/"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
@@ -2257,6 +2258,109 @@
       text-decoration: underline;
     }
 
+    /* ── Paiement par QR SEPA (desktop uniquement) ── */
+    .btn-doc-pay {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      background: var(--primary);
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.15s;
+    }
+
+    .btn-doc-pay:hover { opacity: 0.9; }
+
+    /* Le QR se scanne : inutile sur mobile */
+    @media (pointer: coarse), (max-width: 768px) {
+      .btn-doc-pay { display: none; }
+    }
+
+    .pay-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 15, 20, 0.55);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+
+    .pay-modal-overlay.visible { display: flex; }
+
+    .pay-modal-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px;
+      max-width: 380px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+    }
+
+    .pay-modal-card h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 0 0 4px;
+    }
+
+    .pay-modal-card .pay-modal-sub {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin: 0 0 18px;
+    }
+
+    .pay-modal-qr-wrap {
+      display: flex;
+      justify-content: center;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    #pay-modal-qr img,
+    #pay-modal-qr canvas {
+      display: block;
+      border-radius: 6px;
+    }
+
+    .pay-modal-lines {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.7;
+      margin-bottom: 16px;
+    }
+
+    .pay-modal-lines strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .pay-modal-close {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 9px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .pay-modal-close:hover {
+      border-color: var(--text);
+    }
+
     .renewal-loading {
       text-align: center;
       padding: 40px 20px;
@@ -3016,6 +3120,21 @@
         <button type="button" class="client-validation-cancel" id="client-validation-cancel">Annuler</button>
         <button type="button" class="client-validation-submit" id="client-validation-submit">Envoyer ma réponse</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modale paiement par QR SEPA -->
+  <div class="pay-modal-overlay" id="pay-modal">
+    <div class="pay-modal-card">
+      <h3>Payer par virement</h3>
+      <p class="pay-modal-sub">Scannez ce QR code avec l'application de votre banque</p>
+      <div class="pay-modal-qr-wrap"><div id="pay-modal-qr"></div></div>
+      <div class="pay-modal-lines">
+        Facture <strong id="pay-modal-number">—</strong><br>
+        Montant : <strong id="pay-modal-amount">—</strong><br>
+        IBAN : <strong id="pay-modal-iban">—</strong>
+      </div>
+      <button class="pay-modal-close" id="pay-modal-close">Fermer</button>
     </div>
   </div>
 
