@@ -393,6 +393,22 @@ function showApp(user, profile) {
     }
   }
 
+  const financesNav = document.querySelector(`.nav-item[data-label="Finances"]`);
+  if (financesNav) {
+    if (role === 'Manager') {
+      financesNav.style.display = 'flex';
+    } else {
+      financesNav.style.display = 'none';
+      const section = document.getElementById('section-finances');
+      if (section && section.classList.contains('active')) {
+        navItems.forEach(n => n.classList.remove('active'));
+        navItems[0].classList.add('active');
+        sections.forEach(s => s.classList.remove('active'));
+        document.getElementById('section-dashboard').classList.add('active');
+      }
+    }
+  }
+
   // Re-render role-dependent UI
   if (document.getElementById('clients-tbody')) {
     renderClients(allClients);
@@ -1615,6 +1631,10 @@ navItems.forEach((item, index) => {
 
     const sectionId = sectionMap[index];
     if (sectionId === 'section-equipe' && currentUserRole !== 'Manager') {
+      showToast('Accès réservé aux managers.', 'error');
+      return;
+    }
+    if (sectionId === 'section-finances' && currentUserRole !== 'Manager') {
       showToast('Accès réservé aux managers.', 'error');
       return;
     }
