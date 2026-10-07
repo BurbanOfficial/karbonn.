@@ -9,6 +9,21 @@ const Stripe = require('stripe');
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY || '');
 
+// ── OVH API client ──
+const ovhLib = require('ovh');
+let ovhClient = null;
+if (process.env.OVH_APP_KEY && process.env.OVH_APP_SECRET && process.env.OVH_CONSUMER_KEY) {
+  ovhClient = ovhLib({
+    endpoint: 'ovh-eu',
+    appKey: process.env.OVH_APP_KEY,
+    appSecret: process.env.OVH_APP_SECRET,
+    consumerKey: process.env.OVH_CONSUMER_KEY
+  });
+  console.log('[OVH] API client configured');
+} else {
+  console.log('[OVH] API not configured (missing OVH_APP_KEY / OVH_APP_SECRET / OVH_CONSUMER_KEY)');
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const QONTO_BASE_URL = process.env.QONTO_BASE_URL || 'https://thirdparty.qonto.com/v2';
@@ -294,6 +309,18 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
                   reminderEmailsSent: []
                 });
                 console.log('[Stripe webhook] Extended expiration for site:', siteId, 'to', newExpirationDate);
+                // Renouveler le domaine chez OVH automatiquement
+                try {
+                  await renewDomainOnOvh(siteData.domain, siteId);
+                } catch (ovhErr) {
+                  console.error('[OVH] Error renewing domain:', ovhErr.message);
+                }
+                // Email de confirmation de renouvellement au client
+                try {
+                  await sendDomainRenewedEmail({ ...siteData, id: siteId }, newExpirationDate);
+                } catch (renewEmailErr) {
+                  console.error('[Email] Error sending domain renewed email:', renewEmailErr.message);
+                }
               } else {
                 console.log('[Stripe webhook] Monthly invoice paid without extending domain:', siteId);
               }
@@ -1195,17 +1222,199 @@ app.delete('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {
 });
 
 // Domain renewal pricing (Stripe Billing)
-const RENEWAL_EXTENSION_PRICES_HT = { '.com': 13.49, '.fr': 7.79 };
+// Fallback statiques — remplacés dynamiquement par les prix OVH catalogue
+const RENEWAL_FALLBACK_PRICES_HT = { '.com': 13.49, '.fr': 7.79 };
 const RENEWAL_DEFAULT_PRICE_HT = 10.00;
 const RENEWAL_TVA_RATE = 0.20;
 const RENEWAL_CARD_FEE_RATE = 0.015;
 const RENEWAL_BILLING_FEE_RATE = 0.007;
 const RENEWAL_FIXED_FEE_EUR = 0.25;
 
+// Cache dynamique des prix OVH de renouvellement (HT), synchronisé toutes les 24h
+let ovhDomainRenewalPricesHT = {};
+let ovhPricesLastSync = null;
+
+async function syncOvhDomainPrices() {
+  if (!ovhClient) {
+    console.log('[OVH] Skipping price sync — API not configured');
+    return;
+  }
+  try {
+    console.log('[OVH] Fetching domain renewal prices from catalogue...');
+    const catalog = await ovhClient.requestPromised('GET', '/order/catalog/public/domain', { ovhSubsidiary: 'FR' });
+    const plans = catalog?.plans || [];
+    const pricesMap = {};
+    for (const plan of plans) {
+      // Chaque plan a un planCode du type "fr" ou "com" ou "net"
+      const tld = plan.planCode ? ('.' + plan.planCode.toLowerCase()) : null;
+      if (!tld) continue;
+      // Chercher le prix de renouvellement (pricingMode "default", interval P1Y)
+      const pricings = plan.pricings || [];
+      const renewPricing = pricings.find(p =>
+        (p.capacities || []).includes('renew') &&
+        p.interval === 1 &&
+        p.price !== undefined
+      );
+      if (renewPricing) {
+        // Le prix OVH catalogue est en micro-centimes (x 100 000 000) ou en centimes selon l'API
+        // API publique /order/catalog/public/domain retourne le prix en centimes d'euros (ex: 699 = 6.99€)
+        const priceHT = renewPricing.price / 100000000;
+        if (priceHT > 0 && priceHT < 500) {
+          pricesMap[tld] = Math.round(priceHT * 100) / 100;
+        }
+      }
+    }
+    if (Object.keys(pricesMap).length > 0) {
+      ovhDomainRenewalPricesHT = pricesMap;
+      ovhPricesLastSync = new Date().toISOString();
+      console.log(`[OVH] ${Object.keys(pricesMap).length} TLD prices loaded. .fr=${pricesMap['.fr'] || '?'}€ .com=${pricesMap['.com'] || '?'}€`);
+    } else {
+      console.warn('[OVH] No renewal prices found in catalogue, keeping fallback');
+    }
+  } catch (err) {
+    console.error('[OVH] Error syncing domain prices:', err.message);
+  }
+}
+
+// Renouveler un domaine chez OVH via l'API (Option B : à la demande)
+async function renewDomainOnOvh(domain, siteId) {
+  if (!ovhClient) {
+    console.log('[OVH] Skipping domain renewal — API not configured');
+    return;
+  }
+  if (!domain) {
+    console.log('[OVH] Skipping domain renewal — no domain for site:', siteId);
+    return;
+  }
+
+  // Nettoyer le domaine (retirer protocole, path, etc.)
+  const cleanDomain = String(domain).replace(/^https?:\/\//, '').replace(/\/.*$/, '').trim().toLowerCase();
+  if (!cleanDomain || !cleanDomain.includes('.')) {
+    console.log('[OVH] Invalid domain format:', domain);
+    return;
+  }
+
+  try {
+    // 1. Récupérer le serviceId du domaine
+    let serviceId = null;
+
+    // Vérifier si le ovhServiceId est stocké dans Firestore
+    if (siteId) {
+      const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+      if (siteDoc.exists && siteDoc.data().ovhServiceId) {
+        serviceId = siteDoc.data().ovhServiceId;
+      }
+    }
+
+    // Sinon, le récupérer via l'API OVH
+    if (!serviceId) {
+      try {
+        const svcInfo = await ovhClient.requestPromised('GET', `/domain/${cleanDomain}/serviceInfos`);
+        serviceId = svcInfo.serviceId;
+        // Sauvegarder pour les prochaines fois
+        if (siteId && serviceId) {
+          await db.collection('sitesWeb').doc(siteId).update({ ovhServiceId: serviceId });
+          console.log('[OVH] Saved serviceId', serviceId, 'for', cleanDomain);
+        }
+      } catch (e) {
+        console.error('[OVH] Domain not found on this OVH account:', cleanDomain, e.message);
+        return;
+      }
+    }
+
+    // 2. Récupérer les stratégies de renouvellement
+    const strategies = await ovhClient.requestPromised('GET', `/service/${serviceId}/renew`);
+    if (!strategies || strategies.length === 0) {
+      console.log('[OVH] No renewal strategies available for', cleanDomain);
+      return;
+    }
+
+    // Chercher la stratégie P1Y (1 an) qui contient uniquement ce domaine
+    let targetStrategy = null;
+    let targetPeriod = null;
+    for (const desc of strategies) {
+      if (desc.renewPeriod !== 'P1Y') continue;
+      for (const strat of (desc.strategies || [])) {
+        if (strat.services && strat.services.length === 1 && strat.services.includes(serviceId)) {
+          targetStrategy = strat;
+          targetPeriod = desc.renewPeriod;
+          break;
+        }
+      }
+      if (targetStrategy) break;
+    }
+
+    if (!targetStrategy) {
+      console.log('[OVH] No single-domain P1Y strategy found for', cleanDomain, '— trying first available');
+      // Fallback : prendre la première stratégie P1Y
+      const p1y = strategies.find(d => d.renewPeriod === 'P1Y');
+      if (p1y && p1y.strategies && p1y.strategies[0]) {
+        targetStrategy = p1y.strategies[0];
+        targetPeriod = 'P1Y';
+      }
+    }
+
+    if (!targetStrategy) {
+      console.error('[OVH] No P1Y renewal strategy available for', cleanDomain);
+      return;
+    }
+
+    console.log(`[OVH] Renewing ${cleanDomain} (serviceId: ${serviceId}) — price: ${targetStrategy.price?.value}€`);
+
+    // 3. Créer le bon de commande
+    const order = await ovhClient.requestPromised('POST', `/service/${serviceId}/renew`, {
+      dryRun: false,
+      duration: targetPeriod,
+      services: targetStrategy.services
+    });
+
+    const orderId = order.orderId;
+    console.log(`[OVH] Renewal order created: #${orderId} — price: ${order.priceWithTax?.text || order.priceWithTax?.value}`);
+
+    // 4. Payer le bon de commande avec le moyen de paiement par défaut
+    try {
+      // Lister les moyens de paiement disponibles
+      const paymentMeans = await ovhClient.requestPromised('GET', `/me/order/${orderId}/availableRegisteredPaymentMean`);
+      if (paymentMeans && paymentMeans.length > 0) {
+        const pm = paymentMeans[0]; // Premier moyen de paiement disponible
+        await ovhClient.requestPromised('POST', `/me/order/${orderId}/payWithRegisteredPaymentMean`, {
+          paymentMean: pm.paymentMean,
+          paymentMeanId: pm.paymentMeanId
+        });
+        console.log(`[OVH] Order #${orderId} paid with ${pm.paymentMean} — domain ${cleanDomain} renewed`);
+      } else {
+        console.warn(`[OVH] Order #${orderId} created but no registered payment mean available — pay manually at: ${order.url}`);
+      }
+    } catch (payErr) {
+      console.error(`[OVH] Order #${orderId} created but payment failed:`, payErr.message, '— pay manually at:', order.url);
+    }
+
+    // 5. Log dans Firestore
+    await db.collection('ovhRenewals').add({
+      domain: cleanDomain,
+      siteId: siteId || null,
+      ovhServiceId: serviceId,
+      ovhOrderId: orderId,
+      price: order.priceWithTax?.value || null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+  } catch (err) {
+    console.error('[OVH] Error in renewDomainOnOvh:', err.message);
+  }
+}
+
 function getDomainExtensionForRenewal(domain) {
   if (!domain) return '';
   const parts = String(domain).split('.');
   return parts.length < 2 ? '' : ('.' + parts[parts.length - 1]).toLowerCase();
+}
+
+function getRenewalPriceHT(ext) {
+  // Priorité : prix OVH dynamique > fallback statique > défaut
+  if (ovhDomainRenewalPricesHT[ext] !== undefined) return ovhDomainRenewalPricesHT[ext];
+  if (RENEWAL_FALLBACK_PRICES_HT[ext] !== undefined) return RENEWAL_FALLBACK_PRICES_HT[ext];
+  return RENEWAL_DEFAULT_PRICE_HT;
 }
 
 function addRenewalProcessingFees(amountTTC) {
@@ -1214,11 +1423,45 @@ function addRenewalProcessingFees(amountTTC) {
 
 function computeRenewalPriceCents(domain) {
   const ext = getDomainExtensionForRenewal(domain);
-  const htPerYear = RENEWAL_EXTENSION_PRICES_HT[ext] !== undefined ? RENEWAL_EXTENSION_PRICES_HT[ext] : RENEWAL_DEFAULT_PRICE_HT;
+  const htPerYear = getRenewalPriceHT(ext);
   const ttc = Math.round(htPerYear * (1 + RENEWAL_TVA_RATE) * 100) / 100;
   const total = addRenewalProcessingFees(ttc);
   return Math.round(total * 100);
 }
+
+// Endpoint: prix de renouvellement courants (intranet, managers)
+app.get('/api/renewal-prices', verifyAuth, (req, res) => {
+  const prices = {};
+  const allExts = new Set([...Object.keys(ovhDomainRenewalPricesHT), ...Object.keys(RENEWAL_FALLBACK_PRICES_HT)]);
+  for (const ext of allExts) {
+    const ht = getRenewalPriceHT(ext);
+    const ttc = Math.round(ht * (1 + RENEWAL_TVA_RATE) * 100) / 100;
+    prices[ext] = { ht, ttc, source: ovhDomainRenewalPricesHT[ext] !== undefined ? 'ovh' : 'fallback' };
+  }
+  res.json({ prices, defaultHT: RENEWAL_DEFAULT_PRICE_HT, lastSync: ovhPricesLastSync });
+});
+
+// Endpoint: forcer la synchronisation des prix OVH (managers)
+app.post('/api/renewal-prices/sync', verifyAuth, requireManager, async (req, res) => {
+  try {
+    await syncOvhDomainPrices();
+    res.json({ success: true, count: Object.keys(ovhDomainRenewalPricesHT).length, lastSync: ovhPricesLastSync });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint: résoudre le serviceId OVH d'un domaine (managers)
+app.get('/api/ovh/domain/:domain/service-id', verifyAuth, requireManager, async (req, res) => {
+  if (!ovhClient) return res.status(503).json({ error: 'OVH API not configured' });
+  try {
+    const domain = req.params.domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '').trim().toLowerCase();
+    const svcInfo = await ovhClient.requestPromised('GET', `/domain/${domain}/serviceInfos`);
+    res.json({ domain, serviceId: svcInfo.serviceId, expiration: svcInfo.expiration, renew: svcInfo.renew });
+  } catch (err) {
+    res.status(404).json({ error: `Domain ${req.params.domain} not found on OVH account: ${err.message}` });
+  }
+});
 
 async function createCurrentRenewalPrice(domain, siteId) {
   const amountCents = computeRenewalPriceCents(domain);
@@ -1365,7 +1608,9 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
     }
     const totalCents = amountCents + abonnementCents;
 
-    const subscription = await stripe.subscriptions.create({
+    // Calculer billing_cycle_anchor = expirationDate - 15 jours
+    // pour que les prochains prélèvements annuels aient lieu J-15 avant expiration
+    let subscriptionParams = {
       customer: customerId,
       items,
       billing_mode: { type: 'flexible' },
@@ -1374,7 +1619,22 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
       payment_settings: { payment_method_types: ['card'] },
       expand: ['latest_invoice.payment_intent'],
       metadata: { siteId, domain, years: String(yearsInt), clientId: clientDocId || '' }
-    });
+    };
+    if (siteData.expirationDate) {
+      const expDate = new Date(siteData.expirationDate);
+      if (!isNaN(expDate)) {
+        const anchorDate = new Date(expDate);
+        anchorDate.setDate(anchorDate.getDate() - 15);
+        // Si la date d'ancrage est dans le futur, on la positionne
+        // Sinon on laisse Stripe utiliser la date du jour (premier paiement immédiat)
+        if (anchorDate > new Date()) {
+          subscriptionParams.billing_cycle_anchor = Math.floor(anchorDate.getTime() / 1000);
+          // Le premier prélèvement est immédiat, les suivants seront calés sur l'ancre
+          subscriptionParams.proration_behavior = 'none';
+        }
+      }
+    }
+    const subscription = await stripe.subscriptions.create(subscriptionParams);
 
     console.log('[Stripe] Subscription status:', subscription.status, '| latest_invoice:', typeof subscription.latest_invoice);
 
@@ -1960,6 +2220,63 @@ async function processScheduledMaintenance() {
   }
 }
 
+// Email J-15 pour les clients avec Stripe Billing actif : info prélèvement automatique imminent
+async function sendStripeBillingNoticeEmail(site, daysLeft) {
+  const domain = site.domain || '—';
+  const expirationDate = site.expirationDate ? new Date(site.expirationDate).toLocaleDateString('fr-FR') : '—';
+  const clientName = site.clientName || 'Client';
+  const clientEmail = await getClientEmailById(site.clientId);
+  if (!clientEmail) return;
+
+  const subject = `[Karbonn] Renouvellement automatique de ${domain} dans 15 jours`;
+  const title = 'Renouvellement automatique programmé';
+  const intro = `${clientName}, votre nom de domaine ${domain} sera renouvelé automatiquement dans les prochains jours. Le prélèvement sera effectué sur votre moyen de paiement enregistré.`;
+  const lines = [
+    `Domaine : ${domain}`,
+    `Date d'expiration actuelle : ${expirationDate}`,
+    `Prélèvement prévu : ~15 jours avant l'expiration`,
+    `Aucune action n'est requise de votre part.`
+  ];
+  const html = buildRenewalEmailHtml({ title, intro, lines, buttonText: 'Accéder à mon espace client', buttonHref: 'https://karbonn.fr/espace-client' });
+  const text = `${title}\n\n${intro}\n\n${lines.join('\n')}\n\nhttps://karbonn.fr/espace-client`;
+
+  try {
+    await sendEmail({ to: [clientEmail], subject, text, html });
+    console.log('[Reminders] Stripe billing notice (J-15) sent to', clientEmail, '| site:', site.id);
+    await markReminderSent(site.id, 'stripe_billing_15');
+  } catch (err) {
+    console.error('[Reminders] Failed to send Stripe billing notice:', err);
+  }
+}
+
+// Email de confirmation après renouvellement annuel réussi via Stripe Billing
+async function sendDomainRenewedEmail(site, newExpirationDate) {
+  const domain = site.domain || '—';
+  const clientName = site.clientName || 'Client';
+  const clientEmail = await getClientEmailById(site.clientId);
+  if (!clientEmail) return;
+
+  const newExpStr = newExpirationDate ? new Date(newExpirationDate).toLocaleDateString('fr-FR') : '—';
+  const subject = `[Karbonn] Votre domaine ${domain} a été renouvelé`;
+  const title = 'Domaine renouvelé avec succès';
+  const intro = `${clientName}, nous avons le plaisir de vous confirmer que votre nom de domaine ${domain} a été renouvelé avec succès. Merci pour votre confiance continue.`;
+  const lines = [
+    `Domaine : ${domain}`,
+    `Nouvelle date d'expiration : ${newExpStr}`,
+    `Votre site continue d'être protégé et accessible.`,
+    `Merci de faire confiance à Karbonn pour la gestion de votre présence en ligne.`
+  ];
+  const html = buildRenewalEmailHtml({ title, intro, lines, buttonText: 'Accéder à mon espace client', buttonHref: 'https://karbonn.fr/espace-client' });
+  const text = `${title}\n\n${intro}\n\n${lines.join('\n')}\n\nhttps://karbonn.fr/espace-client`;
+
+  try {
+    await sendEmail({ to: [clientEmail], subject, text, html });
+    console.log('[Email] Domain renewed confirmation sent to', clientEmail, '| domain:', domain);
+  } catch (err) {
+    console.error('[Email] Failed to send domain renewed email:', err);
+  }
+}
+
 async function processRenewalReminders() {
   console.log('[Reminders] Running daily renewal reminder check');
   try {
@@ -1985,10 +2302,18 @@ async function processRenewalReminders() {
       // If recently renewed far enough, skip all reminders
       if (isRecentlyRenewed(site, 90)) continue;
 
+      const hasStripeBilling = site.stripeSubscriptionStatus === 'active';
+
+      // J-15 : email d'information pour les clients avec prélèvement Stripe Billing actif
+      if (hasStripeBilling && daysLeft <= 15 && daysLeft > 14 && !reminderAlreadySent(site, 'stripe_billing_15')) {
+        await sendStripeBillingNoticeEmail(site, daysLeft);
+      }
+
+      // Pour les clients avec Stripe Billing actif, pas de relance manuelle (le prélèvement est automatique)
+      if (hasStripeBilling) continue;
+
       const thresholds = [
-        { days: 90, clientType: 'client_90' },
-        { days: 30, clientType: 'client_30' },
-        { days: 10, clientType: 'client_10' },
+        { days: 10, clientType: 'client_10', managerType: 'manager_10' },
         { days: 7,  clientType: 'client_7', managerType: 'manager_7' },
         { days: 1,  clientType: 'client_1', managerType: 'manager_1' }
       ];
@@ -1999,7 +2324,7 @@ async function processRenewalReminders() {
           if (!reminderAlreadySent(site, t.clientType)) {
             await sendReminderEmail(site, t.clientType, daysLeft);
           }
-          // Manager escalation (J-7, J-1)
+          // Manager escalation
           if (t.managerType && !reminderAlreadySent(site, t.managerType)) {
             await sendReminderEmail(site, t.managerType, daysLeft);
           }
@@ -2887,6 +3212,9 @@ async function syncBunqTransactions() {
   }
 }
 
+// Finances endpoints are restricted to managers
+app.use('/api/finances', verifyAuth, requireManager);
+
 app.post('/api/finances/sync', async (req, res) => {
   if (!bunq.isConfigured()) return res.status(503).json({ error: 'Bunq not configured (BUNQ_API_KEY / BUNQ_PRIVATE_KEY missing)' });
   try {
@@ -3308,6 +3636,13 @@ app.listen(PORT, () => {
   const [qLogin] = QONTO_AUTH.split(':');
   console.log(`[Qonto] Auth token login part: "${qLogin || 'MISSING'}" | key length: ${(QONTO_AUTH.split(':')[1] || '').length}`);
   loadQontoBankAccount();
+
+  // OVH domain pricing sync (every 24h + initial after 15s)
+  if (ovhClient) {
+    setTimeout(() => { syncOvhDomainPrices().catch(e => console.error('[OVH] Price sync error:', e.message)); }, 15 * 1000);
+    setInterval(() => { syncOvhDomainPrices().catch(e => console.error('[OVH] Price sync error:', e.message)); }, 24 * 60 * 60 * 1000);
+  }
+
   const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
   setInterval(() => fetch(`${SELF_URL}/health`).catch(() => {}), 30 * 1000);
 
