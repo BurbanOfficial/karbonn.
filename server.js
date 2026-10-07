@@ -1242,34 +1242,49 @@ async function syncOvhDomainPrices() {
   try {
     console.log('[OVH] Fetching domain renewal prices from catalogue...');
     const catalog = await ovhClient.requestPromised('GET', '/order/catalog/public/domain', { ovhSubsidiary: 'FR' });
-    const plans = catalog?.plans || [];
+    const plans = catalog?.plans || catalog?.addons || [];
     const pricesMap = {};
+
     for (const plan of plans) {
-      // Chaque plan a un planCode du type "fr" ou "com" ou "net"
       const tld = plan.planCode ? ('.' + plan.planCode.toLowerCase()) : null;
       if (!tld) continue;
-      // Chercher le prix de renouvellement (pricingMode "default", interval P1Y)
+
       const pricings = plan.pricings || [];
-      const renewPricing = pricings.find(p =>
-        (p.capacities || []).includes('renew') &&
-        p.interval === 1 &&
-        p.price !== undefined
-      );
-      if (renewPricing) {
-        // Le prix OVH catalogue est en micro-centimes (x 100 000 000) ou en centimes selon l'API
-        // API publique /order/catalog/public/domain retourne le prix en centimes d'euros (ex: 699 = 6.99€)
-        const priceHT = renewPricing.price / 100000000;
+      for (const p of pricings) {
+        const caps = p.capacities || [];
+        if (!caps.includes('renew')) continue;
+        if (p.price === undefined || p.price === null) continue;
+
+        // Détecter l'unité du prix automatiquement
+        let priceHT;
+        if (p.price > 1000000) {
+          priceHT = p.price / 100000000; // micro-centimes
+        } else if (p.price > 100) {
+          priceHT = p.price / 100; // centimes
+        } else {
+          priceHT = p.price; // euros directs
+        }
+
         if (priceHT > 0 && priceHT < 500) {
           pricesMap[tld] = Math.round(priceHT * 100) / 100;
+          break;
         }
       }
     }
+
     if (Object.keys(pricesMap).length > 0) {
       ovhDomainRenewalPricesHT = pricesMap;
       ovhPricesLastSync = new Date().toISOString();
       console.log(`[OVH] ${Object.keys(pricesMap).length} TLD prices loaded. .fr=${pricesMap['.fr'] || '?'}€ .com=${pricesMap['.com'] || '?'}€`);
     } else {
-      console.warn('[OVH] No renewal prices found in catalogue, keeping fallback');
+      // Debug: afficher la structure pour diagnostiquer
+      console.warn('[OVH] No renewal prices found. Catalog keys:', Object.keys(catalog || {}));
+      if (plans.length > 0) {
+        console.warn('[OVH] Sample plan keys:', Object.keys(plans[0]));
+        console.warn('[OVH] Sample plan pricings:', JSON.stringify((plans[0].pricings || []).slice(0, 2)).substring(0, 500));
+      } else {
+        console.warn('[OVH] No plans found in catalog. Trying raw keys:', JSON.stringify(Object.keys(catalog || {})).substring(0, 300));
+      }
     }
   } catch (err) {
     console.error('[OVH] Error syncing domain prices:', err.message);
