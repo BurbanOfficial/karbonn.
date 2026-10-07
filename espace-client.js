@@ -454,12 +454,14 @@ function addRenewalProcessingFees(amountTTC) {
 
 function getRenewalPlans(domain) {
   const ext = getDomainExtension(domain).toLowerCase();
-  const htPerYear = EXTENSION_PRICES_HT[ext] !== undefined ? EXTENSION_PRICES_HT[ext] : DEFAULT_PRICE_HT;
+  const costHT = EXTENSION_PRICES_HT[ext] !== undefined ? EXTENSION_PRICES_HT[ext] : DEFAULT_PRICE_HT;
+  // Prix facturé = coût OVH x2, arrondi à l'euro supérieur
+  const htPerYear = Math.ceil(costHT * 2);
   const years = 1;
   const ttc = Math.round(htPerYear * years * (1 + TVA_RATE) * 100) / 100;
   const total = addRenewalProcessingFees(ttc);
   const cents = total * 100;
-  return [{ years, label: '1 an (renouvellement annuel)', price: total, cents, ttcDomain: ttc }];
+  return [{ years, label: '1 an (renouvellement annuel)', price: total, cents }];
 }
 
 function getStripePublicKey() {
@@ -626,7 +628,6 @@ async function openRenewal(site) {
           <button class="renewal-plan-btn${i === 0 ? ' selected' : ''}" data-years="${p.years}" data-cents="${p.cents}" data-price="${p.price}">
             <span class="plan-years">1 an (renouvellement annuel pour ${escapeHtml(domain)})${monthlySubscriptionPrice > 0 ? ` + abonnement ${escapeHtml(monthlySubscriptionName)} à ${monthlySubscriptionPrice.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/mois` : ''}</span>
             <span class="plan-price">${p.price.toFixed(2)} €</span>
-            <span class="plan-breakdown">dont ${p.ttcDomain.toFixed(2)} € TTC</span>
           </button>`).join('')}
       </div>
       <div class="renewal-price-note"><i class="fa-solid fa-circle-info"></i> Prix TTC + frais Stripe inclus. Abonnement annuel renouvelé automatiquement chaque année pour une année.</div>

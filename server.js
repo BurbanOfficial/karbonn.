@@ -1425,11 +1425,17 @@ function getDomainExtensionForRenewal(domain) {
   return parts.length < 2 ? '' : ('.' + parts[parts.length - 1]).toLowerCase();
 }
 
-function getRenewalPriceHT(ext) {
-  // Priorité : prix OVH dynamique > fallback statique > défaut
+function getOvhCostHT(ext) {
+  // Prix coûtant OVH (dynamique ou fallback)
   if (ovhDomainRenewalPricesHT[ext] !== undefined) return ovhDomainRenewalPricesHT[ext];
   if (RENEWAL_FALLBACK_PRICES_HT[ext] !== undefined) return RENEWAL_FALLBACK_PRICES_HT[ext];
   return RENEWAL_DEFAULT_PRICE_HT;
+}
+
+function getRenewalPriceHT(ext) {
+  // Prix facturé au client = prix OVH x2 (marge 100%), arrondi à l'euro supérieur
+  const cost = getOvhCostHT(ext);
+  return Math.ceil(cost * 2);
 }
 
 function addRenewalProcessingFees(amountTTC) {
@@ -1449,9 +1455,10 @@ app.get('/api/renewal-prices', verifyAuth, (req, res) => {
   const prices = {};
   const allExts = new Set([...Object.keys(ovhDomainRenewalPricesHT), ...Object.keys(RENEWAL_FALLBACK_PRICES_HT)]);
   for (const ext of allExts) {
+    const cost = getOvhCostHT(ext);
     const ht = getRenewalPriceHT(ext);
     const ttc = Math.round(ht * (1 + RENEWAL_TVA_RATE) * 100) / 100;
-    prices[ext] = { ht, ttc, source: ovhDomainRenewalPricesHT[ext] !== undefined ? 'ovh' : 'fallback' };
+    prices[ext] = { costHT: cost, ht, ttc, source: ovhDomainRenewalPricesHT[ext] !== undefined ? 'ovh' : 'fallback' };
   }
   res.json({ prices, defaultHT: RENEWAL_DEFAULT_PRICE_HT, lastSync: ovhPricesLastSync });
 });
