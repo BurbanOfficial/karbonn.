@@ -1623,9 +1623,7 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
     }
     const totalCents = amountCents + abonnementCents;
 
-    // Calculer billing_cycle_anchor = expirationDate - 15 jours
-    // pour que les prochains prélèvements annuels aient lieu J-15 avant expiration
-    let subscriptionParams = {
+    const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items,
       billing_mode: { type: 'flexible' },
@@ -1634,22 +1632,7 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
       payment_settings: { payment_method_types: ['card'] },
       expand: ['latest_invoice.payment_intent'],
       metadata: { siteId, domain, years: String(yearsInt), clientId: clientDocId || '' }
-    };
-    if (siteData.expirationDate) {
-      const expDate = new Date(siteData.expirationDate);
-      if (!isNaN(expDate)) {
-        const anchorDate = new Date(expDate);
-        anchorDate.setDate(anchorDate.getDate() - 15);
-        // Si la date d'ancrage est dans le futur, on la positionne
-        // Sinon on laisse Stripe utiliser la date du jour (premier paiement immédiat)
-        if (anchorDate > new Date()) {
-          subscriptionParams.billing_cycle_anchor = Math.floor(anchorDate.getTime() / 1000);
-          // Le premier prélèvement est immédiat, les suivants seront calés sur l'ancre
-          subscriptionParams.proration_behavior = 'none';
-        }
-      }
-    }
-    const subscription = await stripe.subscriptions.create(subscriptionParams);
+    });
 
     console.log('[Stripe] Subscription status:', subscription.status, '| latest_invoice:', typeof subscription.latest_invoice);
 
