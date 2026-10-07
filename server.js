@@ -1223,7 +1223,7 @@ app.delete('/api/public/sites/:siteId/notes/:noteId', async (req, res) => {
 
 // Domain renewal pricing (Stripe Billing)
 // Fallback statiques — remplacés dynamiquement par les prix OVH catalogue
-const RENEWAL_FALLBACK_PRICES_HT = { '.com': 13.49, '.fr': 7.79 };
+const RENEWAL_FALLBACK_PRICES_HT = { '.com': 7.99, '.fr': 4.99 };
 const RENEWAL_DEFAULT_PRICE_HT = 10.00;
 const RENEWAL_TVA_RATE = 0.20;
 const RENEWAL_CARD_FEE_RATE = 0.015;

@@ -439,8 +439,8 @@ function renderTeamNotes(notes) {
 }
 
 const EXTENSION_PRICES_HT = {
-  '.com': 13.49,
-  '.fr':   7.79
+  '.com': 7.99,
+  '.fr':  4.99
 };
 const DEFAULT_PRICE_HT = 10.00;
 const TVA_RATE = 0.20;
@@ -452,10 +452,10 @@ function addRenewalProcessingFees(amountTTC) {
   return Math.ceil((amountTTC + FIXED_FEE_EUR) / (1 - CARD_FEE_RATE - BILLING_FEE_RATE));
 }
 
+// Prix affiché initialement (estimation locale) — sera remplacé par le prix réel du serveur
 function getRenewalPlans(domain) {
   const ext = getDomainExtension(domain).toLowerCase();
   const costHT = EXTENSION_PRICES_HT[ext] !== undefined ? EXTENSION_PRICES_HT[ext] : DEFAULT_PRICE_HT;
-  // Prix facturé = coût OVH x2, arrondi à l'euro supérieur
   const htPerYear = Math.ceil(costHT * 2);
   const years = 1;
   const ttc = Math.round(htPerYear * years * (1 + TVA_RATE) * 100) / 100;
@@ -967,9 +967,19 @@ async function loadPaymentElement(site, years, cents) {
     currentPaymentElement = stripeElements.create('payment');
     container.innerHTML = '';
     currentPaymentElement.mount(container);
+    // Mettre à jour le prix affiché dans le plan avec le prix réel du serveur
+    const serverPrice = data.amount / 100;
+    const planPriceEl = document.querySelector('.renewal-plan-btn .plan-price');
+    if (planPriceEl) planPriceEl.textContent = `${serverPrice.toFixed(2)} €`;
+    const planBtn = document.querySelector('.renewal-plan-btn');
+    if (planBtn) {
+      planBtn.dataset.price = serverPrice;
+      planBtn.dataset.cents = data.amount;
+    }
+
     currentPaymentElement.on('ready', () => {
       if (payBtn) {
-        payBtn.innerHTML = `<i class="fa-solid fa-lock"></i> Payer ${data.amount / 100} €`;
+        payBtn.innerHTML = `<i class="fa-solid fa-lock"></i> Payer ${serverPrice.toFixed(2)} €`;
         payBtn.disabled = false;
       }
     });
