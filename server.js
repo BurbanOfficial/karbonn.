@@ -1581,6 +1581,8 @@ app.post('/api/public/sites/:siteId/create-renewal-subscription', async (req, re
     const domain = siteData.domain || '';
 
     const amountCents = computeRenewalPriceCents(domain);
+    const ext = getDomainExtensionForRenewal(domain);
+    console.log(`[Stripe] Renewal pricing: domain=${domain} ext=${ext} costHT=${getOvhCostHT(ext)} htFacture=${getRenewalPriceHT(ext)} amountCents=${amountCents}`);
 
     // Build subscription items: domain renewal + optional monthly service subscription
     const abonnementsSnap = await db.collection('abonnements').get();
