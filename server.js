@@ -1489,7 +1489,8 @@ app.get('/api/ovh/domain/:domain/service-id', verifyAuth, requireManager, async 
 app.post('/api/admin/sync-subscriptions-metadata', verifyAuth, requireManager, async (req, res) => {
   try {
     console.log('[Batch] Starting subscription metadata sync...');
-    const sitesSnap = await db.collection('sitesWeb').where('stripeSubscriptionStatus', '==', 'active').get();
+    // Récupérer tous les sites et filtrer ceux qui ont un stripeSubscriptionId
+    const sitesSnap = await db.collection('sitesWeb').get();
     let updated = 0;
     let skipped = 0;
     let errors = 0;
@@ -1518,6 +1519,12 @@ app.post('/api/admin/sync-subscriptions-metadata', verifyAuth, requireManager, a
           console.log(`[Batch] Updated metadata for subscription ${site.stripeSubscriptionId} (site: ${site.id})`);
         } else {
           skipped++;
+        }
+
+        // Si la subscription Stripe est active mais pas le site, mettre à jour le statut du site
+        if (subscription.status === 'active' && site.stripeSubscriptionStatus !== 'active') {
+          await db.collection('sitesWeb').doc(site.id).update({ stripeSubscriptionStatus: 'active' });
+          console.log(`[Batch] Updated site status to active for ${site.id}`);
         }
       } catch (err) {
         console.error(`[Batch] Error updating subscription ${site.stripeSubscriptionId}:`, err.message);
