@@ -1489,45 +1489,44 @@ app.get('/api/ovh/domain/:domain/service-id', verifyAuth, requireManager, async 
 app.post('/api/admin/sync-subscriptions-metadata', verifyAuth, requireManager, async (req, res) => {
   try {
     console.log('[Batch] Starting subscription metadata sync...');
-    // Récupérer tous les sites et filtrer ceux qui ont un stripeSubscriptionId
-    const sitesSnap = await db.collection('sitesWeb').get();
+    const sitesSnap = await db.collection('sitesWeb').where('stripeSubscriptionStatus', '==', 'active').get();
     let updated = 0;
     let skipped = 0;
     let errors = 0;
 
     for (const doc of sitesSnap.docs) {
       const site = { id: doc.id, ...doc.data() };
-      if (!site.stripeSubscriptionId) {
+      // Chercher stripeSubscriptionId soit au niveau racine, soit dans renewals[0]
+      const subId = site.stripeSubscriptionId || (site.renewals && site.renewals[0] && site.renewals[0].subscriptionId);
+      if (!subId) {
         skipped++;
         continue;
       }
 
       try {
-        const subscription = await stripe.subscriptions.retrieve(site.stripeSubscriptionId);
+        const subscription = await stripe.subscriptions.retrieve(subId);
         const metadata = subscription.metadata || {};
         const needsUpdate = !metadata.siteId || !metadata.clientId || !metadata.domain;
 
         if (needsUpdate) {
-          await stripe.subscriptions.update(site.stripeSubscriptionId, {
+          await stripe.subscriptions.update(subId, {
             metadata: {
               siteId: site.id,
               clientId: site.clientId || '',
               domain: site.domain || ''
             }
           });
+          // Mettre à jour le site pour avoir stripeSubscriptionId au niveau racine
+          if (!site.stripeSubscriptionId) {
+            await db.collection('sitesWeb').doc(site.id).update({ stripeSubscriptionId: subId });
+          }
           updated++;
-          console.log(`[Batch] Updated metadata for subscription ${site.stripeSubscriptionId} (site: ${site.id})`);
+          console.log(`[Batch] Updated metadata for subscription ${subId} (site: ${site.id})`);
         } else {
           skipped++;
         }
-
-        // Si la subscription Stripe est active mais pas le site, mettre à jour le statut du site
-        if (subscription.status === 'active' && site.stripeSubscriptionStatus !== 'active') {
-          await db.collection('sitesWeb').doc(site.id).update({ stripeSubscriptionStatus: 'active' });
-          console.log(`[Batch] Updated site status to active for ${site.id}`);
-        }
       } catch (err) {
-        console.error(`[Batch] Error updating subscription ${site.stripeSubscriptionId}:`, err.message);
+        console.error(`[Batch] Error updating subscription ${subId}:`, err.message);
         errors++;
       }
     }
@@ -1561,14 +1560,16 @@ app.post('/api/admin/backfill-qonto-invoices', verifyAuth, requireManager, async
     let errors = 0;
 
     for (const invoice of invoices.data) {
-      if (!invoice.subscription) {
+      // Vérifier si la facture Qonto existe déjà
+      const existing = await db.collection('qontoInvoices').doc(invoice.id).get();
+      if (existing.exists) {
         skipped++;
         continue;
       }
 
-      // Vérifier si la facture Qonto existe déjà
-      const existing = await db.collection('qontoInvoices').doc(invoice.id).get();
-      if (existing.exists) {
+      // Les invoices sans subscription sont gérées par payment_intent.succeeded (pay.karbonn.fr)
+      if (!invoice.subscription) {
+        console.log(`[Batch] Skipping invoice ${invoice.id}: no subscription (handled by payment_intent webhook)`);
         skipped++;
         continue;
       }
@@ -1577,7 +1578,7 @@ app.post('/api/admin/backfill-qonto-invoices', verifyAuth, requireManager, async
         const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
         const siteId = subscription.metadata?.siteId;
         if (!siteId) {
-          console.log(`[Batch] Skipping invoice ${invoice.id}: no siteId in subscription metadata`);
+          console.log(`[Batch] Skipping invoice ${invoice.id}: no siteId in subscription metadata - run sync-metadata first`);
           skipped++;
           continue;
         }
