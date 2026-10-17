@@ -1485,6 +1485,121 @@ app.get('/api/ovh/domain/:domain/service-id', verifyAuth, requireManager, async 
   }
 });
 
+// Endpoint batch: mettre à jour les metadata de toutes les subscriptions Stripe (managers)
+app.post('/api/admin/sync-subscriptions-metadata', verifyAuth, requireManager, async (req, res) => {
+  try {
+    console.log('[Batch] Starting subscription metadata sync...');
+    const sitesSnap = await db.collection('sitesWeb').where('stripeSubscriptionStatus', '==', 'active').get();
+    let updated = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const doc of sitesSnap.docs) {
+      const site = { id: doc.id, ...doc.data() };
+      if (!site.stripeSubscriptionId) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        const subscription = await stripe.subscriptions.retrieve(site.stripeSubscriptionId);
+        const metadata = subscription.metadata || {};
+        const needsUpdate = !metadata.siteId || !metadata.clientId || !metadata.domain;
+
+        if (needsUpdate) {
+          await stripe.subscriptions.update(site.stripeSubscriptionId, {
+            metadata: {
+              siteId: site.id,
+              clientId: site.clientId || '',
+              domain: site.domain || ''
+            }
+          });
+          updated++;
+          console.log(`[Batch] Updated metadata for subscription ${site.stripeSubscriptionId} (site: ${site.id})`);
+        } else {
+          skipped++;
+        }
+      } catch (err) {
+        console.error(`[Batch] Error updating subscription ${site.stripeSubscriptionId}:`, err.message);
+        errors++;
+      }
+    }
+
+    console.log(`[Batch] Metadata sync complete: ${updated} updated, ${skipped} skipped, ${errors} errors`);
+    res.json({ success: true, updated, skipped, errors });
+  } catch (err) {
+    console.error('[Batch] Error in sync-subscriptions-metadata:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint batch: recréer les factures Qonto manquantes pour les paiements Stripe réussis (managers)
+app.post('/api/admin/backfill-qonto-invoices', verifyAuth, requireManager, async (req, res) => {
+  try {
+    const { sinceDays = 30 } = req.body || {};
+    const sinceDate = new Date();
+    sinceDate.setDate(sinceDate.getDate() - sinceDays);
+
+    console.log(`[Batch] Starting Qonto invoice backfill since ${sinceDate.toISOString()}...`);
+
+    // Récupérer toutes les factures Stripe payées depuis la date
+    const invoices = await stripe.invoices.list({
+      status: 'paid',
+      created: { gte: Math.floor(sinceDate.getTime() / 1000) },
+      limit: 100
+    });
+
+    let created = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const invoice of invoices.data) {
+      if (!invoice.subscription) {
+        skipped++;
+        continue;
+      }
+
+      // Vérifier si la facture Qonto existe déjà
+      const existing = await db.collection('qontoInvoices').doc(invoice.id).get();
+      if (existing.exists) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+        const siteId = subscription.metadata?.siteId;
+        if (!siteId) {
+          console.log(`[Batch] Skipping invoice ${invoice.id}: no siteId in subscription metadata`);
+          skipped++;
+          continue;
+        }
+
+        const siteDoc = await db.collection('sitesWeb').doc(siteId).get();
+        if (!siteDoc.exists) {
+          console.log(`[Batch] Skipping invoice ${invoice.id}: site ${siteId} not found`);
+          skipped++;
+          continue;
+        }
+
+        const siteData = siteDoc.data();
+        await createQontoInvoiceFromStripeInvoice(invoice, subscription, siteData);
+        created++;
+        console.log(`[Batch] Created Qonto invoice for Stripe invoice ${invoice.id}`);
+      } catch (err) {
+        console.error(`[Batch] Error creating Qonto invoice for ${invoice.id}:`, err.message);
+        errors++;
+      }
+    }
+
+    console.log(`[Batch] Qonto backfill complete: ${created} created, ${skipped} skipped, ${errors} errors`);
+    res.json({ success: true, created, skipped, errors });
+  } catch (err) {
+    console.error('[Batch] Error in backfill-qonto-invoices:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 async function createCurrentRenewalPrice(domain, siteId) {
   const amountCents = computeRenewalPriceCents(domain);
   const product = await stripe.products.create({
