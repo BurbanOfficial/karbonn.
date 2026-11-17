@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paiement sécurisé — Karbonn.</title>
+<link rel="icon" href="https://i.imgur.com/61Dv12I.png" type="image/png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="https://js.stripe.com/v3/"></script>
+<style>
+  :root {
+    --text: #1d1d1f;
+    --muted: #86868b;
+    --border: #e5e5ea;
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --accent: #0071e3;
+    --accent-hover: #0077ed;
+    --success: #34c759;
+    --error: #ff3b30;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+
+  .pay-shell {
+    width: 100%;
+    max-width: 480px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .pay-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 32px;
+  }
+
+  .pay-brand img { height: 28px; }
+  .pay-brand span { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; }
+
+  .pay-card {
+    background: var(--card);
+    border-radius: 24px;
+    padding: 40px 32px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.04);
+    text-align: center;
+  }
+
+  .pay-amount {
+    font-size: 2.75rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 4px;
+  }
+
+  .pay-invoice {
+    font-size: 0.95rem;
+    color: var(--muted);
+    margin-bottom: 28px;
+  }
+
+  .pay-meta {
+    text-align: left;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+    margin-bottom: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pay-meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+  }
+
+  .pay-meta-row .k { color: var(--muted); }
+  .pay-meta-row .v { font-weight: 500; }
+
+  .pay-cta {
+    width: 100%;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 600;
+    font-family: inherit;
+    padding: 16px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .pay-cta:hover { background: var(--accent-hover); }
+  .pay-cta:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .pay-secure {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 16px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  /* ── Formulaire SEPA ── */
+  .bank-intro {
+    font-size: 0.9rem;
+    color: var(--muted);
+    line-height: 1.55;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  .sepa-element {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+    text-align: left;
+  }
+
+  .pay-error-msg {
+    display: none;
+    font-size: 0.82rem;
+    color: var(--error);
+    margin-bottom: 14px;
+  }
+
+  .pay-error-msg.visible { display: block; }
+
+  .pending-icon {
+    background: rgba(0, 113, 227, 0.12);
+    color: var(--accent);
+  }
+
+  .pay-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 24px;
+    padding: 12px 22px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--text);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .pay-back:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ── États ── */
+  .pay-state { display: none; }
+  .pay-state.visible { display: block; }
+
+  .pay-state-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    margin: 0 auto 20px;
+  }
+
+  .pay-state-icon.success { background: rgba(52, 199, 89, 0.12); color: var(--success); }
+  .pay-state-icon.error { background: rgba(255, 59, 48, 0.12); color: var(--error); }
+
+  .pay-state h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 8px; }
+  .pay-state p { font-size: 0.92rem; color: var(--muted); line-height: 1.6; }
+
+  .pay-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 60px 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  .pay-footer {
+    text-align: center;
+    margin-top: 28px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .pay-footer i { font-size: 0.7rem; }
+</style>
+</head>
+<body>
+  <div class="pay-shell">
+    <div class="pay-brand">
+      <img src="https://i.imgur.com/61Dv12I.png" alt="Karbonn.">
+      <span>Karbonn.</span>
+    </div>
+
+    <div class="pay-card">
+      <div class="pay-loading" id="pay-loading">
+        <i class="fa-solid fa-circle-notch fa-spin"></i> Chargement…
+      </div>
+
+      <!-- État : prêt à payer -->
+      <div class="pay-state" id="pay-ready">
+        <div class="pay-amount" id="pay-amount">—</div>
+        <div class="pay-invoice" id="pay-invoice">Facture —</div>
+        <div class="pay-meta">
+          <div class="pay-meta-row"><span class="k">Client</span><span class="v" id="pay-client">—</span></div>
+          <div class="pay-meta-row"><span class="k">Identifiant client</span><span class="v" id="pay-client-id">—</span></div>
+          <div class="pay-meta-row"><span class="k">Facture</span><span class="v" id="pay-number">—</span></div>
+          <div class="pay-meta-row"><span class="k">Expire le</span><span class="v" id="pay-expiry">—</span></div>
+        </div>
+        <button class="pay-cta" id="pay-cta"><i class="fa-solid fa-building-columns"></i> Payer par prélèvement bancaire</button>
+        <div class="pay-secure"><i class="fa-solid fa-lock"></i> Paiement sécurisé via Stripe</div>
+      </div>
+
+      <!-- Formulaire prélèvement SEPA -->
+      <div class="pay-state" id="pay-sepa">
+        <p class="bank-intro">Renseignez vos coordonnées bancaires ci-dessous.<br>Le prélèvement SEPA sera exécuté sous quelques jours ouvrés.</p>
+        <div id="sepa-element" class="sepa-element"></div>
+        <div id="sepa-error" class="pay-error-msg"></div>
+        <button class="pay-cta" id="sepa-confirm" disabled><i class="fa-solid fa-lock"></i> Confirmer le prélèvement</button>
+        <div class="pay-secure"><i class="fa-solid fa-shield-halved"></i> Vos données bancaires sont transmises chiffrées à Stripe — elles ne transitent jamais par nos serveurs.</div>
+      </div>
+
+      <!-- Prélèvement en cours -->
+      <div class="pay-state" id="pay-processing">
+        <div class="pay-state-icon pending-icon"><i class="fa-solid fa-clock"></i></div>
+        <h2>Prélèvement en cours</h2>
+        <p>Votre demande de prélèvement a été enregistrée.<br>Votre compte sera débité de <strong id="processing-amount"></strong> sous quelques jours ouvrés.<br>La facture sera automatiquement marquée payée dès réception.</p>
+        <a class="pay-back" href="https://karbonn.fr/espace-client"><i class="fa-solid fa-arrow-left"></i> Retour à l'espace client</a>
+      </div>
+
+      <!-- Payée -->
+      <div class="pay-state" id="pay-paid">
+        <div class="pay-state-icon success"><i class="fa-solid fa-check"></i></div>
+        <h2>Paiement reçu</h2>
+        <p>Votre facture <strong id="paid-number"></strong> a été réglée.<br>Merci pour votre confiance.</p>
+        <a class="pay-back" href="https://karbonn.fr/espace-client"><i class="fa-solid fa-arrow-left"></i> Retour à l'espace client</a>
+      </div>
+
+      <!-- Erreur / expiré -->
+      <div class="pay-state" id="pay-error">
+        <div class="pay-state-icon error"><i class="fa-solid fa-xmark"></i></div>
+        <h2 id="error-title">Lien invalide</h2>
+        <p id="error-msg">Ce lien de paiement n'existe pas ou a expiré.</p>
+      </div>
+    </div>
+
+    <div class="pay-footer">
+      <i class="fa-solid fa-shield-halved"></i> Transaction sécurisée — Karbonn. × Stripe<br>
+      Une question ? <a href="mailto:hello@karbonn.fr" style="color:var(--muted)">hello@karbonn.fr</a>
+    </div>
+  </div>
+
+<script>
+const API = 'https://karbonn-x-abby.onrender.com';
+const STRIPE_PK = 'pk_live_51Trn3T3bEnjxdETqSV2lBIrj9V5zPY6fVVF7TQPMbE5xKskA8sxpEGd3hL7JZf7eAal2aeBarOnYX48EXtwzXxdK00zCCpuSgV';
+const token = (location.pathname.match(/\/p\/([A-Za-z0-9_-]+)/) || [])[1] || new URLSearchParams(location.search).get('t') || '';
+let pollTimer = null;
+let stripe = null;
+let sepaElements = null;
+
+const $ = id => document.getElementById(id);
+const fmt = (v, c = 'EUR') => Number(v || 0).toLocaleString('fr-FR', { style: 'currency', currency: c });
+
+function show(state) {
+  ['pay-loading', 'pay-ready', 'pay-sepa', 'pay-processing', 'pay-paid', 'pay-error'].forEach(id => {
+    $(id).classList.toggle('visible', id === state);
+    if (id === 'pay-loading') $(id).style.display = id === state ? 'flex' : 'none';
+  });
+}
+
+function showError(title, msg) {
+  $('error-title').textContent = title;
+  $('error-msg').textContent = msg;
+  show('pay-error');
+}
+
+async function load() {
+  if (!token) return showError('Lien invalide', 'Aucun identifiant de paiement dans l\'URL.');
+  try {
+    const res = await fetch(`${API}/api/public/pay/${encodeURIComponent(token)}`);
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      return showError('Lien invalide', e.error || 'Ce lien de paiement n\'existe pas ou a expiré.');
+    }
+    const d = await res.json();
+
+    $('pay-amount').textContent = fmt(d.amount, d.currency);
+    $('pay-invoice').textContent = `Facture ${d.invoiceNumber}`;
+    $('pay-number').textContent = d.invoiceNumber;
+    $('pay-client').textContent = d.clientName;
+    $('pay-client-id').textContent = d.clientId;
+    $('pay-expiry').textContent = d.expiresAt ? new Date(d.expiresAt).toLocaleDateString('fr-FR') : '—';
+    $('processing-amount').textContent = fmt(d.amount, d.currency);
+
+    if (d.status === 'paid') {
+      $('paid-number').textContent = d.invoiceNumber;
+      return show('pay-paid');
+    }
+    if (d.status === 'expired') {
+      return showError('Lien expiré', 'Ce lien de paiement a expiré. Contactez Karbonn pour en obtenir un nouveau.');
+    }
+
+    // Un prélèvement est déjà en cours ou terminé → afficher directement l'écran de suivi
+    if (d.paymentIntentStatus === 'processing' || d.paymentIntentStatus === 'succeeded') {
+      show('pay-processing');
+      startPolling();
+      return;
+    }
+
+    // Un PaymentIntent existe déjà → reprendre là où le client en était
+    if (d.hasPaymentIntent) {
+      await initSepaDebit();
+    } else {
+      show('pay-ready');
+    }
+  } catch (err) {
+    showError('Erreur', 'Impossible de charger les informations de paiement.');
+  }
+}
+
+async function initSepaDebit() {
+  try {
+    const res = await fetch(`${API}/api/public/pay/${encodeURIComponent(token)}/sepa-debit`, { method: 'POST' });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      return showError('Erreur', e.error || 'Impossible de préparer le paiement.');
+    }
+    const data = await res.json();
+
+    if (data.processing) {
+      show('pay-processing');
+      startPolling();
+      return;
+    }
+    if (!data.clientSecret) {
+      return showError('Erreur', 'Impossible de préparer le paiement.');
+    }
+
+    if (!stripe) stripe = Stripe(STRIPE_PK);
+    sepaElements = stripe.elements({
+      clientSecret: data.clientSecret,
+      locale: 'fr',
+      appearance: {
+        theme: 'stripe',
+        variables: {
+          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif',
+          borderRadius: '10px',
+          colorPrimary: '#0071e3'
+        }
+      }
+    });
+    const el = sepaElements.create('payment', { paymentMethodOrder: ['sepa_debit'] });
+    el.mount('#sepa-element');
+    el.on('ready', () => { $('sepa-confirm').disabled = false; });
+    show('pay-sepa');
+  } catch (err) {
+    showError('Erreur', 'Impossible de préparer le paiement.');
+  }
+}
+
+async function confirmSepaDebit() {
+  const btn = $('sepa-confirm');
+  const errEl = $('sepa-error');
+  if (!stripe || !sepaElements) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Confirmation…';
+  errEl.classList.remove('visible');
+
+  const { error } = await stripe.confirmPayment({
+    elements: sepaElements,
+    confirmParams: { return_url: window.location.href },
+    redirect: 'if_required'
+  });
+
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.classList.add('visible');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-lock"></i> Confirmer le prélèvement';
+    return;
+  }
+
+  // SEPA = processing : le débit intervient sous quelques jours ouvrés
+  show('pay-processing');
+  startPolling();
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`${API}/api/public/pay/${encodeURIComponent(token)}`);
+      if (!res.ok) return;
+      const d = await res.json();
+      if (d.status === 'paid') {
+        clearInterval(pollTimer);
+        $('paid-number').textContent = d.invoiceNumber;
+        show('pay-paid');
+      }
+    } catch {}
+  }, 15000);
+}
+
+$('pay-cta').addEventListener('click', async () => {
+  const btn = $('pay-cta');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Préparation…';
+  await initSepaDebit();
+});
+
+$('sepa-confirm').addEventListener('click', confirmSepaDebit);
+
+load();
+</script>
+</body>
+</html>

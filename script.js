@@ -673,7 +673,7 @@ document.addEventListener('DOMContentLoaded', function () {
         <p>Dernière mise à jour : août 2026</p>
         <h3>1. Éditeur du site</h3>
         <p>Le présent site internet accessible à l’adresse <a href='https://www.karbonn.fr' target='_blank' rel='noopener noreferrer' style='color:#fff;text-decoration:underline;'>https://www.karbonn.fr</a> est édité par :</p>
-        <p><strong>Karbonn.</strong><br>Entreprise Individuelle (micro-entreprise)<br>Représentée par : Rémy CORMON, Gérant<br>Représentant légal : Axel CORMON<br>Siège social : 11 Rue De Dauvet, 27150 Mainneville, France<br>Numéro SIRET : 942 917 113 00014<br>Activité : Agence de communication digitale et développement web.<br>Adresse électronique : <a href='mailto:hello@karbonn.fr' style='color:#fff;text-decoration:underline;'>hello@karbonn.fr</a><br>Téléphone : <a href='tel:+33776691606' style='color:#fff;text-decoration:underline;'>+33 7 76 69 16 06</a><br>TVA : Karbonn. bénéficie du régime de franchise en base de TVA conformément aux dispositions applicables du Code général des impôts. À ce titre : TVA non applicable, article 293 B du Code général des impôts.</p>
+        <p><strong>Karbonn.</strong><br>Entreprise Individuelle (micro-entreprise)<br><span style="display: none;">Représentée par : Rémy CORMON, Gérant<br>Représentant légal : Axel CORMON<br></span>Siège social : 11 Rue De Dauvet, 27150 Mainneville, France<br>Numéro SIRET : 942 917 113 00014<br>Activité : Agence de communication digitale et développement web.<br>Adresse électronique : <a href='mailto:hello@karbonn.fr' style='color:#fff;text-decoration:underline;'>hello@karbonn.fr</a><br>Téléphone : <a href='tel:+33776691606' style='color:#fff;text-decoration:underline;'>+33 7 76 69 16 06</a><br>TVA : Karbonn. bénéficie du régime de franchise en base de TVA conformément aux dispositions applicables du Code général des impôts. À ce titre : TVA non applicable, article 293 B du Code général des impôts.</p>
         <h3>2. Directeur de publication</h3>
         <p>Le directeur de publication du site est : <strong>Rémy CORMON</strong>, en qualité de responsable de l’entreprise Karbonn.</p>
         <h3>3. Hébergement du site</h3>
@@ -729,7 +729,7 @@ document.addEventListener('DOMContentLoaded', function () {
         </ul>
         <h3>2. Responsable du traitement</h3>
         <p>Le responsable du traitement des données personnelles est :</p>
-        <p><strong>Karbonn.</strong><br>Entreprise Individuelle (micro-entreprise)<br>Représentée par : Rémy CORMON<br>Siège social : 11 Rue De Dauvet, 27150 Mainneville, France<br>Email : <a href='mailto:hello@karbonn.fr' style='color:#fff;text-decoration:underline;'>hello@karbonn.fr</a><br>Téléphone : <a href='tel:+33776691606' style='color:#fff;text-decoration:underline;'>+33 7 76 69 16 06</a></p>
+        <p><strong>Karbonn.</strong><br>Entreprise Individuelle (micro-entreprise)<br><span style="display: none;">Représentée par : Rémy CORMON<br></span>Siège social : 11 Rue De Dauvet, 27150 Mainneville, France<br>Email : <a href='mailto:hello@karbonn.fr' style='color:#fff;text-decoration:underline;'>hello@karbonn.fr</a><br>Téléphone : <a href='tel:+33776691606' style='color:#fff;text-decoration:underline;'>+33 7 76 69 16 06</a></p>
         <h3>3. Principes appliqués au traitement des données</h3>
         <p>Karbonn. applique les principes fondamentaux du RGPD :</p>
         <ul>
@@ -849,7 +849,7 @@ document.addEventListener('DOMContentLoaded', function () {
         </ul>
         <p>Les cookies ne permettent pas d’identifier directement une personne physique.</p>
         <h3>3. Responsable du traitement</h3>
-        <p>Le responsable des traitements liés aux cookies est :<br><strong>Karbonn.</strong><br>Entreprise Individuelle<br>Représentée par : Rémy CORMON<br>Adresse : 11 Rue De Dauvet, 27150 Mainneville, France<br>Email : <a href='mailto:hello@karbonn.fr' style='color:#fff;text-decoration:underline;'>hello@karbonn.fr</a></p>
+        <p>Le responsable des traitements liés aux cookies est :<br><strong>Karbonn.</strong><br>Entreprise Individuelle<br><span style="display: none;">Représentée par : Rémy CORMON<br></span>Adresse : 11 Rue De Dauvet, 27150 Mainneville, France<br>Email : <a href='mailto:hello@karbonn.fr' style='color:#fff;text-decoration:underline;'>hello@karbonn.fr</a></p>
         <h3>4. Types de cookies utilisés</h3>
         <p>Le site karbonn.fr utilise principalement des cookies nécessaires au fonctionnement du site. À ce jour, Karbonn. utilise les catégories suivantes :</p>
         <h4>4.1 Cookies strictement nécessaires</h4>
@@ -1006,7 +1006,7 @@ document.addEventListener('DOMContentLoaded', function () {
         <p>Prestations numériques — Karbonn.<br>Dernière mise à jour : août 2026</p>
         <h3>1. Objet</h3>
         <p>Les présentes Conditions Générales de Vente (ci-après « CGV ») définissent les conditions applicables aux prestations proposées par :</p>
-        <p><strong>Karbonn.</strong><br>Entreprise Individuelle (micro-entreprise)<br>Représentée par : Rémy CORMON<br>Siège social : 11 Rue De Dauvet, 27150 Mainneville, France<br>SIRET : 942 917 113 00014<br>Email : <a href='mailto:hello@karbonn.fr' style='color:#fff;text-decoration:underline;'>hello@karbonn.fr</a><br>Téléphone : <a href='tel:+33776691606' style='color:#fff;text-decoration:underline;'>+33 7 76 69 16 06</a></p>
+        <p><strong>Karbonn.</strong><br>Entreprise Individuelle (micro-entreprise)<br><span style="display: none;">Représentée par : Rémy CORMON<br></span>Siège social : 11 Rue De Dauvet, 27150 Mainneville, France<br>SIRET : 942 917 113 00014<br>Email : <a href='mailto:hello@karbonn.fr' style='color:#fff;text-decoration:underline;'>hello@karbonn.fr</a><br>Téléphone : <a href='tel:+33776691606' style='color:#fff;text-decoration:underline;'>+33 7 76 69 16 06</a></p>
         <p>Les présentes CGV encadrent les relations commerciales entre Karbonn. et ses clients dans le cadre de prestations numériques comprenant notamment :</p>
         <ul>
           <li>création de sites internet ;</li>
